@@ -10,22 +10,27 @@ import SwiftData
 
 @main
 struct workout_aicodeApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    let sharedModelContainer: ModelContainer
+    @StateObject private var store: AppStore
 
+    init() {
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let configuration = ModelConfiguration()
+            let container = try ModelContainer(
+                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+                configurations: configuration
+            )
+            self.sharedModelContainer = container
+            _store = StateObject(wrappedValue: AppStore(context: container.mainContext))
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(store)
         }
         .modelContainer(sharedModelContainer)
     }

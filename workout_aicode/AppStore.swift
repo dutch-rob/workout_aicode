@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 
 final class AppStore: ObservableObject {
     @Published var workouts: [WorkoutDef] = []
@@ -16,7 +17,18 @@ final class AppStore: ObservableObject {
         do {
             let workoutsDescriptor = FetchDescriptor<WorkoutDef>(sortBy: [SortDescriptor(\WorkoutDef.name)])
             let exercisesDescriptor = FetchDescriptor<ExerciseDef>(sortBy: [SortDescriptor(\ExerciseDef.name)])
-            workouts = try context.fetch(workoutsDescriptor)
+            workouts = (try context.fetch(workoutsDescriptor)).sorted { lhs, rhs in
+                if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
+            var changed = false
+            for (idx, w) in workouts.enumerated() {
+                if w.sortIndex != idx {
+                    w.sortIndex = idx
+                    changed = true
+                }
+            }
+            if changed { try? context.save() }
             exercises = try context.fetch(exercisesDescriptor)
         } catch {
             workouts = []
@@ -26,7 +38,8 @@ final class AppStore: ObservableObject {
 
     func saveWorkout(_ workout: WorkoutDef) {
         do {
-            let descriptor = FetchDescriptor<WorkoutDef>(predicate: #Predicate { $0.id == workout.id })
+            let targetID = workout.id
+            let descriptor = FetchDescriptor<WorkoutDef>(predicate: #Predicate<WorkoutDef> { obj in obj.id == targetID })
             let existing = try context.fetch(descriptor)
             if existing.isEmpty {
                 context.insert(workout)
@@ -47,7 +60,8 @@ final class AppStore: ObservableObject {
 
     func saveExercise(_ exercise: ExerciseDef) {
         do {
-            let descriptor = FetchDescriptor<ExerciseDef>(predicate: #Predicate { $0.id == exercise.id })
+            let targetID = exercise.id
+            let descriptor = FetchDescriptor<ExerciseDef>(predicate: #Predicate<ExerciseDef> { obj in obj.id == targetID })
             let existing = try context.fetch(descriptor)
             if existing.isEmpty {
                 context.insert(exercise)
@@ -65,4 +79,58 @@ final class AppStore: ObservableObject {
         try? context.save()
         reloadAll()
     }
+    
+    func reorderWorkouts(_ newOrder: [WorkoutDef]) {
+        for (idx, w) in newOrder.enumerated() {
+            w.sortIndex = idx
+        }
+        try? context.save()
+        reloadAll()
+    }
+    
+    func lastEntries(for workout: WorkoutDef) -> [UUID: ExerciseLogEntry] {
+        do {
+            let workoutID = workout.id
+            let descriptor = FetchDescriptor<WorkoutLog>(
+                predicate: #Predicate<WorkoutLog> { $0.workoutId == workoutID },
+                sortBy: [SortDescriptor(\WorkoutLog.date, order: .reverse)]
+            )
+            let logs = try context.fetch(descriptor)
+            var map: [UUID: ExerciseLogEntry] = [:]
+            let targetSet = Set(workout.exerciseOrder)
+            for log in logs { 
+                for e in log.entries {
+                    if targetSet.contains(e.exerciseId) && map[e.exerciseId] == nil {
+                        map[e.exerciseId] = e
+                    }
+                }
+                if map.count == targetSet.count { break }
+            }
+            return map
+        } catch {
+            return [:]
+        }
+    }
+    
+    func exportLogs() -> URL? {
+        do {
+            let descriptor = FetchDescriptor<WorkoutLog>(sortBy: [SortDescriptor(\WorkoutLog.date, order: .forward)])
+            let logs = try context.fetch(descriptor)
+            var text = ""
+            for log in logs {
+                text += "\(log.date): Workout \(log.workoutId)\n"
+                for e in log.entries {
+                    let w = e.weights.map(String.init).joined(separator: ",")
+                    let r = e.reps.map(String.init).joined(separator: ",")
+                    text += "  ex=\(e.exerciseId) W=[\(w)] R=[\(r)]\n"
+                }
+            }
+            let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appendingPathComponent("workout_logs.txt")
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            return nil
+        }
+    }
 }
+

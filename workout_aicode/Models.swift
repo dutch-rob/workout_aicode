@@ -11,12 +11,17 @@ final class ExerciseDef: Identifiable, Hashable {
     var weightIncrement: Int
 
     init(id: UUID = UUID(), name: String, numberOfSeries: Int = 3, lowestWeight: Int = 0, highestWeight: Int = 200, weightIncrement: Int = 5) {
+        let clampedNumberOfSeries = max(0, numberOfSeries)
+        let clampedLowest = max(0, lowestWeight)
+        let clampedHighest = max(clampedLowest, highestWeight)
+        let clampedIncrement = max(1, weightIncrement)
+
         self.id = id
         self.name = name
-        self.numberOfSeries = max(0, numberOfSeries)
-        self.lowestWeight = max(0, lowestWeight)
-        self.highestWeight = max(self.lowestWeight, highestWeight)
-        self.weightIncrement = max(1, weightIncrement)
+        self.numberOfSeries = clampedNumberOfSeries
+        self.lowestWeight = clampedLowest
+        self.highestWeight = clampedHighest
+        self.weightIncrement = clampedIncrement
     }
 }
 
@@ -26,11 +31,13 @@ final class WorkoutDef: Identifiable, Hashable {
     var name: String
     // Ordered list of exercise IDs to preserve order
     var exerciseOrder: [UUID]
+    var sortIndex: Int
 
-    init(id: UUID = UUID(), name: String, exerciseOrder: [UUID] = []) {
+    init(id: UUID = UUID(), name: String, exerciseOrder: [UUID] = [], sortIndex: Int = 0) {
         self.id = id
         self.name = name
         self.exerciseOrder = exerciseOrder
+        self.sortIndex = sortIndex
     }
 }
 
