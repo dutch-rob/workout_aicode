@@ -118,11 +118,14 @@ final class AppStore: ObservableObject {
             let logs = try context.fetch(descriptor)
             var text = ""
             for log in logs {
-                text += "\(log.date): Workout \(log.workoutId)\n"
                 for e in log.entries {
-                    let w = e.weights.map(String.init).joined(separator: ",")
-                    let r = e.reps.map(String.init).joined(separator: ",")
-                    text += "  ex=\(e.exerciseId) W=[\(w)] R=[\(r)]\n"
+                    let workoutText = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
+                    let exName = exercises.first(where: { $0.id == e.exerciseId })?.name ?? "Exercise"
+                    let weightsText = e.weights.map(String.init).joined(separator: "\t")
+                    let repsText = e.reps.map(String.init).joined(separator: "\t")
+                    text += "\(log.date.formatted(date: .numeric, time: .omitted))\t"
+                    text += "\(log.date.formatted(date: .omitted, time: .shortened))\t"
+                    text += "workout\t\"\(workoutText)\"\texercise\t\"\(exName)\"\tweights\t\(weightsText)\trepetitions\t\(repsText)\n"
                 }
             }
             let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appendingPathComponent("workout_logs.txt")
@@ -133,4 +136,3 @@ final class AppStore: ObservableObject {
         }
     }
 }
-

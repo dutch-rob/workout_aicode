@@ -1,25 +1,37 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 extension Notification.Name {
     static let modelDataDidChange = Notification.Name("ModelDataDidChange")
 }
 
-// MARK: - Edit Workouts Screen
+// Transferable payload and UTType for drag/drop
+struct WorkoutDragPayload: Transferable, Hashable, Codable {
+    let id: UUID
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .workoutDragPayload)
+    }
+}
+
+extension UTType {
+    static let workoutDragPayload = UTType.data
+}
+
+// MARK: - Edit WGreatorkouts Screen
 struct EditWorkoutsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
     // @Query(sort: [SortDescriptor(\WorkoutDef.name)]) private var workouts: [WorkoutDef]
-    private var workouts: [WorkoutDef] { store.workouts }
-
-    @State private var editMode: EditMode = .active
+    
     @State private var showDeleteConfirm = false
     @State private var workoutPendingDelete: WorkoutDef?
-    @State private var path = NavigationPath()
+    @State private var editMode: EditMode = .inactive
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
                     Button {
@@ -28,34 +40,77 @@ struct EditWorkoutsView: View {
                         // try? context.save()
                         // NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
                         store.saveWorkout(w)
-                        path.append(w)
                     } label: { Text("new") }
                         .buttonStyle(.borderedProminent)
                     Button("logs") { /* presented via ContentView */ }
                         .buttonStyle(.bordered)
+                    Button(editMode == .active ? "done" : "reorder") {
+                        editMode = (editMode == .active ? .inactive : .active)
+                    }
+                    .buttonStyle(.bordered)
                     Button("end") { dismiss() }
                         .buttonStyle(.bordered)
                 }
 
-                if workouts.isEmpty {
+                if store.workouts.isEmpty {
                     ContentUnavailableView("No workouts to edit", systemImage: "list.bullet")
                 } else {
                     List {
                         Section {
-                            ForEach(workouts) { workout in
-                                NavigationLink(destination: EditWorkoutView(workout: workout)) {
-                                    Text(workout.name)
+                            ForEach(store.workouts) { workout in
+                                HStack(spacing: 12) {
+                                    if editMode == .active {
+                                        // Reorder mode: show title; system shows drag handles
+                                        Text(workout.name)
+                                            .lineLimit(1)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    } else {
+                                        // Normal mode: make the whole row a NavigationLink to edit
+                                        NavigationLink(destination: EditWorkoutView(workout: workout)) {
+                                            HStack(spacing: 12) {
+                                                // Place a red delete button on the left to mimic reorder screen placement
+                                                Button {
+                                                    workoutPendingDelete = workout
+                                                    showDeleteConfirm = true
+                                                } label: {
+                                                    ZStack {
+                                                        Circle()
+                                                            .fill(Color.red)
+                                                            .frame(width: 28, height: 28)
+                                                        Image(systemName: "minus")
+                                                            .foregroundStyle(.white)
+                                                            .font(.system(size: 14, weight: .bold))
+                                                    }
+                                                    .accessibilityLabel("Delete")
+                                                }
+                                                .buttonStyle(.plain)
+
+                                                Text(workout.name)
+                                                    .lineLimit(1)
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                            }
+                                        }
+                                    }
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         workoutPendingDelete = workout
                                         showDeleteConfirm = true
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
+                                    } label: { Label("Delete", systemImage: "trash") }
                                 }
                             }
-                            .onMove(perform: move)
+                            .onMove { indices, newOffset in
+                                var newOrder = store.workouts
+                                newOrder.move(fromOffsets: indices, toOffset: newOffset)
+                                store.reorderWorkouts(newOrder)
+                            }
+                            .onDelete { indexSet in
+                                for idx in indexSet {
+                                    let w = store.workouts[idx]
+                                    workoutPendingDelete = w
+                                    showDeleteConfirm = true
+                                }
+                            }
                         }
                     }
                     .environment(\.editMode, $editMode)
@@ -63,9 +118,6 @@ struct EditWorkoutsView: View {
             }
             .padding()
             .navigationTitle("edit workouts")
-            .navigationDestination(for: WorkoutDef.self) { w in
-                EditWorkoutView(workout: w)
-            }
             .confirmationDialog("Delete Workout?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     // if let w = workoutPendingDelete {
@@ -85,12 +137,15 @@ struct EditWorkoutsView: View {
         }
     }
 
+    // Unused now that custom drag/drop reordering is implemented; kept for reference.
     private func move(from source: IndexSet, to destination: Int) {
-        var order = workouts
+        var order = store.workouts
         order.move(fromOffsets: source, toOffset: destination)
         store.reorderWorkouts(order)
     }
 }
+
+// Built-in List reordering is used; custom WorkoutRow removed.
 
 // MARK: - Edit Workout Screen
 struct EditWorkoutView: View {
@@ -100,118 +155,134 @@ struct EditWorkoutView: View {
 
     @Bindable var workout: WorkoutDef
     @State private var hasInserted = false
+    @State private var pendingNewExercise: ExerciseDef? = nil
 
     private var isWorkoutValid: Bool {
         !workout.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
-        Form {
-            Section {
-                TextField("Workout name", text: $workout.name)
-            }
-            Section(header: Text("Exercises")) {
-                NavigationLink { EditExerciseView(exercise: ExerciseDef(name: "")) } label: { Text("new exercise") }
-
-                ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
-                    let current = allExercises.first(where: { $0.id == workout.exerciseOrder[idx] })
-                    Menu {
-                        ForEach(allExercises) { choice in
-                            Button(choice.name) { workout.exerciseOrder[idx] = choice.id }
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "line.3.horizontal")
-                            Text(current?.name ?? "Select exercise")
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 12) {
+            // Buttons row under title
+            HStack(spacing: 12) {
+                Button("new") {
+                    // Create a new exercise and open its editor
+                    let ex = ExerciseDef(name: "")
+                    store.saveExercise(ex)
+                    // Present editor for the new exercise
+                    // Use a navigation link
+                    // We'll push via hidden link below
+                    pendingNewExercise = ex
                 }
-                // Empty box at bottom
-                Menu {
-                    ForEach(allExercises) { choice in
-                        Button(choice.name) {
-                            workout.exerciseOrder.append(choice.id)
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "plus.circle")
-                        Text("Add exercise")
-                    }
+                .buttonStyle(.borderedProminent)
+
+                NavigationLink("reorder") {
+                    ReorderExercisesView(workout: workout)
                 }
                 .buttonStyle(.bordered)
-            }
-        }
-        // .onChange(of: workout.name) { newValue in
-        //     let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        //     guard !trimmed.isEmpty, !hasInserted else { return }
-        //     do {
-        //         let targetID = workout.id
-        //         let descriptor = FetchDescriptor<WorkoutDef>(predicate: #Predicate<WorkoutDef> { obj in obj.id == targetID })
-        //         let existing = try context.fetch(descriptor)
-        //         if existing.isEmpty {
-        //             context.insert(workout)
-        //         }
-        //         hasInserted = true
-        //         NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-        //         try? context.save()
-        //     } catch {
-        //         context.insert(workout)
-        //         hasInserted = true
-        //         NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-        //         try? context.save()
-        //     }
-        // }
-        // .onDisappear {
-        //     guard !hasInserted else { return }
-        //     let trimmed = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        //     guard !trimmed.isEmpty else { return }
-        //     do {
-        //         let targetID = workout.id
-        //         let descriptor = FetchDescriptor<WorkoutDef>(predicate: #Predicate<WorkoutDef> { obj in obj.id == targetID })
-        //         let existing = try context.fetch(descriptor)
-        //         if existing.isEmpty {
-        //             context.insert(workout)
-        //         }
-        //         hasInserted = true
-        //     } catch {
-        //         context.insert(workout)
-        //         hasInserted = true
-        //     }
-        //     try? context.save()
-        //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-        // }
-        .navigationTitle("edit workout")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    // do {
-                    //     let targetID = workout.id
-                    //     let descriptor = FetchDescriptor<WorkoutDef>(predicate: #Predicate<WorkoutDef> { obj in obj.id == targetID })
-                    //     let existing = try context.fetch(descriptor)
-                    //     if existing.isEmpty {
-                    //         context.insert(workout)
-                    //     }
-                    //     hasInserted = true
-                    //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                    //     try? context.save()
-                    //     dismiss()
-                    // } catch {
-                    //     context.insert(workout)
-                    //     hasInserted = true
-                    //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                    //     try? context.save()
-                    //     dismiss()
-                    // }
+
+                Button("end") {
                     store.saveWorkout(workout)
                     dismiss()
                 }
-                .disabled(!isWorkoutValid)
+                .buttonStyle(.bordered)
+            }
+
+            Form {
+                Section {
+                    TextField("Workout name", text: $workout.name)
+                }
+                Section(header: Text("Exercises")) {
+                    ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
+                        let current = allExercises.first(where: { $0.id == workout.exerciseOrder[idx] })
+                        HStack(spacing: 12) {
+                            Button {
+                                workout.exerciseOrder.remove(at: idx)
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 28, height: 28)
+                                    Image(systemName: "minus")
+                                        .foregroundStyle(.white)
+                                        .font(.system(size: 14, weight: .bold))
+                                }
+                                .accessibilityLabel("Delete")
+                            }
+                            .buttonStyle(.plain)
+
+                            Menu {
+                                ForEach(allExercises) { choice in
+                                    Button(choice.name) { workout.exerciseOrder[idx] = choice.id }
+                                }
+                            } label: {
+                                HStack {
+                                    Text(current?.name ?? "Select exercise")
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                        }
+                    }
+
+                    // Add exercise row at the bottom
+                    Menu {
+                        ForEach(allExercises) { choice in
+                            Button(choice.name) {
+                                workout.exerciseOrder.append(choice.id)
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle")
+                            Text("Add exercise")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
+        .background(
+            Group {
+                if let ex = pendingNewExercise {
+                    NavigationLink("", destination: EditExerciseView(exercise: ex))
+                        .opacity(0)
+                        .onAppear { pendingNewExercise = nil }
+                }
+            }
+        )
+        .navigationTitle("edit workout")
+        .toolbar { }
     }
 
     @Query private var allExercises: [ExerciseDef]
+}
+
+// MARK: - Reorder Exercises Screen
+struct ReorderExercisesView: View {
+    @EnvironmentObject private var store: AppStore
+    @Bindable var workout: WorkoutDef
+    @State private var editMode: EditMode = .active
+
+    var body: some View {
+        List {
+            ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
+                let name = exerciseName(for: workout.exerciseOrder[idx])
+                Text(name)
+            }
+            .onMove { indices, newOffset in
+                var order = workout.exerciseOrder
+                order.move(fromOffsets: indices, toOffset: newOffset)
+                workout.exerciseOrder = order
+            }
+        }
+        .environment(\.editMode, $editMode)
+        .navigationTitle("reorder")
+    }
+
+    @Query private var allExercises: [ExerciseDef]
+    private func exerciseName(for id: UUID) -> String {
+        allExercises.first(where: { $0.id == id })?.name ?? "Exercise"
+    }
 }
 
 // MARK: - Exercises List Screen
@@ -321,13 +392,13 @@ struct EditExerciseView: View {
         //         try? context.save()
         //     }
         // }
-        .onChange(of: exercise.lowestWeight) { newValue in
+        .onChange(of: exercise.lowestWeight) { _, newValue in
             if exercise.highestWeight < newValue { exercise.highestWeight = newValue }
         }
-        .onChange(of: exercise.highestWeight) { newValue in
+        .onChange(of: exercise.highestWeight) { _, newValue in
             if newValue < exercise.lowestWeight { exercise.lowestWeight = newValue }
         }
-        .onChange(of: exercise.weightIncrement) { newValue in
+        .onChange(of: exercise.weightIncrement) { _, newValue in
             if newValue < 1 { exercise.weightIncrement = 1 }
         }
         .navigationTitle("edit exercise")
@@ -461,6 +532,7 @@ struct LogExerciseView: View {
                 .controlSize(.large)
             }
         }
+//        .background(Color(red: 0.90, green: 0.95, blue: 1.0))
         .padding()
         .navigationBarBackButtonHidden(true)
         //.navigationTitle(exercise?.name ?? "Exercise")
@@ -477,6 +549,7 @@ struct LogExerciseView: View {
         } message: {
             Text("You have logged all exercises. What would you like to do?")
         }
+//        .background(Color(red: 0.90, green: 0.5, blue: 1.0))
     }
 
     private func exerciseAt(_ index: Int) -> ExerciseDef? {
