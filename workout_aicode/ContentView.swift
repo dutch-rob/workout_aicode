@@ -113,26 +113,22 @@ enum NavDestination: Hashable {
 }
 
 //#Preview {
-//    ContentView()
-//        .modelContainer(for: [WorkoutDef.self, ExerciseDef.self, WorkoutLog.self], inMemory: true)
+//    // In-memory model container for previews
+//    let container = try! ModelContainer(
+//        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+//        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+//    )
+//    let store = AppStore(context: container.mainContext)
+//
+//    // Seed some sample data so the preview shows content
+//    let sampleWorkout1 = WorkoutDef(name: "Upper Body", exerciseOrder: [])
+//    let sampleWorkout2 = WorkoutDef(name: "Leg Day", exerciseOrder: [])
+//    container.mainContext.insert(sampleWorkout1)
+//    container.mainContext.insert(sampleWorkout2)
+//    try? container.mainContext.save()
+//    store.reloadAll()
+//
+//    return ContentView()
+//        .environmentObject(store)
+//        .modelContainer(container)
 //}
-#Preview {
-    // In-memory model container for previews
-    let container = try! ModelContainer(
-        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
-        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-    )
-    let store = AppStore(context: container.mainContext)
-
-    // Seed some sample data so the preview shows content
-    let sampleWorkout1 = WorkoutDef(name: "Upper Body", exerciseOrder: [])
-    let sampleWorkout2 = WorkoutDef(name: "Leg Day", exerciseOrder: [])
-    container.mainContext.insert(sampleWorkout1)
-    container.mainContext.insert(sampleWorkout2)
-    try? container.mainContext.save()
-    store.reloadAll()
-
-    return ContentView()
-        .environmentObject(store)
-        .modelContainer(container)
-}
