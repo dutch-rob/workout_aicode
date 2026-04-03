@@ -87,7 +87,7 @@ final class AppStore: ObservableObject {
         try? context.save()
         reloadAll()
     }
-    
+
     func lastEntries(for workout: WorkoutDef) -> [UUID: ExerciseLogEntry] {
         do {
             let workoutID = workout.id

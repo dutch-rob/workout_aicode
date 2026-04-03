@@ -16,6 +16,7 @@ struct ContentView: View {
     ]) private var workouts: [WorkoutDef]
 
     @State private var showEditWorkouts = false
+    @State private var showEditExercises = false
     @State private var showExercises = false
     @State private var navigateToLogs = false
     @State private var path = NavigationPath()
@@ -36,18 +37,28 @@ struct ContentView: View {
                         modelContext.insert(w)
                         path.append(NavDestination.editWorkout(w))
                     } label: {
-                        Text("new")
+                        Text("new workout")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("edit") { showEditWorkouts = true }
-                        .buttonStyle(.bordered)
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(.bordered)
 
                     NavigationLink(value: NavDestination.logs) {
                         Text("logs").frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.bordered)
+                }
+
+                HStack(spacing: 12) {
+                    Button { showEditWorkouts = true }
+                    label: {
+                        Text("edit workouts")
+                        .frame(maxWidth: .infinity)}
+                    .buttonStyle(.bordered)
+
+                    Button { showEditExercises = true }
+                    label: {
+                        Text("edit exercises")
+                        .frame(maxWidth: .infinity)}
                     .buttonStyle(.bordered)
                 }
 
@@ -61,9 +72,12 @@ struct ContentView: View {
                                 NavigationLink(value: NavDestination.logWorkout(workout)) {
                                     Text(workout.name)
                                         .font(.headline)
+                                        .foregroundStyle(.white)
+                                        .bold()
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding()
-                                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.1)))
+//                                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.1)))
+                                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.blue.opacity(1.0)))
                                 }
                             }
                         }.padding(.top, 4)
@@ -91,6 +105,9 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showEditWorkouts) {
                 EditWorkoutsView()
+            }
+            .sheet(isPresented: $showEditExercises) {
+                EditExercisesView()
             }
             .sheet(isPresented: $showExercises) {
                 ExercisesView()
