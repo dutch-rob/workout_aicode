@@ -33,135 +33,130 @@ struct EditWorkoutsView: View {
     @State private var navigateToNewWorkout: Bool = false
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Button {
-                        let w = WorkoutDef(name: "")
-                        // context.insert(w)
-                        // try? context.save()
-                        // NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                        store.saveWorkout(w)
-                        pendingNewWorkout = w
-                        navigateToNewWorkout = true }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Button {
+                    let w = WorkoutDef(name: "")
+                    // context.insert(w)
+                    // try? context.save()
+                    // NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
+                    store.saveWorkout(w)
+                    pendingNewWorkout = w
+                    navigateToNewWorkout = true }
 
-                    label: {
-                        Text("new workout")
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    Button {
+                label: {
+                    Text("new workout")
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                Button {
 //                        Button(editMode == .active ? "end reorder" : "reorder workouts") {
-                        editMode = (editMode == .active ? .inactive : .active)
-                    }
-                    label: {
-                        Text(editMode == .active ? "end reorder" : "reorder workouts")
-                        .frame(maxWidth: .infinity)}
+                    editMode = (editMode == .active ? .inactive : .active)
+                }
+                label: {
+                    Text(editMode == .active ? "end reorder" : "reorder workouts")
+                    .frame(maxWidth: .infinity)}
 
-                    .buttonStyle(.bordered)
+                .buttonStyle(.bordered)
 //                        .frame(maxWidth: .infinity)
-                }
+            }
 
-                HStack(spacing: 12) {
-                    Button { dismiss() }
-                    label: {
-                        Text("end edit")
-                        .frame(maxWidth: .infinity)}
-                    .buttonStyle(.bordered)
-                }
+            HStack(spacing: 12) {
+                Button { dismiss() }
+                label: {
+                    Text("end edit")
+                    .frame(maxWidth: .infinity)}
+                .buttonStyle(.bordered)
+            }
 
-                if store.workouts.isEmpty {
-                    ContentUnavailableView("No workouts to edit", systemImage: "list.bullet")
-                } else {
-                    List {
-                        Section {
-                            ForEach(store.workouts) { workout in
-                                HStack(spacing: 12) {
-                                    if editMode == .active {
-                                        // Reorder mode: show title; system shows drag handles
-                                        Text(workout.name)
-                                            .lineLimit(1)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    } else {
-                                        // Normal mode: make the whole row a NavigationLink to edit
-                                        NavigationLink(destination: EditWorkoutView(workout: workout)) {
-                                            HStack(spacing: 12) {
-                                                // Place a red delete button on the left to mimic reorder screen placement
-                                                Button {
-                                                    workoutPendingDelete = workout
-                                                    showDeleteConfirm = true
-                                                } label: {
-                                                    ZStack {
-                                                        Circle()
-                                                            .fill(Color.red)
-                                                            .frame(width: 28, height: 28)
-                                                        Image(systemName: "minus")
-                                                            .foregroundStyle(.white)
-                                                            .font(.system(size: 14, weight: .bold))
-                                                    }
-                                                    .accessibilityLabel("Delete")
+            if store.workouts.isEmpty {
+                ContentUnavailableView("No workouts to edit", systemImage: "list.bullet")
+            } else {
+                List {
+                    Section {
+                        ForEach(store.workouts) { workout in
+                            HStack(spacing: 12) {
+                                if editMode == .active {
+                                    // Reorder mode: show title; system shows drag handles
+                                    Text(workout.name)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                } else {
+                                    // Normal mode: make the whole row a NavigationLink to edit
+                                    NavigationLink(destination: EditWorkoutView(workout: workout)) {
+                                        HStack(spacing: 12) {
+                                            // Place a red delete button on the left to mimic reorder screen placement
+                                            Button {
+                                                workoutPendingDelete = workout
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                ZStack {
+                                                    Circle()
+                                                        .fill(Color.red)
+                                                        .frame(width: 28, height: 28)
+                                                    Image(systemName: "minus")
+                                                        .foregroundStyle(.white)
+                                                        .font(.system(size: 14, weight: .bold))
                                                 }
-                                                .buttonStyle(.plain)
-
-                                                Text(workout.name)
-                                                    .lineLimit(1)
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                .accessibilityLabel("Delete")
                                             }
+                                            .buttonStyle(.plain)
+
+                                            Text(workout.name)
+                                                .lineLimit(1)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
                                         }
                                     }
                                 }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        workoutPendingDelete = workout
-                                        showDeleteConfirm = true
-                                    } label: { Label("Delete", systemImage: "trash") }
-                                }
                             }
-                            .onMove { indices, newOffset in
-                                var newOrder = store.workouts
-                                newOrder.move(fromOffsets: indices, toOffset: newOffset)
-                                store.reorderWorkouts(newOrder)
-                            }
-                            .onDelete { indexSet in
-                                for idx in indexSet {
-                                    let w = store.workouts[idx]
-                                    workoutPendingDelete = w
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    workoutPendingDelete = workout
                                     showDeleteConfirm = true
-                                }
+                                } label: { Label("Delete", systemImage: "trash") }
+                            }
+                        }
+                        .onMove { indices, newOffset in
+                            var newOrder = store.workouts
+                            newOrder.move(fromOffsets: indices, toOffset: newOffset)
+                            store.reorderWorkouts(newOrder)
+                        }
+                        .onDelete { indexSet in
+                            for idx in indexSet {
+                                let w = store.workouts[idx]
+                                workoutPendingDelete = w
+                                showDeleteConfirm = true
                             }
                         }
                     }
-                    .environment(\.editMode, $editMode)
                 }
+                .environment(\.editMode, $editMode)
             }
-            .background(
-                Group {
-                    if let w = pendingNewWorkout {
-                        NavigationLink(destination: EditWorkoutView(workout: w), isActive: $navigateToNewWorkout) {
-                            EmptyView()
-                        }
-                        .hidden()
-                    }
-                }
-            )
-            .padding()
-            .navigationTitle("edit workouts")
-            .confirmationDialog("Delete Workout?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
-                    // if let w = workoutPendingDelete {
-                    //     context.delete(w)
-                    //     try? context.save()
-                    //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                    // }
-                    if let w = workoutPendingDelete {
-                        store.deleteWorkout(w)
-                    }
-                    workoutPendingDelete = nil
-                }
-                Button("Cancel", role: .cancel) { workoutPendingDelete = nil }
-            } message: {
-                Text("Are you sure you want to delete this workout?")
+        }
+        .padding()
+        .navigationTitle("edit workouts")
+        .navigationDestination(isPresented: $navigateToNewWorkout) {
+            if let w = pendingNewWorkout {
+                EditWorkoutView(workout: w)
+            } else {
+                EmptyView()
             }
+        }
+        .confirmationDialog("Delete Workout?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                // if let w = workoutPendingDelete {
+                //     context.delete(w)
+                //     try? context.save()
+                //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
+                // }
+                if let w = workoutPendingDelete {
+                    store.deleteWorkout(w)
+                }
+                workoutPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { workoutPendingDelete = nil }
+        } message: {
+            Text("Are you sure you want to delete this workout?")
         }
     }
 
@@ -196,7 +191,6 @@ struct EditWorkoutView: View {
             HStack(spacing: 12) {
                 Button("new exercise") {
                     let ex = ExerciseDef(name: "")
-                    EditExerciseView(exercise: ex)
                     store.saveExercise(ex)
                     // Append to this workout's exercise order as last
                     workout.exerciseOrder.append(ex.id)
@@ -270,17 +264,14 @@ struct EditWorkoutView: View {
                 }
             }
         }
-        .background(
-            Group {
-                if let ex = pendingNewExercise {
-                    NavigationLink(destination: EditExerciseView(exercise: ex), isActive: $navigateToNewExercise) {
-                        EmptyView()
-                    }
-                    .hidden()
-                }
-            }
-        )
         .navigationTitle("edit workout")
+        .navigationDestination(isPresented: $navigateToNewExercise) {
+            if let ex = pendingNewExercise {
+                EditExerciseView(exercise: ex)
+            } else {
+                EmptyView()
+            }
+        }
         .toolbar { }
     }
 
@@ -315,52 +306,6 @@ struct ReorderExercisesView: View {
     }
 }
 
-// MARK: - Exercises List Screen
-struct ExercisesView: View {
-    @EnvironmentObject private var store: AppStore
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var context
-    // @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var exercises: [ExerciseDef]
-    private var exercises: [ExerciseDef] { store.exercises }
-    @State private var path = NavigationPath()
-
-    var body: some View {
-        NavigationStack(path: $path) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("exercises").font(.largeTitle).bold()
-                HStack(spacing: 12) {
-                    Button {
-                        let ex = ExerciseDef(name: "")
-                        // context.insert(ex)
-                        // try? context.save()
-                        // NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                        store.saveExercise(ex)
-                        path.append(ex)
-                    } label: { Text("new") }
-                        .buttonStyle(.borderedProminent)
-                    Button("edit") { /* could present edit mode in future */ }
-                        .buttonStyle(.bordered)
-                    Button("logs") { /* open logs */ }
-                        .buttonStyle(.bordered)
-                }
-                if exercises.isEmpty {
-                    ContentUnavailableView("No exercises", systemImage: "dumbbell")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List(exercises) { ex in
-                        NavigationLink(value: ex) {
-                            Text(ex.name)
-                        }
-                    }
-                }
-            }
-            .padding()
-            .navigationDestination(for: ExerciseDef.self) { ex in
-                EditExerciseView(exercise: ex)
-            }
-        }
-    }
-}
 
 // MARK: - Edit Exercises Screen
 struct EditExercisesView: View {
@@ -375,117 +320,112 @@ struct EditExercisesView: View {
     @State private var navigateToNewExercise: Bool = false
 
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Button {
-                        let ex = ExerciseDef(name: "")
-                        store.saveExercise(ex)
-                        pendingNewExercise = ex
-                        navigateToNewExercise = true
-                        
-                    } label: { Text("new exercise")
-                        .frame(maxWidth: .infinity)}
-                        .buttonStyle(.bordered)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Button {
+                    let ex = ExerciseDef(name: "")
+                    store.saveExercise(ex)
+                    pendingNewExercise = ex
+                    navigateToNewExercise = true
+                    
+                } label: { Text("new exercise")
+                    .frame(maxWidth: .infinity)}
                     .buttonStyle(.bordered)
-                    Button { dismiss()
-                    } label: { Text("end edit")
-                       .frame(maxWidth: .infinity)}
-                    .buttonStyle(.bordered)
-                }
+                .buttonStyle(.bordered)
+                Button { dismiss()
+                } label: { Text("end edit")
+                   .frame(maxWidth: .infinity)}
+                .buttonStyle(.bordered)
+            }
 
-                if store.workouts.isEmpty {
-                    ContentUnavailableView("No exercises to edit", systemImage: "list.bullet")
-                } else {
-                    List {
-                        Section {
-                            ForEach(store.exercises) { exercise in
-                                HStack(spacing: 12) {
-                                    if editMode == .active {
-                                        // Reorder mode: show title; system shows drag handles
-                                        Text(exercise.name)
-                                            .lineLimit(1)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    } else {
-                                        // Normal mode: make the whole row a NavigationLink to edit
-                                        NavigationLink(destination: EditExerciseView(exercise: exercise)) {
-                                            HStack(spacing: 12) {
-                                                // Place a red delete button on the left to mimic reorder screen placement
-                                                Button {
-                                                    exercisePendingDelete = exercise
-                                                    showDeleteConfirm = true
-                                                } label: {
-                                                    ZStack {
-                                                        Circle()
-                                                            .fill(Color.red)
-                                                            .frame(width: 28, height: 28)
-                                                        Image(systemName: "minus")
-                                                            .foregroundStyle(.white)
-                                                            .font(.system(size: 14, weight: .bold))
-                                                    }
-                                                    .accessibilityLabel("Delete")
+            if store.workouts.isEmpty {
+                ContentUnavailableView("No exercises to edit", systemImage: "list.bullet")
+            } else {
+                List {
+                    Section {
+                        ForEach(store.exercises) { exercise in
+                            HStack(spacing: 12) {
+                                if editMode == .active {
+                                    // Reorder mode: show title; system shows drag handles
+                                    Text(exercise.name)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                } else {
+                                    // Normal mode: make the whole row a NavigationLink to edit
+                                    NavigationLink(destination: EditExerciseView(exercise: exercise)) {
+                                        HStack(spacing: 12) {
+                                            // Place a red delete button on the left to mimic reorder screen placement
+                                            Button {
+                                                exercisePendingDelete = exercise
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                ZStack {
+                                                    Circle()
+                                                        .fill(Color.red)
+                                                        .frame(width: 28, height: 28)
+                                                    Image(systemName: "minus")
+                                                        .foregroundStyle(.white)
+                                                        .font(.system(size: 14, weight: .bold))
                                                 }
-                                                .buttonStyle(.plain)
-
-                                                Text(exercise.name)
-                                                    .lineLimit(1)
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                .accessibilityLabel("Delete")
                                             }
+                                            .buttonStyle(.plain)
+
+                                            Text(exercise.name)
+                                                .lineLimit(1)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
                                         }
                                     }
                                 }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        exercisePendingDelete = exercise
-                                        showDeleteConfirm = true
-                                    } label: { Label("Delete", systemImage: "trash") }
-                                }
                             }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    exercisePendingDelete = exercise
+                                    showDeleteConfirm = true
+                                } label: { Label("Delete", systemImage: "trash") }
+                            }
+                        }
 //                            .onMove { indices, newOffset in
 //                                var newOrder = store.exercises
 //                                newOrder.move(fromOffsets: indices, toOffset: newOffset)
 //                                store.reorderExercises(newOrder)
 //                            }
-                            .onDelete { indexSet in
-                                for idx in indexSet {
-                                    let ex = store.exercises[idx]
-                                    exercisePendingDelete = ex
-                                    showDeleteConfirm = true
-                                }
+                        .onDelete { indexSet in
+                            for idx in indexSet {
+                                let ex = store.exercises[idx]
+                                exercisePendingDelete = ex
+                                showDeleteConfirm = true
                             }
                         }
                     }
-                    .environment(\.editMode, $editMode)
                 }
+                .environment(\.editMode, $editMode)
             }
-            .background(
-                Group {
-                    if let ex = pendingNewExercise {
-                        NavigationLink(destination: EditExerciseView(exercise: ex), isActive: $navigateToNewExercise) {
-                            EmptyView()
-                        }
-                        .hidden()
-                    }
-                }
-            )
-            .padding()
-            .navigationTitle("edit exercises")
-            .confirmationDialog("Delete Workout?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-                Button("Delete", role: .destructive) {
-                    // if let ex = exercisePendingDelete {
-                    //     context.delete(ex)
-                    //     try? context.save()
-                    //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                    // }
-                    if let ex = exercisePendingDelete {
-                        store.deleteExercise(ex)
-                    }
-                    exercisePendingDelete = nil
-                }
-                Button("Cancel", role: .cancel) { exercisePendingDelete = nil }
-            } message: {
-                Text("Are you sure you want to delete this exercise?")
+        }
+        .padding()
+        .navigationTitle("edit exercises")
+        .navigationDestination(isPresented: $navigateToNewExercise) {
+            if let ex = pendingNewExercise {
+                EditExerciseView(exercise: ex)
+            } else {
+                EmptyView()
             }
+        }
+        .confirmationDialog("Delete Workout?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                // if let ex = exercisePendingDelete {
+                //     context.delete(ex)
+                //     try? context.save()
+                //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
+                // }
+                if let ex = exercisePendingDelete {
+                    store.deleteExercise(ex)
+                }
+                exercisePendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { exercisePendingDelete = nil }
+        } message: {
+            Text("Are you sure you want to delete this exercise?")
         }
     }
 

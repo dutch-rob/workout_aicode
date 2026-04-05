@@ -16,11 +16,13 @@ struct ContentView: View {
     ]) private var workouts: [WorkoutDef]
 
     @State private var showEditWorkouts = false
-    @State private var showEditExercises = false
     @State private var showExercises = false
     @State private var navigateToLogs = false
     @State private var path = NavigationPath()
     @State private var refreshTick: Int = 0
+    
+    @State private var pendingNewWorkout: WorkoutDef? = nil
+    @State private var navigateToNewWorkout: Bool = false
 
     init() {}
 
@@ -35,30 +37,29 @@ struct ContentView: View {
                     Button {
                         let w = WorkoutDef(name: "")
                         modelContext.insert(w)
-                        path.append(NavDestination.editWorkout(w))
+                        pendingNewWorkout = w
+                        navigateToNewWorkout = true
                     } label: {
                         Text("new workout")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
 
-                    NavigationLink(value: NavDestination.logs) {
+                    NavigationLink(destination: LogsView()) {
                         Text("logs").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                 }
 
                 HStack(spacing: 12) {
-                    Button { showEditWorkouts = true }
-                    label: {
-                        Text("edit workouts")
-                        .frame(maxWidth: .infinity)}
+                    NavigationLink(destination: EditWorkoutsView()) {
+                        Text("edit workouts").frame(maxWidth: .infinity)
+                    }
                     .buttonStyle(.bordered)
-
-                    Button { showEditExercises = true }
-                    label: {
-                        Text("edit exercises")
-                        .frame(maxWidth: .infinity)}
+                    
+                    NavigationLink(destination: EditExercisesView()) {
+                        Text("edit exercises").frame(maxWidth: .infinity)
+                    }
                     .buttonStyle(.bordered)
                 }
 
@@ -69,14 +70,13 @@ struct ContentView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 8) {
                             ForEach(workouts.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, id: \.self) { workout in
-                                NavigationLink(value: NavDestination.logWorkout(workout)) {
+                                NavigationLink(destination: LogExerciseView(workout: workout)) {
                                     Text(workout.name)
                                         .font(.headline)
                                         .foregroundStyle(.white)
                                         .bold()
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding()
-//                                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.1)))
                                         .background(RoundedRectangle(cornerRadius: 12).fill(Color.blue.opacity(1.0)))
                                 }
                             }
@@ -91,61 +91,18 @@ struct ContentView: View {
                     showExercises = true
                 }
             })
-            .navigationDestination(for: NavDestination.self) { dest in
-                switch dest {
-                case .logs:
-                    LogsView()
-                case .logWorkout(let workout):
-                    LogExerciseView(workout: workout)
-                case .editWorkout(let workout):
-                    EditWorkoutView(workout: workout)
-                case .exercises:
-                    ExercisesView()
-                }
-            }
-            .sheet(isPresented: $showEditWorkouts) {
-                EditWorkoutsView()
-            }
-            .sheet(isPresented: $showEditExercises) {
-                EditExercisesView()
-            }
-            .sheet(isPresented: $showExercises) {
-                ExercisesView()
-            }
             .onReceive(NotificationCenter.default.publisher(for: .modelDataDidChange)) { _ in
                 refreshTick &+= 1
+            }
+            .navigationDestination(isPresented: $navigateToNewWorkout) {
+                if let w = pendingNewWorkout {
+                    EditWorkoutView(workout: w)
+                } else {
+                    EmptyView()
+                }
             }
 //            .background(Color(red: 1.0, green: 0.95, blue: 0.8))
         }
     }
 }
 
-// MARK: - Navigation Destinations
-
-enum NavDestination: Hashable {
-    case logs
-    case logWorkout(WorkoutDef)
-    case editWorkout(WorkoutDef)
-    case exercises
-}
-
-//#Preview {
-//    // In-memory model container for previews
-//    let container = try! ModelContainer(
-//        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
-//        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
-//    )
-//    let store = AppStore(context: container.mainContext)
-//
-//    // Seed some sample data so the preview shows content
-//    let sampleWorkout1 = WorkoutDef(name: "Upper Body", exerciseOrder: [])
-//    let sampleWorkout2 = WorkoutDef(name: "Leg Day", exerciseOrder: [])
-//    container.mainContext.insert(sampleWorkout1)
-//    container.mainContext.insert(sampleWorkout2)
-//    try? container.mainContext.save()
-//    store.reloadAll()
-//
-//    return ContentView()
-//        .environmentObject(store)
-//        .modelContainer(container)
-//}
