@@ -15,10 +15,6 @@ struct ContentView: View {
         SortDescriptor(\WorkoutDef.name)
     ]) private var workouts: [WorkoutDef]
 
-    @State private var showEditWorkouts = false
-    @State private var showExercises = false
-    @State private var navigateToLogs = false
-    @State private var path = NavigationPath()
     @State private var refreshTick: Int = 0
     
     @State private var pendingNewWorkout: WorkoutDef? = nil
@@ -27,7 +23,7 @@ struct ContentView: View {
     init() {}
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack() {
             VStack(alignment: .leading, spacing: 12) {
                 Text("workouts")
                     .font(.largeTitle).bold()
@@ -86,11 +82,6 @@ struct ContentView: View {
                 }
             }
             .padding()
-            .gesture(DragGesture().onEnded { value in
-                if value.translation.width < -40 || value.translation.width > 40 {
-                    showExercises = true
-                }
-            })
             .onReceive(NotificationCenter.default.publisher(for: .modelDataDidChange)) { _ in
                 refreshTick &+= 1
             }
@@ -101,7 +92,6 @@ struct ContentView: View {
                     EmptyView()
                 }
             }
-//            .background(Color(red: 1.0, green: 0.95, blue: 0.8))
         }
     }
 }
