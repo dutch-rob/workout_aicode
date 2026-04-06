@@ -96,3 +96,28 @@ struct ContentView: View {
     }
 }
 
+#Preview("Home - ContentView") {
+    let container = try! ModelContainer(
+        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+    let context = container.mainContext
+    let store = AppStore(context: context)
+    // Seed sample workouts and exercises
+    let e1 = ExerciseDef(name: "Bench Press")
+    let e2 = ExerciseDef(name: "Squat")
+    let w1 = WorkoutDef(name: "Upper Body", exerciseOrder: [e1.id])
+    let w2 = WorkoutDef(name: "Leg Day", exerciseOrder: [e2.id])
+
+    context.insert(e1)
+    context.insert(e2)
+    context.insert(w1)
+    context.insert(w2)
+    try? context.save()
+    store.reloadAll()
+
+    return ContentView()
+        .environmentObject(store)
+        .modelContainer(container)
+}
+

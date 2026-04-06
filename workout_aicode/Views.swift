@@ -19,6 +19,28 @@ extension UTType {
     static let workoutDragPayload = UTType.data
 }
 
+// Reusable red delete circle button
+struct DeleteCircleButton: View {
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle().fill(Color.red).frame(width: 28, height: 28)
+                Image(systemName: "minus")
+                    .foregroundStyle(.white)
+                    .font(.system(size: 14, weight: .bold))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Delete")
+    }
+}
+
+// Helper to get exercise name by id
+extension Collection where Element == ExerciseDef {
+    func name(for id: UUID) -> String { first(where: { $0.id == id })?.name ?? "Exercise" }
+}
+
 // MARK: - Edit Workouts Screen
 struct EditWorkoutsView: View {
     @EnvironmentObject private var store: AppStore
@@ -37,9 +59,6 @@ struct EditWorkoutsView: View {
             HStack(spacing: 12) {
                 Button {
                     let w = WorkoutDef(name: "")
-                    // context.insert(w)
-                    // try? context.save()
-                    // NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
                     store.saveWorkout(w)
                     pendingNewWorkout = w
                     navigateToNewWorkout = true }
@@ -48,7 +67,7 @@ struct EditWorkoutsView: View {
                     Text("new workout")
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 Button {
 //                        Button(editMode == .active ? "end reorder" : "reorder workouts") {
                     editMode = (editMode == .active ? .inactive : .active)
@@ -64,7 +83,7 @@ struct EditWorkoutsView: View {
             HStack(spacing: 12) {
                 Button { dismiss() }
                 label: {
-                    Text("end edit")
+                    Text("Done")
                     .frame(maxWidth: .infinity)}
                 .buttonStyle(.bordered)
             }
@@ -86,21 +105,10 @@ struct EditWorkoutsView: View {
                                     NavigationLink(destination: EditWorkoutView(workout: workout)) {
                                         HStack(spacing: 12) {
                                             // Place a red delete button on the left to mimic reorder screen placement
-                                            Button {
+                                            DeleteCircleButton {
                                                 workoutPendingDelete = workout
                                                 showDeleteConfirm = true
-                                            } label: {
-                                                ZStack {
-                                                    Circle()
-                                                        .fill(Color.red)
-                                                        .frame(width: 28, height: 28)
-                                                    Image(systemName: "minus")
-                                                        .foregroundStyle(.white)
-                                                        .font(.system(size: 14, weight: .bold))
-                                                }
-                                                .accessibilityLabel("Delete")
                                             }
-                                            .buttonStyle(.plain)
 
                                             Text(workout.name)
                                                 .lineLimit(1)
@@ -197,14 +205,14 @@ struct EditWorkoutView: View {
                     pendingNewExercise = ex
                     navigateToNewExercise = true
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
 
                 NavigationLink("reorder exercises") {
                     ReorderExercisesView(workout: workout)
                 }
                 .buttonStyle(.bordered)
 
-                Button("end edit") {
+                Button("Done") {
                     store.saveWorkout(workout)
                     dismiss()
                 }
@@ -219,20 +227,7 @@ struct EditWorkoutView: View {
                     ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
                         let current = allExercises.first(where: { $0.id == workout.exerciseOrder[idx] })
                         HStack(spacing: 12) {
-                            Button {
-                                workout.exerciseOrder.remove(at: idx)
-                            } label: {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.red)
-                                        .frame(width: 28, height: 28)
-                                    Image(systemName: "minus")
-                                        .foregroundStyle(.white)
-                                        .font(.system(size: 14, weight: .bold))
-                                }
-                                .accessibilityLabel("Delete")
-                            }
-                            .buttonStyle(.plain)
+                            DeleteCircleButton { workout.exerciseOrder.remove(at: idx) }
 
                             Menu {
                                 ForEach(allExercises) { choice in
@@ -302,7 +297,7 @@ struct ReorderExercisesView: View {
 
     @Query private var allExercises: [ExerciseDef]
     private func exerciseName(for id: UUID) -> String {
-        allExercises.first(where: { $0.id == id })?.name ?? "Exercise"
+        return allExercises.name(for: id)
     }
 }
 
@@ -330,10 +325,9 @@ struct EditExercisesView: View {
                     
                 } label: { Text("new exercise")
                     .frame(maxWidth: .infinity)}
-                    .buttonStyle(.bordered)
-                .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                 Button { dismiss()
-                } label: { Text("end edit")
+                } label: { Text("Done")
                    .frame(maxWidth: .infinity)}
                 .buttonStyle(.bordered)
             }
@@ -355,21 +349,10 @@ struct EditExercisesView: View {
                                     NavigationLink(destination: EditExerciseView(exercise: exercise)) {
                                         HStack(spacing: 12) {
                                             // Place a red delete button on the left to mimic reorder screen placement
-                                            Button {
+                                            DeleteCircleButton {
                                                 exercisePendingDelete = exercise
                                                 showDeleteConfirm = true
-                                            } label: {
-                                                ZStack {
-                                                    Circle()
-                                                        .fill(Color.red)
-                                                        .frame(width: 28, height: 28)
-                                                    Image(systemName: "minus")
-                                                        .foregroundStyle(.white)
-                                                        .font(.system(size: 14, weight: .bold))
-                                                }
-                                                .accessibilityLabel("Delete")
                                             }
-                                            .buttonStyle(.plain)
 
                                             Text(exercise.name)
                                                 .lineLimit(1)
@@ -385,11 +368,6 @@ struct EditExercisesView: View {
                                 } label: { Label("Delete", systemImage: "trash") }
                             }
                         }
-//                            .onMove { indices, newOffset in
-//                                var newOrder = store.exercises
-//                                newOrder.move(fromOffsets: indices, toOffset: newOffset)
-//                                store.reorderExercises(newOrder)
-//                            }
                         .onDelete { indexSet in
                             for idx in indexSet {
                                 let ex = store.exercises[idx]
@@ -428,13 +406,6 @@ struct EditExercisesView: View {
             Text("Are you sure you want to delete this exercise?")
         }
     }
-
-    // Unused now that custom drag/drop reordering is implemented; kept for reference.
-//    private func move(from source: IndexSet, to destination: Int) {
-//        var order = store.exercises
-//        order.move(fromOffsets: source, toOffset: destination)
-//        store.reorderExercises(order)
-//    }
 }
 
 // MARK: - Edit Exercise Screen
@@ -477,26 +448,6 @@ struct EditExerciseView: View {
                 }
             } label: { Text("Weight increment") }
         }
-        // .onChange(of: exercise.name) { newValue in
-        //     let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        //     guard !trimmed.isEmpty, !hasInserted else { return }
-        //     do {
-        //         let targetID = exercise.id
-        //         let descriptor = FetchDescriptor<ExerciseDef>(predicate: #Predicate<ExerciseDef> { obj in obj.id == targetID })
-        //         let existing = try context.fetch(descriptor)
-        //         if existing.isEmpty {
-        //             context.insert(exercise)
-        //         }
-        //         hasInserted = true
-        //         NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-        //         try? context.save()
-        //     } catch {
-        //         context.insert(exercise)
-        //         hasInserted = true
-        //         NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-        //         try? context.save()
-        //     }
-        // }
         .onChange(of: exercise.lowestWeight) { _, newValue in
             if exercise.highestWeight < newValue { exercise.highestWeight = newValue }
         }
@@ -510,49 +461,12 @@ struct EditExerciseView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    // do {
-                    //     let targetID = exercise.id
-                    //     let descriptor = FetchDescriptor<ExerciseDef>(predicate: #Predicate<ExerciseDef> { obj in obj.id == targetID })
-                    //     let existing = try context.fetch(descriptor)
-                    //     if existing.isEmpty {
-                    //         context.insert(exercise)
-                    //     }
-                    //     hasInserted = true
-                    //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                    //     try? context.save()
-                    //     dismiss()
-                    // } catch {
-                    //     context.insert(exercise)
-                    //     hasInserted = true
-                    //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                    //     try? context.save()
-                    //     dismiss()
-                    // }
                     store.saveExercise(exercise)
                     dismiss()
                 }
                 .disabled(!isExerciseValid)
             }
         }
-        // .onDisappear {
-        //     guard !hasInserted else { return }
-        //     let trimmed = exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        //     guard !trimmed.isEmpty else { return }
-        //     do {
-        //         let targetID = exercise.id
-        //         let descriptor = FetchDescriptor<ExerciseDef>(predicate: #Predicate<ExerciseDef> { obj in obj.id == targetID })
-        //         let existing = try context.fetch(descriptor)
-        //         if existing.isEmpty {
-        //             context.insert(exercise)
-        //         }
-        //         hasInserted = true
-        //     } catch {
-        //         context.insert(exercise)
-        //         hasInserted = true
-        //     }
-        //     try? context.save()
-        //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-        // }
     }
 }
 
@@ -777,5 +691,97 @@ struct LogsView: View {
         }
         .navigationTitle("logs")
     }
+}
+
+#Preview("Edit Workouts") {
+    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let context = container.mainContext
+    let store = AppStore(context: context)
+    // Seed sample data
+    let w1 = WorkoutDef(name: "Upper Body")
+    let w2 = WorkoutDef(name: "Leg Day")
+    context.insert(w1)
+    context.insert(w2)
+    try? context.save()
+    store.reloadAll()
+    return NavigationStack { EditWorkoutsView() }
+        .environmentObject(store)
+        .modelContainer(container)
+}
+
+#Preview("Edit Workout") {
+    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let context = container.mainContext
+    let store = AppStore(context: context)
+    // Seed workout and exercises
+    let e1 = ExerciseDef(name: "Bench Press")
+    let e2 = ExerciseDef(name: "Pull-up")
+    let workout = WorkoutDef(name: "Upper Body", exerciseOrder: [e1.id, e2.id])
+    context.insert(e1)
+    context.insert(e2)
+    context.insert(workout)
+    try? context.save()
+    store.reloadAll()
+    return NavigationStack { EditWorkoutView(workout: workout) }
+        .environmentObject(store)
+        .modelContainer(container)
+}
+
+#Preview("Edit Exercises") {
+    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let context = container.mainContext
+    let store = AppStore(context: context)
+    // Seed sample exercises
+    let e1 = ExerciseDef(name: "Squat")
+    let e2 = ExerciseDef(name: "Deadlift")
+    context.insert(e1)
+    context.insert(e2)
+    try? context.save()
+    store.reloadAll()
+    return NavigationStack { EditExercisesView() }
+        .environmentObject(store)
+        .modelContainer(container)
+}
+
+#Preview("Log Exercise") {
+    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let context = container.mainContext
+    let store = AppStore(context: context)
+    let e1 = ExerciseDef(name: "Curl", numberOfSeries: 3)
+    let workout = WorkoutDef(name: "Arms", exerciseOrder: [e1.id])
+    context.insert(e1)
+    context.insert(workout)
+    try? context.save()
+    store.reloadAll()
+    return NavigationStack { LogExerciseView(workout: workout) }
+        .environmentObject(store)
+        .modelContainer(container)
+}
+
+#Preview("Logs") {
+    let container = try! ModelContainer(
+        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+    let context = container.mainContext
+    let store = AppStore(context: context)
+    // Seed workout, exercises, and a log
+    let e1 = ExerciseDef(name: "Curl")
+    let e2 = ExerciseDef(name: "Press")
+    let workout = WorkoutDef(name: "Mixed", exerciseOrder: [e1.id, e2.id])
+    let logEntry1 = ExerciseLogEntry(exerciseId: e1.id, weights: [10, 12, 12], reps: [12, 10, 8])
+    let logEntry2 = ExerciseLogEntry(exerciseId: e2.id, weights: [20, 22, 24], reps: [10, 10, 8])
+    let log = WorkoutLog(workoutId: workout.id, entries: [logEntry1, logEntry2])
+
+    context.insert(e1)
+    context.insert(e2)
+    context.insert(workout)
+    context.insert(log)
+    try? context.save()
+    store.reloadAll()
+
+    return NavigationStack { LogsView() }
+        .environmentObject(store)
+        .modelContainer(container)
 }
 
