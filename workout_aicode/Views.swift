@@ -67,9 +67,8 @@ struct EditWorkoutsView: View {
                     Text("new workout")
                     .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 Button {
-//                        Button(editMode == .active ? "end reorder" : "reorder workouts") {
                     editMode = (editMode == .active ? .inactive : .active)
                 }
                 label: {
@@ -77,16 +76,15 @@ struct EditWorkoutsView: View {
                     .frame(maxWidth: .infinity)}
 
                 .buttonStyle(.bordered)
-//                        .frame(maxWidth: .infinity)
             }
 
-            HStack(spacing: 12) {
-                Button { dismiss() }
-                label: {
-                    Text("Done")
-                    .frame(maxWidth: .infinity)}
-                .buttonStyle(.bordered)
-            }
+//            HStack(spacing: 12) {
+//                Button { dismiss() }
+//                label: {
+//                    Text("Done")
+//                    .frame(maxWidth: .infinity)}
+//                .buttonStyle(.bordered)
+//            }
 
             if store.workouts.isEmpty {
                 ContentUnavailableView("No workouts to edit", systemImage: "list.bullet")
@@ -197,7 +195,7 @@ struct EditWorkoutView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Buttons row under title
             HStack(spacing: 12) {
-                Button("new exercise") {
+                Button {
                     let ex = ExerciseDef(name: "")
                     store.saveExercise(ex)
                     // Append to this workout's exercise order as last
@@ -205,18 +203,26 @@ struct EditWorkoutView: View {
                     pendingNewExercise = ex
                     navigateToNewExercise = true
                 }
-                .buttonStyle(.borderedProminent)
+                label: {
+                    Text("new exercise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
 
-                NavigationLink("reorder exercises") {
+                NavigationLink {
                     ReorderExercisesView(workout: workout)
                 }
-                .buttonStyle(.bordered)
-
-                Button("Done") {
-                    store.saveWorkout(workout)
-                    dismiss()
+                label: {
+                    Text("reorder exercises")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+
+//                Button("Done") {
+//                    store.saveWorkout(workout)
+//                    dismiss()
+//                }
+//                .buttonStyle(.bordered)
             }
 
             Form {
@@ -325,11 +331,11 @@ struct EditExercisesView: View {
                     
                 } label: { Text("new exercise")
                     .frame(maxWidth: .infinity)}
-                    .buttonStyle(.borderedProminent)
-                Button { dismiss()
-                } label: { Text("Done")
-                   .frame(maxWidth: .infinity)}
-                .buttonStyle(.bordered)
+                    .buttonStyle(.bordered)
+//                Button { dismiss()
+//                } label: { Text("Done")
+//                   .frame(maxWidth: .infinity)}
+//                .buttonStyle(.bordered)
             }
 
             if store.workouts.isEmpty {
@@ -489,6 +495,24 @@ struct LogExerciseView: View {
     var body: some View {
         let exercise = exerciseAt(currentIndex)
         VStack(spacing: 16) {
+            
+            HStack {
+                Button("log, next") { logAndNext() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                Button("quit") { dismiss() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                Menu("list") {
+                    ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
+                        let ex = exerciseAt(idx)
+                        Button(ex?.name ?? "") { currentIndex = idx }
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+            }
+
             Text(exercise?.name ?? "").font(.title2).bold()
 
             Text("weight used").font(.caption).frame(maxWidth: .infinity, alignment: .leading)
@@ -533,26 +557,10 @@ struct LogExerciseView: View {
                 }
                 .frame(height: 260)
             }
-
-            HStack {
-                Button("log, next") { logAndNext() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                Button("quit") { dismiss() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                Menu("list") {
-                    ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
-                        let ex = exerciseAt(idx)
-                        Button(ex?.name ?? "") { currentIndex = idx }
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-            }
         }
 //        .background(Color(red: 0.90, green: 0.95, blue: 1.0))
         .padding()
+        .navigationTitle("log exercise")
         .navigationBarBackButtonHidden(true)
         //.navigationTitle(exercise?.name ?? "Exercise")
         //.navigationBarTitleDisplayMode(.inline)
