@@ -218,11 +218,6 @@ struct EditWorkoutView: View {
                 }
                 .buttonStyle(.bordered)
 
-//                Button("Done") {
-//                    store.saveWorkout(workout)
-//                    dismiss()
-//                }
-//                .buttonStyle(.bordered)
             }
 
             Form {
@@ -491,84 +486,141 @@ struct LogExerciseView: View {
 
     @State private var loggedIndices: Set<Int> = []
     @State private var showAllLoggedAlert = false
+    @State private var dragOffsetX: CGFloat = 0
+    @State private var containerWidth: CGFloat = 0
 
     var body: some View {
         let exercise = exerciseAt(currentIndex)
-        VStack(spacing: 16) {
-            
-            HStack {
-                Button("log, next") { logAndNext() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                Button("quit") { dismiss() }
+        GeometryReader { geo in
+            let width = geo.size.width
+            VStack(spacing: 16) {
+                
+                HStack {
+                    Button("log, next") { logAndNext() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    Button("quit") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    Menu("list") {
+                        ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
+                            let ex = exerciseAt(idx)
+                            Button(ex?.name ?? "") { currentIndex = idx }
+                        }
+                    }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
-                Menu("list") {
-                    ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
-                        let ex = exerciseAt(idx)
-                        Button(ex?.name ?? "") { currentIndex = idx }
-                    }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-            }
 
-            Text(exercise?.name ?? "").font(.title2).bold()
+                Text(exercise?.name ?? "").font(.title2).bold()
 
-            Text("weight used").font(.caption).frame(maxWidth: .infinity, alignment: .leading)
-            if let exercise = exercise {
-                let weightOptions = Array(stride(from: exercise.lowestWeight, through: exercise.highestWeight, by: exercise.weightIncrement))
-                GeometryReader { proxy in
-                    let totalWidth = proxy.size.width - 16
-                    let count = max(1, exercise.numberOfSeries)
-                    let column = max(100, totalWidth / CGFloat(count))
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(0..<count, id: \.self) { series in
-                                Picker("", selection: weightBinding(series: series, defaultValue: exercise.lowestWeight)) {
-                                    ForEach(weightOptions, id: \.self) { w in
-                                        Text("\(w)").tag(w)
+                Text("weight used").font(.caption).frame(maxWidth: .infinity, alignment: .leading)
+                if let exercise = exercise {
+                    let weightOptions = Array(stride(from: exercise.lowestWeight, through: exercise.highestWeight, by: exercise.weightIncrement))
+                    GeometryReader { proxy in
+                        let totalWidth = proxy.size.width - 16
+                        let count = max(1, exercise.numberOfSeries)
+                        let column = max(100, totalWidth / CGFloat(count))
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack {
+                                ForEach(0..<count, id: \.self) { series in
+                                    Picker("", selection: weightBinding(series: series, defaultValue: exercise.lowestWeight)) {
+                                        ForEach(weightOptions, id: \.self) { w in
+                                            Text("\(w)").tag(w)
+                                        }
                                     }
+                                    .pickerStyle(.wheel)
+                                    .frame(width: column, height: max(240, proxy.size.height * 0.4))
                                 }
-                                .pickerStyle(.wheel)
-                                .frame(width: column, height: max(240, proxy.size.height * 0.4))
                             }
                         }
                     }
-                }
-                .frame(height: 260)
+                    .frame(height: 260)
 
-                Text("repetitions").font(.caption).frame(maxWidth: .infinity, alignment: .leading)
-                GeometryReader { proxy in
-                    let totalWidth = proxy.size.width - 16
-                    let count = max(1, exercise.numberOfSeries)
-                    let column = max(100, totalWidth / CGFloat(count))
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(0..<count, id: \.self) { series in
-                                Picker("", selection: repsBinding(series: series)) {
-                                    ForEach(0...200, id: \.self) { r in Text("\(r)").tag(r) }
+                    Text("repetitions").font(.caption).frame(maxWidth: .infinity, alignment: .leading)
+                    GeometryReader { proxy in
+                        let totalWidth = proxy.size.width - 16
+                        let count = max(1, exercise.numberOfSeries)
+                        let column = max(100, totalWidth / CGFloat(count))
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack {
+                                ForEach(0..<count, id: \.self) { series in
+                                    Picker("", selection: repsBinding(series: series)) {
+                                        ForEach(0...200, id: \.self) { r in Text("\(r)").tag(r) }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(width: column, height: max(240, proxy.size.height * 0.4))
                                 }
-                                .pickerStyle(.wheel)
-                                .frame(width: column, height: max(240, proxy.size.height * 0.4))
                             }
                         }
                     }
+                    .frame(height: 260)
                 }
-                .frame(height: 260)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .contentShape(Rectangle())
+            .offset(x: dragOffsetX)
+            .padding()
+            .onAppear {
+                containerWidth = width
+                prepareBuffers()
+            }
+            .onChange(of: geo.size.width) { _, newW in
+                containerWidth = newW
+            }
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 10, coordinateSpace: .local)
+                    .onChanged { value in
+                        // Track horizontal drag; ignore vertical drags so pickers keep working
+                        if abs(value.translation.width) > abs(value.translation.height) {
+                            dragOffsetX = value.translation.width
+                        }
+                    }
+                    .onEnded { value in
+                        let threshold: CGFloat = 60
+                        let horizontal = value.translation.width
+                        let vertical = value.translation.height
+                        let isHorizontal = abs(horizontal) > abs(vertical)
+
+                        guard isHorizontal else {
+                            withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
+                            return
+                        }
+
+                        if horizontal <= -threshold {
+                            // Swipe left -> animate current content out to the left, then bring next in from the right
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                dragOffsetX = -containerWidth
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                                goToNextUnlogged()
+                                // Position new content just offscreen to the right, then animate in
+                                dragOffsetX = containerWidth
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    dragOffsetX = 0
+                                }
+                            }
+                        } else if horizontal >= threshold {
+                            // Swipe right -> animate current content out to the right, then bring previous in from the left
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                dragOffsetX = containerWidth
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                                goToPrevUnlogged()
+                                // Position new content just offscreen to the left, then animate in
+                                dragOffsetX = -containerWidth
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    dragOffsetX = 0
+                                }
+                            }
+                        } else {
+                            withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
+                        }
+                    }
+            )
         }
-//        .background(Color(red: 0.90, green: 0.95, blue: 1.0))
-        .padding()
         .navigationTitle("log exercise")
         .navigationBarBackButtonHidden(true)
-        //.navigationTitle(exercise?.name ?? "Exercise")
-        //.navigationBarTitleDisplayMode(.inline)
-        .onAppear { prepareBuffers() }
-        .gesture(DragGesture().onEnded { value in
-            if value.translation.width < -40 { goToNextUnlogged() }
-            else if value.translation.width > 40 { goToPrevUnlogged() }
-        })
         .alert("All exercises logged", isPresented: $showAllLoggedAlert) {
             Button("View only", role: .cancel) { /* stay on current */ }
             Button("Overwrite") { loggedIndices.remove(currentIndex) }
@@ -576,7 +628,6 @@ struct LogExerciseView: View {
         } message: {
             Text("You have logged all exercises. What would you like to do?")
         }
-//        .background(Color(red: 0.90, green: 0.5, blue: 1.0))
     }
 
     private func exerciseAt(_ index: Int) -> ExerciseDef? {
