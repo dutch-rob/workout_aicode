@@ -78,14 +78,6 @@ struct EditWorkoutsView: View {
                 .buttonStyle(.bordered)
             }
 
-//            HStack(spacing: 12) {
-//                Button { dismiss() }
-//                label: {
-//                    Text("Done")
-//                    .frame(maxWidth: .infinity)}
-//                .buttonStyle(.bordered)
-//            }
-
             if store.workouts.isEmpty {
                 ContentUnavailableView("No workouts to edit", systemImage: "list.bullet")
             } else {
