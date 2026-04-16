@@ -480,6 +480,9 @@ struct LogExerciseView: View {
     @State private var showAllLoggedAlert = false
     @State private var dragOffsetX: CGFloat = 0
     @State private var containerWidth: CGFloat = 0
+    private enum DragDirection { case horizontal, vertical }
+    @State private var dragDirection: DragDirection? = nil
+    @State private var isPaging: Bool = false
 
     var body: some View {
         let exercise = exerciseAt(currentIndex)
@@ -526,6 +529,7 @@ struct LogExerciseView: View {
                                 }
                             }
                         }
+                        .scrollDisabled(isPaging)
                     }
                     .frame(height: 260)
 
@@ -545,6 +549,7 @@ struct LogExerciseView: View {
                                 }
                             }
                         }
+                        .scrollDisabled(isPaging)
                     }
                     .frame(height: 260)
                 }
@@ -560,46 +565,54 @@ struct LogExerciseView: View {
             .onChange(of: geo.size.width) { _, newW in
                 containerWidth = newW
             }
-            .highPriorityGesture(
+            .simultaneousGesture(
                 DragGesture(minimumDistance: 10, coordinateSpace: .local)
                     .onChanged { value in
-                        // Track horizontal drag; ignore vertical drags so pickers keep working
-                        if abs(value.translation.width) > abs(value.translation.height) {
-                            dragOffsetX = value.translation.width
+                        let t = value.translation
+                        if dragDirection == nil {
+                            let slop: CGFloat = 8
+                            if abs(t.width) > slop || abs(t.height) > slop {
+                                dragDirection = abs(t.width) > abs(t.height) ? .horizontal : .vertical
+                                isPaging = (dragDirection == .horizontal)
+                            }
+                        }
+                        if dragDirection == .horizontal {
+                            dragOffsetX = t.width
+                        } else {
+                            // vertical or undecided: keep the page in place so pickers can scroll
+                            dragOffsetX = 0
                         }
                     }
                     .onEnded { value in
-                        let threshold: CGFloat = 60
-                        let horizontal = value.translation.width
-                        let vertical = value.translation.height
-                        let isHorizontal = abs(horizontal) > abs(vertical)
-
-                        guard isHorizontal else {
+                        defer {
+                            dragDirection = nil
+                            isPaging = false
+                        }
+                        guard dragDirection == .horizontal else {
                             withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
                             return
                         }
 
+                        let threshold: CGFloat = 80
+                        let horizontal = value.translation.width
+
                         if horizontal <= -threshold {
-                            // Swipe left -> animate current content out to the left, then bring next in from the right
                             withAnimation(.easeInOut(duration: 0.22)) {
                                 dragOffsetX = -containerWidth
                             }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
                                 goToNextUnlogged()
-                                // Position new content just offscreen to the right, then animate in
                                 dragOffsetX = containerWidth
                                 withAnimation(.easeInOut(duration: 0.22)) {
                                     dragOffsetX = 0
                                 }
                             }
                         } else if horizontal >= threshold {
-                            // Swipe right -> animate current content out to the right, then bring previous in from the left
                             withAnimation(.easeInOut(duration: 0.22)) {
                                 dragOffsetX = containerWidth
                             }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
                                 goToPrevUnlogged()
-                                // Position new content just offscreen to the left, then animate in
                                 dragOffsetX = -containerWidth
                                 withAnimation(.easeInOut(duration: 0.22)) {
                                     dragOffsetX = 0
