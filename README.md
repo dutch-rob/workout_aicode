@@ -1,15 +1,7 @@
-A practical tracker of sets and reps of your workout.
+A practical tracker of sets and reps of your workout, in the Apple App Store under name "SetsRepsWheels".
 
-You can log your sets and reps conveniently with this app:
-
-•	Define your own exercises by number of sets, lower and upper weight limit and weight increment.
-
-•	Define your own workouts by ordering your exercises
-
-•	Log your workouts in a one screen per exercise for all sets using the ‘picker wheel’ that defaults to the previously logged numbers
-
-•	If the machine for your next workout is in use, swipe to the left for the next exercise, or swipe to the right for the last exercise that you have not logged yet
-
-•	Export your logs in a file that you can easily ready into a spreadsheet
-
-•	There is also a screen to view your logs in detail
+I made this app to log sets and reps during a workout more conveniently than I have found in other apps: All sets of an exercise are on one screen, and it uses the picker wheels to set the numbers to log. The picker wheels starts at the numbers of the previous time you logged the exercise. 
+The app is rather bare-bones. I made it first for myself and I think it work great for me. I hope that you will find it useful as well but it is probably not the best workout app for everybody. 
+You can define your own exercises and workouts, and in the app (and Link(“here”, destination: URL(string: "https://github.com/dutch-rob/workout_aicode”)!)), I will explain how simple that goes.
+Your exercises are logged on your phone and you can download or email everything you logged to yourself from the phone. You can read that file easily into a spreadsheet for further analysis.
+Another practical quirk: If the machine you want to use next is in use then you can swipe through the exercises you have not logged yet during your current workout.
