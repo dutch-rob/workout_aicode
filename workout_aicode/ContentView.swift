@@ -14,11 +14,14 @@ struct ContentView: View {
         SortDescriptor(\WorkoutDef.sortIndex),
         SortDescriptor(\WorkoutDef.name)
     ]) private var workouts: [WorkoutDef]
+    @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var exercises: [ExerciseDef]
 
     @State private var refreshTick: Int = 0
     
     @State private var pendingNewWorkout: WorkoutDef? = nil
     @State private var navigateToNewWorkout: Bool = false
+    @State private var pendingNewExercise: ExerciseDef? = nil
+    @State private var navigateToNewExercise: Bool = false
 
     init() {}
 
@@ -30,14 +33,19 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 12) {
-                    Button {
-                        let w = WorkoutDef(name: "")
-                        modelContext.insert(w)
-                        pendingNewWorkout = w
-                        navigateToNewWorkout = true
-                    } label: {
-                        Text("new workout")
-                            .frame(maxWidth: .infinity)
+                    NavigationLink(destination: InfoView()) {
+                        Label {
+                            Text("info")
+                        } icon: {
+                            ZStack {
+                                Circle().fill(Color.blue)
+                                Image(systemName: "info")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
+                            .frame(width: 20, height: 20)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
 
@@ -48,19 +56,43 @@ struct ContentView: View {
                 }
 
                 HStack(spacing: 12) {
-                    NavigationLink(destination: EditWorkoutsView()) {
-                        Text("edit workouts").frame(maxWidth: .infinity)
+                    if workouts.isEmpty {
+                        Button {
+                            let w = WorkoutDef(name: "")
+                            modelContext.insert(w)
+                            pendingNewWorkout = w
+                            navigateToNewWorkout = true
+                        } label: {
+                            Text("new workout").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        NavigationLink(destination: EditWorkoutsView()) {
+                            Text("edit workouts").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
                     
-                    NavigationLink(destination: EditExercisesView()) {
-                        Text("edit exercises").frame(maxWidth: .infinity)
+                    if exercises.isEmpty {
+                        Button {
+                            let e = ExerciseDef(name: "")
+                            modelContext.insert(e)
+                            pendingNewExercise = e
+                            navigateToNewExercise = true
+                        } label: {
+                            Text("new exercise").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        NavigationLink(destination: EditExercisesView()) {
+                            Text("edit exercises").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
                 }
 
                 if workouts.isEmpty {
-                    ContentUnavailableView("No workouts", systemImage: "list.bullet", description: Text("Tap New to create your first workout"))
+                    ContentUnavailableView("No workouts", systemImage: "list.bullet", description: Text("Tap 'new workout' to create your first workout"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
@@ -82,12 +114,16 @@ struct ContentView: View {
                 }
             }
             .padding()
-            .onReceive(NotificationCenter.default.publisher(for: .modelDataDidChange)) { _ in
-                refreshTick &+= 1
-            }
             .navigationDestination(isPresented: $navigateToNewWorkout) {
                 if let w = pendingNewWorkout {
                     EditWorkoutView(workout: w)
+                } else {
+                    EmptyView()
+                }
+            }
+            .navigationDestination(isPresented: $navigateToNewExercise) {
+                if let e = pendingNewExercise {
+                    EditExerciseView(exercise: e)
                 } else {
                     EmptyView()
                 }

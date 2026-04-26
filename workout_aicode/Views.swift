@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 extension Notification.Name {
     static let modelDataDidChange = Notification.Name("ModelDataDidChange")
 }
-
 // Transferable payload and UTType for drag/drop
 struct WorkoutDragPayload: Transferable, Hashable, Codable {
     let id: UUID
@@ -46,8 +45,7 @@ struct EditWorkoutsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
-    // @Query(sort: [SortDescriptor(\WorkoutDef.name)]) private var workouts: [WorkoutDef]
-    
+
     @State private var showDeleteConfirm = false
     @State private var workoutPendingDelete: WorkoutDef?
     @State private var editMode: EditMode = .inactive
@@ -142,11 +140,6 @@ struct EditWorkoutsView: View {
         }
         .confirmationDialog("Delete Workout?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
-                // if let w = workoutPendingDelete {
-                //     context.delete(w)
-                //     try? context.save()
-                //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                // }
                 if let w = workoutPendingDelete {
                     store.deleteWorkout(w)
                 }
@@ -157,16 +150,7 @@ struct EditWorkoutsView: View {
             Text("Are you sure you want to delete this workout?")
         }
     }
-
-    // Unused now that custom drag/drop reordering is implemented; kept for reference.
-    private func move(from source: IndexSet, to destination: Int) {
-        var order = store.workouts
-        order.move(fromOffsets: source, toOffset: destination)
-        store.reorderWorkouts(order)
-    }
 }
-
-// Built-in List reordering is used; custom WorkoutRow removed.
 
 // MARK: - Edit Workout Screen
 struct EditWorkoutView: View {
@@ -319,13 +303,9 @@ struct EditExercisesView: View {
                 } label: { Text("new exercise")
                     .frame(maxWidth: .infinity)}
                     .buttonStyle(.bordered)
-//                Button { dismiss()
-//                } label: { Text("Done")
-//                   .frame(maxWidth: .infinity)}
-//                .buttonStyle(.bordered)
             }
 
-            if store.workouts.isEmpty {
+            if store.exercises.isEmpty {
                 ContentUnavailableView("No exercises to edit", systemImage: "list.bullet")
             } else {
                 List {
@@ -382,13 +362,9 @@ struct EditExercisesView: View {
                 EmptyView()
             }
         }
-        .confirmationDialog("Delete Workout?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+        .onAppear { store.reloadAll() }
+        .confirmationDialog("Delete Exercise?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
-                // if let ex = exercisePendingDelete {
-                //     context.delete(ex)
-                //     try? context.save()
-                //     NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-                // }
                 if let ex = exercisePendingDelete {
                     store.deleteExercise(ex)
                 }
@@ -688,7 +664,6 @@ struct LogExerciseView: View {
         let entry = ExerciseLogEntry(exerciseId: ex.id, weights: weights[currentIndex], reps: reps[currentIndex])
         let log = WorkoutLog(workoutId: workout.id, entries: [entry])
         context.insert(log)
-        // TODO: merge entries within same session, set timestamp, export ASCII/iCloud
 
         guard loggedIndices.count < workout.exerciseOrder.count else {
             // All logged, present an alert
@@ -725,35 +700,221 @@ struct LogsView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
     @Query private var workouts: [WorkoutDef]
     @Query private var exercises: [ExerciseDef]
+    
+    @State private var exportURL: URL?
 
     var body: some View {
-        List {
-            Section {
-                if let url = store.exportLogs() {
-                    ShareLink(item: url) {
-                        Text("Export")
-                    }
-                }
-            }
-            Section {
-                ForEach(logs) { log in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(log.date.formatted(date: .abbreviated, time: .shortened)).font(.headline)
-                        Text(workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout")
-                            .font(.subheadline)
-                        ForEach(log.entries, id: \.self) { entry in
-                            let exName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
-                            let weightsText = entry.weights.map(String.init).joined(separator: ", ")
-                            let repsText = entry.reps.map(String.init).joined(separator: ", ")
-                            Text("\(exName): W \(weightsText)  R \(repsText)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+        Group {
+            if logs.isEmpty {
+                ContentUnavailableView("No logs yet", systemImage: "doc.text", description: Text("Start logging your workouts to see them here."))
+            } else {
+                List(compactRows()) { row in
+                    VStack(spacing: 2) {
+                        // Single separator above content
+                        Rectangle()
+                            .fill(Color.secondary.opacity(1.0))
+                            .frame(height: row.isWorkout ? 3 : 1)
+                        // Row content
+                        HStack(alignment: .center, spacing: 8) {
+                            // Column 1
+                            Group {
+                                if row.isWorkout {
+                                    Text(row.left)
+                                        .font(.headline)
+                                        .foregroundStyle(.blue)
+                                        .italic()
+                                } else {
+                                    Text(row.left)
+                                        .font(.headline)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            // Column 2
+                            row.rightView
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .padding(.bottom, 0)
+
+//                        // Single separator below content
+//                        Rectangle()
+//                            .fill(Color.secondary.opacity(0.5))
+//                            .frame(height: row.isWorkout ? 2 : 1)
                     }
+                    .listStyle(.plain)
+                    .listRowSeparator(.hidden)
                 }
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("export") {
+                    exportLogs()
+                }
+                .disabled(logs.isEmpty)
+            }
+        }
         .navigationTitle("logs")
+        .sheet(item: $exportURL, onDismiss: { cleanupExport() }) { url in
+            ShareSheet(activityItems: [url])
+        }
+    }
+    
+    private func exportLogs() {
+        // Generate TSV content
+        let tsv = makeTSV()
+        // Write to a temporary file
+        let tmpDir = FileManager.default.temporaryDirectory
+        let fileURL = tmpDir.appendingPathComponent("workout-logs.tsv")
+        do {
+            try tsv.data(using: .utf8)?.write(to: fileURL, options: .atomic)
+            exportURL = fileURL
+        } catch {
+            print("Failed to write export: \(error)")
+        }
+    }
+
+    private func cleanupExport() {
+        if let url = exportURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        exportURL = nil
+    }
+
+    private func makeTSV() -> String {
+        // Header
+        var lines: [String] = ["date\ttime\tworkout\texercise\tset\tweight\treps\tlog output version: log.1"]
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.timeZone = TimeZone.current
+        dateFormatter.dateFormat = "yyyy-MM-dd\tHH:mm"
+        // Logs are reverse sorted; export newest first is fine
+        for log in logs {
+            let workoutName = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
+            for entry in log.entries {
+                let exerciseName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
+                let count = max(entry.weights.count, entry.reps.count)
+                for i in 0..<count {
+                    let w = i < entry.weights.count ? entry.weights[i] : 0
+                    let r = i < entry.reps.count ? entry.reps[i] : 0
+                    let dateStr = dateFormatter.string(from: log.date)
+                    // Escape commas by wrapping fields in quotes if needed
+                    let wq = quoteIfNeeded(workoutName)
+                    let eq = quoteIfNeeded(exerciseName)
+                    lines.append("\(dateStr)\t\(wq)\t\(eq)\t\(i+1)\t\(w)\t\(r)")
+                }
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func quoteIfNeeded(_ s: String) -> String {
+        if s.contains(",") || s.contains("\"") || s.contains("\n") {
+            let escaped = s.replacingOccurrences(of: "\"", with: "\"\"")
+            return "\"\(escaped)\""
+        }
+        return s
+    }
+
+    struct CompactRow: Identifiable {
+        let id: String
+        let isWorkout: Bool
+        let left: String
+        let rightView: AnyView
+        let timestamp: Date
+        let workoutId: UUID?
+        let exerciseId: UUID?
+    }
+
+    private func compactRows() -> [CompactRow] {
+        // Build rows in reverse chronological order (logs are already reverse sorted)
+        var rows: [CompactRow] = []
+        var lastExerciseTimestamp: Date? = nil
+        for log in logs {
+            let workoutName = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
+            var addedWorkoutForThisLog = false
+            for entry in log.entries {
+                // Determine if we need to include a workout row based on gap with previous exercise row
+                let shouldIncludeWorkoutRow: Bool
+                if let prevTs = lastExerciseTimestamp {
+                    // Previous row is more recent; include workout row if gap >= 1 hour
+                    shouldIncludeWorkoutRow = prevTs.timeIntervalSince(log.date) >= 3600
+                } else {
+                    // First exercise encountered -> include workout row
+                    shouldIncludeWorkoutRow = true
+                }
+                if shouldIncludeWorkoutRow && !addedWorkoutForThisLog {
+                    let right = Text(log.date.formatted(date: .abbreviated, time: .shortened)).font(.headline).foregroundStyle(.blue)
+                    rows.append(CompactRow(id: "w-\(log.id.uuidString)-first", isWorkout: true, left: workoutName, rightView: AnyView(right), timestamp: log.date, workoutId: log.workoutId, exerciseId: nil))
+                    addedWorkoutForThisLog = true
+                }
+                // Append exercise row
+                let exName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
+                let right = AnyView(weightsRepsGrid(for: entry, at: log.date))
+                rows.append(CompactRow(id: "e-\(log.id.uuidString)-\(entry.exerciseId.uuidString)", isWorkout: false, left: exName, rightView: right, timestamp: log.date, workoutId: log.workoutId, exerciseId: entry.exerciseId))
+                // Update last exercise timestamp after adding the exercise row
+                lastExerciseTimestamp = log.date
+            }
+        }
+        return rows
+    }
+
+    private func weightsRepsGrid(for entry: ExerciseLogEntry, at date: Date) -> some View {
+        let previous = previousEntry(for: entry.exerciseId, before: date)
+        let maxCount = max(entry.weights.count, entry.reps.count)
+        return AnyView(
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
+                GridRow {
+                    Text("w").font(.headline)
+                    ForEach(0..<maxCount, id: \.self) { i in
+                        let current = i < entry.weights.count ? entry.weights[i] : 0
+                        let prev = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
+                        Text("\(current)")
+                            .foregroundStyle(colorForWeight(current: current, previous: prev))
+                            .font(.headline)
+                    }
+                }
+                GridRow {
+                    Text("r").font(.headline)
+                    ForEach(0..<maxCount, id: \.self) { i in
+                        let current = i < entry.reps.count ? entry.reps[i] : 0
+                        let prevRep = previous?.reps.indices.contains(i) == true ? previous!.reps[i] : nil
+                        let currentW = i < entry.weights.count ? entry.weights[i] : 0
+                        let prevW = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
+                        Text("\(current)")
+                            .foregroundStyle(colorForReps(current: current, previous: prevRep, currentWeight: currentW, previousWeight: prevW))
+                            .font(.headline)
+                    }
+                }
+            }
+        )
+    }
+
+    private func previousEntry(for exerciseId: UUID, before date: Date) -> ExerciseLogEntry? {
+        // Search older logs (since logs are reverse sorted)
+        for log in logs.dropFirst() {
+            if log.date < date {
+                if let entry = log.entries.first(where: { $0.exerciseId == exerciseId }) {
+                    return entry
+                }
+            }
+        }
+        return nil
+    }
+
+    private func colorForWeight(current: Int, previous: Int?) -> Color {
+        guard let previous = previous else { return .primary }
+        if current > previous { return .green }
+        if current < previous { return .red }
+        return .primary
+    }
+
+    private func colorForReps(current: Int, previous: Int?, currentWeight: Int, previousWeight: Int?) -> Color {
+        guard let previous = previous else { return .primary }
+        // If reps larger and weight same or larger -> green
+        if current > previous, (previousWeight == nil || currentWeight >= (previousWeight ?? currentWeight)) { return .green }
+        // If reps smaller and weight same or smaller -> green per spec
+        if current < previous, (previousWeight == nil || currentWeight <= (previousWeight ?? currentWeight)) { return .red }
+        return .primary
     }
 }
 
@@ -847,5 +1008,22 @@ struct LogsView: View {
     return NavigationStack { LogsView() }
         .environmentObject(store)
         .modelContainer(container)
+}
+
+import UIKit
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+extension URL: Identifiable {
+    public var id: URL { self }
 }
 
