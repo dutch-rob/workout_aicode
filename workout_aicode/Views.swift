@@ -460,6 +460,12 @@ struct LogExerciseView: View {
     @State private var dragDirection: DragDirection? = nil
     @State private var isPaging: Bool = false
 
+    private var isLastUnlogged: Bool {
+        let total = workout.exerciseOrder.count
+        // If after adding currentIndex, loggedIndices count would equal total, means last unlogged
+        return loggedIndices.count == total - 1 && !loggedIndices.contains(currentIndex)
+    }
+
     var body: some View {
         let exercise = exerciseAt(currentIndex)
         GeometryReader { geo in
@@ -467,9 +473,13 @@ struct LogExerciseView: View {
             VStack(spacing: 16) {
                 
                 HStack {
-                    Button("log, next") { logAndNext() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                    Button {
+                        logAndNext()
+                    } label: {
+                        Text(isLastUnlogged ? "log, end" : "log, next")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                     Button("quit") { dismiss() }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
@@ -602,12 +612,36 @@ struct LogExerciseView: View {
         }
         .navigationTitle("log exercise")
         .navigationBarBackButtonHidden(true)
-        .alert("All exercises logged", isPresented: $showAllLoggedAlert) {
-            Button("View only", role: .cancel) { /* stay on current */ }
-            Button("Overwrite") { loggedIndices.remove(currentIndex) }
-            Button("Done") { dismiss() }
-        } message: {
-            Text("You have logged all exercises. What would you like to do?")
+        .sheet(isPresented: $showAllLoggedAlert) {
+            VStack(spacing: 20) {
+                Text("All exercises logged")
+                    .font(.title2)
+                    .bold()
+                Button(action: {
+                    dismiss()
+                }) {
+                    VStack(spacing: 2) {
+                        Text("Done")
+                        Text("end of workout")
+                            .font(.footnote)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .foregroundColor(.white)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+
+                Button("View logged exercise only", role: .cancel) {
+                    showAllLoggedAlert = false
+                }
+
+                Button("Overwrite logged exercise") {
+                    loggedIndices.remove(currentIndex)
+                    showAllLoggedAlert = false
+                }
+            }
+            .padding()
         }
     }
 
@@ -660,6 +694,15 @@ struct LogExerciseView: View {
 
     private func logAndNext() {
         guard let ex = exerciseAt(currentIndex) else { return }
+        // If this is the last unlogged exercise, log and dismiss immediately
+        if loggedIndices.count + 1 >= workout.exerciseOrder.count {
+            loggedIndices.insert(currentIndex)
+            let entry = ExerciseLogEntry(exerciseId: ex.id, weights: weights[currentIndex], reps: reps[currentIndex])
+            let log = WorkoutLog(workoutId: workout.id, entries: [entry])
+            context.insert(log)
+            dismiss()
+            return
+        }
         loggedIndices.insert(currentIndex)
         let entry = ExerciseLogEntry(exerciseId: ex.id, weights: weights[currentIndex], reps: reps[currentIndex])
         let log = WorkoutLog(workoutId: workout.id, entries: [entry])
@@ -696,66 +739,164 @@ struct LogExerciseView: View {
 // MARK: - Logs Screen
 struct LogsView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.modelContext) private var context
 
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
     @Query private var workouts: [WorkoutDef]
     @Query private var exercises: [ExerciseDef]
     
     @State private var exportURL: URL?
+    
+    @State private var showImportPicker = false
+    @State private var pendingImportURL: URL?
+    @State private var showImportActions = false
+    
+    // New states for alerts and undo backup
+    @State private var showResultAlert: Bool = false
+    @State private var resultTitle: String = ""
+    @State private var resultMessage: String = ""
+    @State private var lastBackupURL: URL? = nil
 
     var body: some View {
         Group {
-            if logs.isEmpty {
-                ContentUnavailableView("No logs yet", systemImage: "doc.text", description: Text("Start logging your workouts to see them here."))
-            } else {
-                List(compactRows()) { row in
-                    VStack(spacing: 2) {
-                        // Single separator above content
-                        Rectangle()
-                            .fill(Color.secondary.opacity(1.0))
-                            .frame(height: row.isWorkout ? 3 : 1)
-                        // Row content
-                        HStack(alignment: .center, spacing: 8) {
-                            // Column 1
-                            Group {
-                                if row.isWorkout {
-                                    Text(row.left)
-                                        .font(.headline)
-                                        .foregroundStyle(.blue)
-                                        .italic()
-                                } else {
-                                    Text(row.left)
-                                        .font(.headline)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            // Column 2
-                            row.rightView
-                                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack {
+                HStack(spacing: 8) {
+                    Button {
+                        exportLogs()
+                    } label: {
+                        Text("export\nTSV")
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(logs.isEmpty)
+
+                    Button {
+                        exportJSON()
+                    } label: {
+                        Text("export\nJSON")
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(logs.isEmpty)
+
+                    Button {
+                        showImportPicker = true
+                    } label: {
+                        Text("import\nJSON")
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        if let backupURL = lastBackupURL {
+                            replaceData(with: backupURL)
+                            lastBackupURL = nil
                         }
-                        .padding(.bottom, 0)
+                    } label: {
+                        Text("undo\nimport")
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(lastBackupURL == nil)
+                }
+                .padding(.bottom, 8)
+
+                if logs.isEmpty {
+                    ContentUnavailableView("No logs yet", systemImage: "doc.text", description: Text("Start logging your workouts to see them here."))
+                } else {
+                    List(compactRows()) { row in
+                        VStack(spacing: 2) {
+                            // Single separator above content
+                            Rectangle()
+                                .fill(Color.secondary.opacity(1.0))
+                                .frame(height: row.isWorkout ? 3 : 1)
+                            // Row content
+                            HStack(alignment: .center, spacing: 8) {
+                                // Column 1
+                                Group {
+                                    if row.isWorkout {
+                                        Text(row.left)
+                                            .font(.headline)
+                                            .foregroundStyle(.blue)
+                                            .italic()
+                                    } else {
+                                        Text(row.left)
+                                            .font(.headline)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                // Column 2
+                                row.rightView
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(.bottom, 0)
 
 //                        // Single separator below content
 //                        Rectangle()
 //                            .fill(Color.secondary.opacity(0.5))
 //                            .frame(height: row.isWorkout ? 2 : 1)
+                        }
+                        .listStyle(.plain)
+                        .listRowSeparator(.hidden)
                     }
-                    .listStyle(.plain)
-                    .listRowSeparator(.hidden)
                 }
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button("export") {
-                    exportLogs()
-                }
-                .disabled(logs.isEmpty)
             }
         }
         .navigationTitle("logs")
         .sheet(item: $exportURL, onDismiss: { cleanupExport() }) { url in
             ShareSheet(activityItems: [url])
+        }
+        .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                pendingImportURL = url
+                showImportActions = true
+            case .failure(let error):
+                resultTitle = "File Error"
+                resultMessage = "Failed to pick file: \(error.localizedDescription)"
+                showResultAlert = true
+            }
+        }
+        .confirmationDialog("Import JSON", isPresented: $showImportActions, titleVisibility: .visible) {
+            Button("Validate") {
+                if let url = pendingImportURL {
+                    validateImport(at: url)
+                }
+            }
+            Button("Check Counts") {
+                if let url = pendingImportURL {
+                    checkCounts(at: url)
+                }
+            }
+            Button("Replace Data", role: .destructive) {
+                if let url = pendingImportURL {
+                    // Backup before replace
+                    if let backup = backupCurrentData() {
+                        lastBackupURL = backup
+                    }
+                    replaceData(with: url)
+                }
+            }
+            Button("Merge Data") {
+                if let url = pendingImportURL {
+                    // Backup before merge
+                    if let backup = backupCurrentData() {
+                        lastBackupURL = backup
+                    }
+                    mergeData(with: url)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert(resultTitle, isPresented: $showResultAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(resultMessage)
         }
     }
     
@@ -769,7 +910,9 @@ struct LogsView: View {
             try tsv.data(using: .utf8)?.write(to: fileURL, options: .atomic)
             exportURL = fileURL
         } catch {
-            print("Failed to write export: \(error)")
+            resultTitle = "Export Failed"
+            resultMessage = "Failed to write export: \(error.localizedDescription)"
+            showResultAlert = true
         }
     }
 
@@ -779,10 +922,479 @@ struct LogsView: View {
         }
         exportURL = nil
     }
+    
+    // New exportJSON with metadata envelope
+    private func exportJSON() {
+        // Define envelope and nested structs inside LogsView scope
+        struct ExportEnvelope: Codable {
+            let exportVersion: String
+            let appIdentifier: String
+            let appVersion: String
+            let build: String
+            let exportedAt: String
+            let device: DeviceInfo
+            let locale: String
+            let timeZone: String
+            let counts: Counts
+            let data: AllData
+
+            struct DeviceInfo: Codable {
+                let model: String
+                let system: String
+                let version: String
+            }
+
+            struct Counts: Codable {
+                let workouts: Int
+                let exercises: Int
+                let logs: Int
+            }
+
+            struct AllData: Codable {
+                let workouts: [WorkoutDef]
+                let exercises: [ExerciseDef]
+                let logs: [WorkoutLog]
+            }
+        }
+
+        let exportVersion = "logJSON.1"
+        let bundle = Bundle.main
+
+        let appIdentifier = bundle.bundleIdentifier ?? ""
+
+        let appVersion = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let build = bundle.infoDictionary?["CFBundleVersion"] as? String ?? ""
+
+        let exportedAt = ISO8601DateFormatter().string(from: Date())
+
+        let device = ExportEnvelope.DeviceInfo(
+            model: UIDevice.current.model,
+            system: UIDevice.current.systemName,
+            version: UIDevice.current.systemVersion
+        )
+
+        let locale = Locale.current.identifier
+        let timeZone = TimeZone.current.identifier
+
+        let counts = ExportEnvelope.Counts(
+            workouts: workouts.count,
+            exercises: exercises.count,
+            logs: logs.count
+        )
+
+        let data = ExportEnvelope.AllData(
+            workouts: workouts,
+            exercises: exercises,
+            logs: logs
+        )
+
+        let envelope = ExportEnvelope(
+            exportVersion: exportVersion,
+            appIdentifier: appIdentifier,
+            appVersion: appVersion,
+            build: build,
+            exportedAt: exportedAt,
+            device: device,
+            locale: locale,
+            timeZone: timeZone,
+            counts: counts,
+            data: data
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted]
+
+        do {
+            let jsonData = try encoder.encode(envelope)
+            let tmpDir = FileManager.default.temporaryDirectory
+            let fileURL = tmpDir.appendingPathComponent("workout-logs.json")
+            try jsonData.write(to: fileURL, options: .atomic)
+            exportURL = fileURL
+        } catch {
+            resultTitle = "Export Failed"
+            resultMessage = "Failed to export JSON: \(error.localizedDescription)"
+            showResultAlert = true
+        }
+    }
+    
+    // Backup current data helper - returns URL of backup file
+    private func backupCurrentData() -> URL? {
+        struct ExportEnvelope: Codable {
+            let exportVersion: String
+            let appIdentifier: String
+            let appVersion: String
+            let build: String
+            let exportedAt: String
+            let device: DeviceInfo
+            let locale: String
+            let timeZone: String
+            let counts: Counts
+            let data: AllData
+
+            struct DeviceInfo: Codable {
+                let model: String
+                let system: String
+                let version: String
+            }
+
+            struct Counts: Codable {
+                let workouts: Int
+                let exercises: Int
+                let logs: Int
+            }
+
+            struct AllData: Codable {
+                let workouts: [WorkoutDef]
+                let exercises: [ExerciseDef]
+                let logs: [WorkoutLog]
+            }
+        }
+
+        let exportVersion = "logJSON.1"
+        let bundle = Bundle.main
+
+        let appIdentifier = bundle.bundleIdentifier ?? ""
+
+        let appVersion = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let build = bundle.infoDictionary?["CFBundleVersion"] as? String ?? ""
+
+        let exportedAt = ISO8601DateFormatter().string(from: Date())
+
+        let device = ExportEnvelope.DeviceInfo(
+            model: UIDevice.current.model,
+            system: UIDevice.current.systemName,
+            version: UIDevice.current.systemVersion
+        )
+
+        let locale = Locale.current.identifier
+        let timeZone = TimeZone.current.identifier
+
+        let counts = ExportEnvelope.Counts(
+            workouts: workouts.count,
+            exercises: exercises.count,
+            logs: logs.count
+        )
+
+        let data = ExportEnvelope.AllData(
+            workouts: workouts,
+            exercises: exercises,
+            logs: logs
+        )
+
+        let envelope = ExportEnvelope(
+            exportVersion: exportVersion,
+            appIdentifier: appIdentifier,
+            appVersion: appVersion,
+            build: build,
+            exportedAt: exportedAt,
+            device: device,
+            locale: locale,
+            timeZone: timeZone,
+            counts: counts,
+            data: data
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted]
+
+        do {
+            let jsonData = try encoder.encode(envelope)
+            let tmpDir = FileManager.default.temporaryDirectory
+            // Use a unique backup filename
+            let fileURL = tmpDir.appendingPathComponent("workout-backup.json")
+            try jsonData.write(to: fileURL, options: .atomic)
+            return fileURL
+        } catch {
+            resultTitle = "Backup Failed"
+            resultMessage = "Failed to backup current data: \(error.localizedDescription)"
+            showResultAlert = true
+            return nil
+        }
+    }
+    
+    // MARK: - Import Helpers and Types
+    
+    struct ExportEnvelope: Codable {
+        let exportVersion: String
+        let appIdentifier: String
+        let appVersion: String
+        let build: String
+        let exportedAt: String
+        let device: DeviceInfo
+        let locale: String
+        let timeZone: String
+        let counts: Counts
+        let data: AllData
+
+        struct DeviceInfo: Codable {
+            let model: String
+            let system: String
+            let version: String
+        }
+
+        struct Counts: Codable {
+            let workouts: Int
+            let exercises: Int
+            let logs: Int
+        }
+
+        struct AllData: Codable {
+            let workouts: [WorkoutDef]
+            let exercises: [ExerciseDef]
+            let logs: [WorkoutLog]
+        }
+    }
+
+    private func loadEnvelope(from url: URL) throws -> ExportEnvelope {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        return try decoder.decode(ExportEnvelope.self, from: data)
+    }
+
+    private func validateImport(at url: URL) {
+        do {
+            let envelope = try loadEnvelope(from: url)
+            guard envelope.exportVersion.starts(with: "logJSON.") else {
+                resultTitle = "Validation Failed"
+                resultMessage = "Invalid export version: \(envelope.exportVersion)"
+                showResultAlert = true
+                return
+            }
+            // Check required fields presence (non-empty strings)
+            guard !envelope.appIdentifier.isEmpty, !envelope.appVersion.isEmpty, !envelope.build.isEmpty else {
+                resultTitle = "Validation Failed"
+                resultMessage = "Missing app metadata in export"
+                showResultAlert = true
+                return
+            }
+            // Check counts consistent with data arrays
+            guard envelope.counts.workouts == envelope.data.workouts.count,
+                  envelope.counts.exercises == envelope.data.exercises.count,
+                  envelope.counts.logs == envelope.data.logs.count else {
+                resultTitle = "Validation Failed"
+                resultMessage = "Counts mismatch with data arrays"
+                showResultAlert = true
+                return
+            }
+            // Check logs are reverse chronological order (each date >= next)
+            let logs = envelope.data.logs
+            for i in 0..<(logs.count - 1) {
+                let current = logs[i].date
+                let next = logs[i+1].date
+                if current < next {
+                    resultTitle = "Validation Failed"
+                    resultMessage = "Logs are not in reverse chronological order"
+                    showResultAlert = true
+                    return
+                }
+            }
+            resultTitle = "Validation Successful"
+            resultMessage = "The import file is valid and ready to use."
+            showResultAlert = true
+        } catch {
+            resultTitle = "Validation Failed"
+            resultMessage = "Failed to validate import: \(error.localizedDescription)"
+            showResultAlert = true
+        }
+    }
+
+    private func checkCounts(at url: URL) {
+        do {
+            let envelope = try loadEnvelope(from: url)
+            let importedCounts = envelope.counts
+            let currentCounts = ExportEnvelope.Counts(
+                workouts: workouts.count,
+                exercises: exercises.count,
+                logs: logs.count
+            )
+            let importedLogs = envelope.data.logs
+            let oldestDate = importedLogs.min(by: { $0.date < $1.date })?.date
+            let newestDate = importedLogs.max(by: { $0.date < $1.date })?.date
+            
+            let workoutDiff = importedCounts.workouts - currentCounts.workouts
+            let exerciseDiff = importedCounts.exercises - currentCounts.exercises
+            let logDiff = importedCounts.logs - currentCounts.logs
+            
+            var message = """
+            Imported counts:
+            - Workouts: \(importedCounts.workouts) (\(workoutDiff >= 0 ? "+" : "")\(workoutDiff) compared to current)
+            - Exercises: \(importedCounts.exercises) (\(exerciseDiff >= 0 ? "+" : "")\(exerciseDiff))
+            - Logs: \(importedCounts.logs) (\(logDiff >= 0 ? "+" : "")\(logDiff))
+            """
+            message += "\nImported logs span from \(oldestDate?.description(with: .current) ?? "N/A") to \(newestDate?.description(with: .current) ?? "N/A")"
+            
+            resultTitle = "Counts Summary"
+            resultMessage = message
+            showResultAlert = true
+        } catch {
+            resultTitle = "Counts Check Failed"
+            resultMessage = "Failed to check counts: \(error.localizedDescription)"
+            showResultAlert = true
+        }
+    }
+
+    private func replaceData(with url: URL) {
+        do {
+            let envelope = try loadEnvelope(from: url)
+            guard envelope.exportVersion.starts(with: "logJSON.") else {
+                resultTitle = "Import Failed"
+                resultMessage = "Invalid export version: \(envelope.exportVersion)"
+                showResultAlert = true
+                return
+            }
+            // Clear existing data
+            let fetchLogs: FetchDescriptor<WorkoutLog> = FetchDescriptor()
+            if let existingLogs = try? context.fetch(fetchLogs) {
+                for log in existingLogs {
+                    context.delete(log)
+                }
+            }
+            let fetchWorkouts: FetchDescriptor<WorkoutDef> = FetchDescriptor()
+            if let existingWorkouts = try? context.fetch(fetchWorkouts) {
+                for workout in existingWorkouts {
+                    context.delete(workout)
+                }
+            }
+            let fetchExercises: FetchDescriptor<ExerciseDef> = FetchDescriptor()
+            if let existingExercises = try? context.fetch(fetchExercises) {
+                for ex in existingExercises {
+                    context.delete(ex)
+                }
+            }
+            // Insert imported data
+            for ex in envelope.data.exercises {
+                context.insert(ex)
+            }
+            for workout in envelope.data.workouts {
+                context.insert(workout)
+            }
+            for log in envelope.data.logs {
+                context.insert(log)
+            }
+            try context.save()
+            // Notify store or reload
+            NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
+            resultTitle = "Import Successful"
+            resultMessage = "Data replaced successfully."
+            showResultAlert = true
+        } catch {
+            resultTitle = "Import Failed"
+            resultMessage = "Failed to replace data: \(error.localizedDescription)"
+            showResultAlert = true
+        }
+    }
+
+    private func mergeData(with url: URL) {
+        struct LogSignature: Hashable {
+            let date: Date
+            let workoutId: UUID
+            let exerciseIds: Set<UUID>
+        }
+        do {
+            let envelope = try loadEnvelope(from: url)
+            guard envelope.exportVersion.starts(with: "logJSON.") else {
+                resultTitle = "Merge Failed"
+                resultMessage = "Invalid export version: \(envelope.exportVersion)"
+                showResultAlert = true
+                return
+            }
+            // Existing ids sets for quick lookup
+            let existingExerciseIDs = Set(exercises.map { $0.id })
+            let existingWorkoutIDs = Set(workouts.map { $0.id })
+            
+            var insertedExercises = 0
+            var insertedWorkouts = 0
+            
+            // To track name updates
+            var updatedExerciseNames = 0
+            var updatedWorkoutNames = 0
+            
+            // Insert new exercises only; update names for existing
+            for importedEx in envelope.data.exercises {
+                if let existingEx = exercises.first(where: { $0.id == importedEx.id }) {
+                    if existingEx.name != importedEx.name {
+                        existingEx.name = importedEx.name
+                        updatedExerciseNames += 1
+                    }
+                } else {
+                    context.insert(importedEx)
+                    insertedExercises += 1
+                }
+            }
+            // Insert new workouts only; update names for existing
+            for importedWorkout in envelope.data.workouts {
+                if let existingWorkout = workouts.first(where: { $0.id == importedWorkout.id }) {
+                    if existingWorkout.name != importedWorkout.name {
+                        existingWorkout.name = importedWorkout.name
+                        updatedWorkoutNames += 1
+                    }
+                } else {
+                    context.insert(importedWorkout)
+                    insertedWorkouts += 1
+                }
+            }
+            // For logs:
+            // We consider a log duplicate if date + workoutId + all entry exerciseIds are the same
+            let existingLogsSet = Set(logs.map { LogSignature(date: $0.date, workoutId: $0.workoutId, exerciseIds: Set($0.entries.map { $0.exerciseId })) })
+            
+            var insertedLogs = 0
+            var conflictCount = 0
+            
+            for importedLog in envelope.data.logs {
+                let signature = LogSignature(date: importedLog.date, workoutId: importedLog.workoutId, exerciseIds: Set(importedLog.entries.map { $0.exerciseId }))
+                if !existingLogsSet.contains(signature) {
+                    context.insert(importedLog)
+                    insertedLogs += 1
+                } else {
+                    // Potential conflict: same date and workoutId and exerciseIds; check if weights/reps differ
+                    if let existingLog = logs.first(where: {
+                        $0.date == importedLog.date && $0.workoutId == importedLog.workoutId
+                    }) {
+                        var conflictFound = false
+                        for importedEntry in importedLog.entries {
+                            if let existingEntry = existingLog.entries.first(where: { $0.exerciseId == importedEntry.exerciseId }) {
+                                if existingEntry.weights != importedEntry.weights || existingEntry.reps != importedEntry.reps {
+                                    // Conflict detected
+                                    conflictFound = true
+                                }
+                            } else {
+                                // New entry in existing log, add it
+                                existingLog.entries.append(importedEntry)
+                            }
+                        }
+                        if conflictFound {
+                            conflictCount += 1
+                            // TODO: Present a UI to resolve conflict; for now keep existing
+                        }
+                    }
+                }
+            }
+            try context.save()
+            NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
+            var message = "Data merged successfully.\n"
+            message += "Inserted Exercises: \(insertedExercises)\n"
+            message += "Inserted Workouts: \(insertedWorkouts)\n"
+            message += "Inserted Logs: \(insertedLogs)\n"
+            message += "Updated Exercise Names: \(updatedExerciseNames)\n"
+            message += "Updated Workout Names: \(updatedWorkoutNames)\n"
+            if conflictCount > 0 {
+                message += "Conflicts detected in \(conflictCount) log entries; existing entries kept."
+            }
+            resultTitle = "Merge Complete"
+            resultMessage = message
+            showResultAlert = true
+        } catch {
+            resultTitle = "Merge Failed"
+            resultMessage = "Failed to merge data: \(error.localizedDescription)"
+            showResultAlert = true
+        }
+    }
 
     private func makeTSV() -> String {
         // Header
-        var lines: [String] = ["date\ttime\tworkout\texercise\tset\tweight\treps\tlog output version: log.1"]
+        var lines: [String] = ["date\ttime\tworkout\texercise\tset\tweight\treps\tlog output version: logTSV.1"]
         let dateFormatter = DateFormatter()
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
         dateFormatter.timeZone = TimeZone.current

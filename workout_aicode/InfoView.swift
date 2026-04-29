@@ -42,7 +42,7 @@ struct InfoView: View {
                 Group {
                     Text("Log screen and file").font(.headline)
                     Text("The button 'logs' takes you to a screen that displays your log entries from most recent, down to older. A logged weight is green if it is larger than the weight in the previous log of the exercise and corresponding set, and red if it is smaller. A logged number of repetitions is green if it is larger than the reps in the previous log of the exercise and corresponding set, and the corresponding weight is not smaller; it is red if the reps number is smaller and the corresponding weight is not larger.")
-                    Text("The log screen includes a button 'export' that offers the possibility to send or save a tab-separated file elsewhere, e.g. to read into a spreadsheet.")
+                    Text("The log screen includes buttons for exporting your log data as tab delimited file (TSV), e.g. for reading into a spreadsheet; or export log data, and workout and exercise definitions as JSON file; you can also import a JSON file that should have the correct format (seems easiest to achieve by editing a file you exported earlier - but editing a JSON is not everybody's cup of tea); and you can restore the previous JSON if your upload is not good. Export files are sent to a destination of your choice. The JSON file is now the only way to correct errors or make changes in your log. After importing a JSON file you can replace the app's data or merge with the app's data.")
                 }
 
                 Group {
