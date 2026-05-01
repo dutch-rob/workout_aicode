@@ -470,6 +470,7 @@ struct LogExerciseView: View {
         let exercise = exerciseAt(currentIndex)
         GeometryReader { geo in
             let width = geo.size.width
+            let pickerHeight = max(160, (geo.size.height - 220) / 2)
             VStack(spacing: 16) {
                 
                 HStack {
@@ -511,13 +512,13 @@ struct LogExerciseView: View {
                                         }
                                     }
                                     .pickerStyle(.wheel)
-                                    .frame(width: column, height: max(240, proxy.size.height * 0.4))
+                                    .frame(width: column, height: proxy.size.height)
                                 }
                             }
                         }
                         .scrollDisabled(isPaging)
                     }
-                    .frame(height: 260)
+                    .frame(height: pickerHeight)
 
                     Text("repetitions").font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     GeometryReader { proxy in
@@ -531,13 +532,13 @@ struct LogExerciseView: View {
                                         ForEach(0...200, id: \.self) { r in Text("\(r)").tag(r) }
                                     }
                                     .pickerStyle(.wheel)
-                                    .frame(width: column, height: max(240, proxy.size.height * 0.4))
+                                    .frame(width: column, height: proxy.size.height)
                                 }
                             }
                         }
                         .scrollDisabled(isPaging)
                     }
-                    .frame(height: 260)
+                    .frame(height: pickerHeight)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
