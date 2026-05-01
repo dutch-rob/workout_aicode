@@ -116,3 +116,34 @@ struct ExerciseLogEntry: Codable, Hashable {
     var weights: [Int]
     var reps: [Int]
 }
+
+struct ExportEnvelope: Codable {
+    let exportVersion: String
+    let appIdentifier: String
+    let appVersion: String
+    let build: String
+    let exportedAt: String
+    let device: DeviceInfo
+    let locale: String
+    let timeZone: String
+    let counts: Counts
+    let data: AllData
+
+    struct DeviceInfo: Codable {
+        let model: String
+        let system: String
+        let version: String
+    }
+
+    struct Counts: Codable {
+        let workouts: Int
+        let exercises: Int
+        let logs: Int
+    }
+
+    struct AllData: Codable {
+        let workouts: [WorkoutDef]
+        let exercises: [ExerciseDef]
+        let logs: [WorkoutLog]
+    }
+}

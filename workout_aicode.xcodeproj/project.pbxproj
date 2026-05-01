@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		151466282FA3D961001264A4 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 151466272FA3D961001264A4 /* README.md */; };
+		151466292FA3D961001264A4 /* generate_infoview.py in Resources */ = {isa = PBXBuildFile; fileRef = 151466262FA3D961001264A4 /* generate_infoview.py */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		15DD49452F594E7600D778CD /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +29,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		151466262FA3D961001264A4 /* generate_infoview.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = generate_infoview.py; sourceTree = "<group>"; };
+		151466272FA3D961001264A4 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		15DD49352F594E7100D778CD /* workout_aicode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = workout_aicode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD49442F594E7600D778CD /* workout_aicodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD494E2F594E7600D778CD /* workout_aicodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +82,8 @@
 		15DD492C2F594E7100D778CD = {
 			isa = PBXGroup;
 			children = (
+				151466262FA3D961001264A4 /* generate_infoview.py */,
+				151466272FA3D961001264A4 /* README.md */,
 				15DD49372F594E7100D778CD /* workout_aicode */,
 				15DD49472F594E7600D778CD /* workout_aicodeTests */,
 				15DD49512F594E7600D778CD /* workout_aicodeUITests */,
@@ -212,6 +221,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				151466282FA3D961001264A4 /* README.md in Resources */,
+				151466292FA3D961001264A4 /* generate_infoview.py in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,5 +1,7 @@
 import SwiftUI
 
+// AUTO-GENERATED — edit README.md and run generate_infoview.py to update.
+
 struct InfoView: View {
     var body: some View {
         ScrollView {
@@ -16,27 +18,27 @@ struct InfoView: View {
                 Group {
                     Text("Start").font(.headline)
                     Text("When you download and open the app for the first time, there will be no workouts and exercises defined yet: You need to do that yourself.")
-                    Text("It seems best to start with clicking on the button ‘new workout’. This opens the ‘edit workout’ screen. It seems best to first give a name to the new workout. Then, because you have not defined any exercises yet, click on the button ‘new exercise’. This opens the ‘edit exercise’ screen where you can set the number of sets for your exercise, the lowest weight you use for this exercise as well as the highest, and the increments of the weights that the wheel switches through. With the back button, you can go back to the edit workout screen and add more exercises to your workout. After finishing the definition of your workout you go back to the start screen. You should see the name of your defined workout on that screen. If you click on it, you can start logging your exercises.")
+                    Text("It seems best to start with clicking on the button 'new workout'. This opens the 'edit workout' screen. It seems best to first give a name to the new workout. Then, because you have not defined any exercises yet, click on the button 'new exercise'. This opens the 'edit exercise' screen where you can set the number of sets for your exercise, the lowest weight you use for this exercise as well as the highest, and the increments of the weights that the wheel switches through. With the back button, you can go back to the edit workout screen and add more exercises to your workout. After finishing the definition of your workout you go back to the start screen. You should see the name of your defined workout on that screen. If you click on it, you can start logging your exercises.")
                 }
 
                 Group {
                     Text("Log exercises").font(.headline)
                     Text("From the start screen, click on the workout you want to do. This will pull up the first exercise that you defined in your workout and show the wheels for each set of your exercise: The top wheels show the weights and the bottom wheels show the number of repetitions. If you have logged the exercise before, the wheels will start off at the numbers that you logged the last time you did the exercise.")
-                    Text("After you’ve done your exercise, you can click on the button ‘log, next’ — that will log the exercise. You can also click on ‘quit’ which will end the exercise as well as the workout without logging the exercise on screen.")
+                    Text("After you've done your exercise, you can click on the button 'log, next' — that will log the exercise. You can also click on 'quit' which will end the exercise as well as the workout without logging the exercise on screen.")
                     Text("If you want to skip the exercise, for example because the machine is in use, then you can swipe to the left to go to the next exercise that you have not logged yet in your list of exercises. You can also swipe right to the previous exercise that you have not logged yet. Swiping left/right will leave the current exercise without logging it.")
-                    Text("If you click ‘log, next’ on the last exercise of your workout, a menu pops up, asking if you want to go to a next exercise and overwrite what you logged earlier for that exercise; view your workout and go back to the start screen; or go to a next exercise to look at what you logged during this workout, without changing your log.")
+                    Text("If you click 'log, next' on the last exercise of your workout, a menu pops up, asking if you want to go to a next exercise and overwrite what you logged earlier for that exercise; view your workout and go back to the start screen; or go to a next exercise to look at what you logged during this workout, without changing your log.")
                 }
 
                 Group {
                     Text("Edit workouts").font(.headline)
-                    Text("After you’ve added at least one workout and one exercise, the start screen changes a bit: the button ‘new workout’ changes to ‘edit workouts’ and the button ‘new exercise’ changes to ‘edit exercises’.")
-                    Text("When clicking on ‘edit workouts’, you will see a list of the workouts that you have defined. You can click on a workout to edit the exercises that are in the workout. There you can define a new exercise (‘new exercise’) or add an exercise to the list of exercises of the workout by selecting from the list of all defined exercises (‘Add exercise’). You can also click on ‘reorder exercises’ in case you want to change the order in which your exercises are presented during this workout by dragging an exercise with your finger on the icon with the three horizontal dashes on the right-hand side. You can also click on the red icon to the left of the name of an exercise in order to delete the exercise from this workout.")
-                    Text("Back in ‘edit workouts’ you can also click to reorder workouts, and on the red icon to the left of the name of a workout in order to delete the workout.")
+                    Text("After you've added at least one workout and one exercise, the start screen changes a bit: the button 'new workout' changes to 'edit workouts' and the button 'new exercise' changes to 'edit exercises'.")
+                    Text("When clicking on 'edit workouts', you will see a list of the workouts that you have defined. You can click on a workout to edit the exercises that are in the workout. There you can define a new exercise ('new exercise') or add an exercise to the list of exercises of the workout by selecting from the list of all defined exercises ('Add exercise'). You can also click on 'reorder exercises' in case you want to change the order in which your exercises are presented during this workout by dragging an exercise with your finger on the icon with the three horizontal dashes on the right-hand side. You can also click on the red icon to the left of the name of an exercise in order to delete the exercise from this workout.")
+                    Text("Back in 'edit workouts' you can also click to reorder workouts, and on the red icon to the left of the name of a workout in order to delete the workout.")
                 }
 
                 Group {
                     Text("Edit exercises").font(.headline)
-                    Text("From the start screen, you can also click on the button ‘edit exercises’. This will show a list of the exercises that you have defined either through this button or when you were defining your workouts by adding a new exercise.")
+                    Text("From the start screen, you can also click on the button 'edit exercises'. This will show a list of the exercises that you have defined either through this button or when you were defining your workouts by adding a new exercise.")
                 }
 
                 Group {

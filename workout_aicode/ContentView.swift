@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  workout_aicode
-//
-//  Created by Rob Boer on 3/4/26.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -16,17 +9,11 @@ struct ContentView: View {
     ]) private var workouts: [WorkoutDef]
     @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var exercises: [ExerciseDef]
 
-    @State private var refreshTick: Int = 0
-    
     @State private var pendingNewWorkout: WorkoutDef? = nil
-    @State private var navigateToNewWorkout: Bool = false
     @State private var pendingNewExercise: ExerciseDef? = nil
-    @State private var navigateToNewExercise: Bool = false
-
-    init() {}
 
     var body: some View {
-        NavigationStack() {
+        NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 Text("workouts")
                     .font(.largeTitle).bold()
@@ -58,10 +45,9 @@ struct ContentView: View {
                 HStack(spacing: 12) {
                     if workouts.isEmpty {
                         Button {
-                            let w = WorkoutDef(name: "")
-                            modelContext.insert(w)
-                            pendingNewWorkout = w
-                            navigateToNewWorkout = true
+                            let workout = WorkoutDef(name: "")
+                            modelContext.insert(workout)
+                            pendingNewWorkout = workout
                         } label: {
                             Text("new workout").frame(maxWidth: .infinity)
                         }
@@ -72,13 +58,12 @@ struct ContentView: View {
                         }
                         .buttonStyle(.bordered)
                     }
-                    
+
                     if exercises.isEmpty {
                         Button {
-                            let e = ExerciseDef(name: "")
-                            modelContext.insert(e)
-                            pendingNewExercise = e
-                            navigateToNewExercise = true
+                            let exercise = ExerciseDef(name: "")
+                            modelContext.insert(exercise)
+                            pendingNewExercise = exercise
                         } label: {
                             Text("new exercise").frame(maxWidth: .infinity)
                         }
@@ -110,23 +95,14 @@ struct ContentView: View {
                             }
                         }.padding(.top, 4)
                     }
-                    .id(refreshTick)
                 }
             }
             .padding()
-            .navigationDestination(isPresented: $navigateToNewWorkout) {
-                if let w = pendingNewWorkout {
-                    EditWorkoutView(workout: w)
-                } else {
-                    EmptyView()
-                }
+            .navigationDestination(item: $pendingNewWorkout) { workout in
+                EditWorkoutView(workout: workout)
             }
-            .navigationDestination(isPresented: $navigateToNewExercise) {
-                if let e = pendingNewExercise {
-                    EditExerciseView(exercise: e)
-                } else {
-                    EmptyView()
-                }
+            .navigationDestination(item: $pendingNewExercise) { exercise in
+                EditExerciseView(exercise: exercise)
             }
         }
     }
@@ -139,7 +115,6 @@ struct ContentView: View {
     )
     let context = container.mainContext
     let store = AppStore(context: context)
-    // Seed sample workouts and exercises
     let e1 = ExerciseDef(name: "Bench Press")
     let e2 = ExerciseDef(name: "Squat")
     let w1 = WorkoutDef(name: "Upper Body", exerciseOrder: [e1.id])
@@ -156,4 +131,3 @@ struct ContentView: View {
         .environmentObject(store)
         .modelContainer(container)
 }
-

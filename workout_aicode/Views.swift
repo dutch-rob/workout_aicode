@@ -50,29 +50,25 @@ struct EditWorkoutsView: View {
     @State private var workoutPendingDelete: WorkoutDef?
     @State private var editMode: EditMode = .inactive
     @State private var pendingNewWorkout: WorkoutDef? = nil
-    @State private var navigateToNewWorkout: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 Button {
-                    let w = WorkoutDef(name: "")
-                    store.saveWorkout(w)
-                    pendingNewWorkout = w
-                    navigateToNewWorkout = true }
-
-                label: {
-                    Text("new workout")
-                    .frame(maxWidth: .infinity)
+                    let workout = WorkoutDef(name: "")
+                    store.saveWorkout(workout)
+                    pendingNewWorkout = workout
+                } label: {
+                    Text("new workout").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+
                 Button {
                     editMode = (editMode == .active ? .inactive : .active)
-                }
-                label: {
+                } label: {
                     Text(editMode == .active ? "end reorder" : "reorder workouts")
-                    .frame(maxWidth: .infinity)}
-
+                        .frame(maxWidth: .infinity)
+                }
                 .buttonStyle(.bordered)
             }
 
@@ -119,8 +115,8 @@ struct EditWorkoutsView: View {
                         }
                         .onDelete { indexSet in
                             for idx in indexSet {
-                                let w = store.workouts[idx]
-                                workoutPendingDelete = w
+                                let workout = store.workouts[idx]
+                                workoutPendingDelete = workout
                                 showDeleteConfirm = true
                             }
                         }
@@ -131,17 +127,13 @@ struct EditWorkoutsView: View {
         }
         .padding()
         .navigationTitle("edit workouts")
-        .navigationDestination(isPresented: $navigateToNewWorkout) {
-            if let w = pendingNewWorkout {
-                EditWorkoutView(workout: w)
-            } else {
-                EmptyView()
-            }
+        .navigationDestination(item: $pendingNewWorkout) { workout in
+            EditWorkoutView(workout: workout)
         }
         .confirmationDialog("Delete Workout?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
-                if let w = workoutPendingDelete {
-                    store.deleteWorkout(w)
+                if let workout = workoutPendingDelete {
+                    store.deleteWorkout(workout)
                 }
                 workoutPendingDelete = nil
             }
@@ -161,7 +153,6 @@ struct EditWorkoutView: View {
     @Bindable var workout: WorkoutDef
     @State private var hasInserted = false
     @State private var pendingNewExercise: ExerciseDef? = nil
-    @State private var navigateToNewExercise: Bool = false
 
     private var isWorkoutValid: Bool {
         !workout.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -172,28 +163,21 @@ struct EditWorkoutView: View {
             // Buttons row under title
             HStack(spacing: 12) {
                 Button {
-                    let ex = ExerciseDef(name: "")
-                    store.saveExercise(ex)
-                    // Append to this workout's exercise order as last
-                    workout.exerciseOrder.append(ex.id)
-                    pendingNewExercise = ex
-                    navigateToNewExercise = true
-                }
-                label: {
-                    Text("new exercise")
-                        .frame(maxWidth: .infinity)
+                    let exercise = ExerciseDef(name: "")
+                    store.saveExercise(exercise)
+                    workout.exerciseOrder.append(exercise.id)
+                    pendingNewExercise = exercise
+                } label: {
+                    Text("new exercise").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
 
                 NavigationLink {
                     ReorderExercisesView(workout: workout)
-                }
-                label: {
-                    Text("reorder exercises")
-                        .frame(maxWidth: .infinity)
+                } label: {
+                    Text("reorder exercises").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-
             }
 
             Form {
@@ -237,12 +221,8 @@ struct EditWorkoutView: View {
             }
         }
         .navigationTitle("edit workout")
-        .navigationDestination(isPresented: $navigateToNewExercise) {
-            if let ex = pendingNewExercise {
-                EditExerciseView(exercise: ex)
-            } else {
-                EmptyView()
-            }
+        .navigationDestination(item: $pendingNewExercise) { exercise in
+            EditExerciseView(exercise: exercise)
         }
         .toolbar { }
     }
@@ -289,20 +269,18 @@ struct EditExercisesView: View {
     @State private var exercisePendingDelete: ExerciseDef?
     @State private var editMode: EditMode = .inactive
     @State private var pendingNewExercise: ExerciseDef? = nil
-    @State private var navigateToNewExercise: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
                 Button {
-                    let ex = ExerciseDef(name: "")
-                    store.saveExercise(ex)
-                    pendingNewExercise = ex
-                    navigateToNewExercise = true
-                    
-                } label: { Text("new exercise")
-                    .frame(maxWidth: .infinity)}
-                    .buttonStyle(.bordered)
+                    let exercise = ExerciseDef(name: "")
+                    store.saveExercise(exercise)
+                    pendingNewExercise = exercise
+                } label: {
+                    Text("new exercise").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
             }
 
             if store.exercises.isEmpty {
@@ -343,8 +321,8 @@ struct EditExercisesView: View {
                         }
                         .onDelete { indexSet in
                             for idx in indexSet {
-                                let ex = store.exercises[idx]
-                                exercisePendingDelete = ex
+                                let exercise = store.exercises[idx]
+                                exercisePendingDelete = exercise
                                 showDeleteConfirm = true
                             }
                         }
@@ -355,18 +333,14 @@ struct EditExercisesView: View {
         }
         .padding()
         .navigationTitle("edit exercises")
-        .navigationDestination(isPresented: $navigateToNewExercise) {
-            if let ex = pendingNewExercise {
-                EditExerciseView(exercise: ex)
-            } else {
-                EmptyView()
-            }
+        .navigationDestination(item: $pendingNewExercise) { exercise in
+            EditExerciseView(exercise: exercise)
         }
         .onAppear { store.reloadAll() }
         .confirmationDialog("Delete Exercise?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
-                if let ex = exercisePendingDelete {
-                    store.deleteExercise(ex)
+                if let exercise = exercisePendingDelete {
+                    store.deleteExercise(exercise)
                 }
                 exercisePendingDelete = nil
             }
@@ -470,75 +444,14 @@ struct LogExerciseView: View {
         let exercise = exerciseAt(currentIndex)
         GeometryReader { geo in
             let width = geo.size.width
-            let pickerHeight = max(160, (geo.size.height - 220) / 2)
-            VStack(spacing: 16) {
-                
-                HStack {
-                    Button {
-                        logAndNext()
-                    } label: {
-                        Text(isLastUnlogged ? "log, end" : "log, next")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    Button("quit") { dismiss() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                    Menu("list") {
-                        ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
-                            let ex = exerciseAt(idx)
-                            Button(ex?.name ?? "") { currentIndex = idx }
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                }
-
+            VStack(spacing: 4) {
+                buttonRow
                 Text(exercise?.name ?? "").font(.title2).bold()
-
-                Text("weight used").font(.caption).frame(maxWidth: .infinity, alignment: .leading)
-                if let exercise = exercise {
-                    let weightOptions = Array(stride(from: exercise.lowestWeight, through: exercise.highestWeight, by: exercise.weightIncrement))
-                    GeometryReader { proxy in
-                        let totalWidth = proxy.size.width - 16
-                        let count = max(1, exercise.numberOfSeries)
-                        let column = max(100, totalWidth / CGFloat(count))
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack {
-                                ForEach(0..<count, id: \.self) { series in
-                                    Picker("", selection: weightBinding(series: series, defaultValue: exercise.lowestWeight)) {
-                                        ForEach(weightOptions, id: \.self) { w in
-                                            Text("\(w)").tag(w)
-                                        }
-                                    }
-                                    .pickerStyle(.wheel)
-                                    .frame(width: column, height: proxy.size.height)
-                                }
-                            }
-                        }
-                        .scrollDisabled(isPaging)
-                    }
-                    .frame(height: pickerHeight)
-
-                    Text("repetitions").font(.caption).frame(maxWidth: .infinity, alignment: .leading)
-                    GeometryReader { proxy in
-                        let totalWidth = proxy.size.width - 16
-                        let count = max(1, exercise.numberOfSeries)
-                        let column = max(100, totalWidth / CGFloat(count))
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack {
-                                ForEach(0..<count, id: \.self) { series in
-                                    Picker("", selection: repsBinding(series: series)) {
-                                        ForEach(0...200, id: \.self) { r in Text("\(r)").tag(r) }
-                                    }
-                                    .pickerStyle(.wheel)
-                                    .frame(width: column, height: proxy.size.height)
-                                }
-                            }
-                        }
-                        .scrollDisabled(isPaging)
-                    }
-                    .frame(height: pickerHeight)
+                if let exercise {
+                    Text("weight used").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
+                    weightPickers(for: exercise)
+                    Text("repetitions").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
+                    repsPickers(for: exercise)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -547,69 +460,16 @@ struct LogExerciseView: View {
             .padding()
             .onAppear {
                 containerWidth = width
+                pickerHeight = max(160, (geo.size.height - 220) / 2)
                 prepareBuffers()
             }
-            .onChange(of: geo.size.width) { _, newW in
-                containerWidth = newW
+            .onChange(of: geo.size.width) { _, newWidth in
+                containerWidth = newWidth
             }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 10, coordinateSpace: .local)
-                    .onChanged { value in
-                        let t = value.translation
-                        if dragDirection == nil {
-                            let slop: CGFloat = 8
-                            if abs(t.width) > slop || abs(t.height) > slop {
-                                dragDirection = abs(t.width) > abs(t.height) ? .horizontal : .vertical
-                                isPaging = (dragDirection == .horizontal)
-                            }
-                        }
-                        if dragDirection == .horizontal {
-                            dragOffsetX = t.width
-                        } else {
-                            // vertical or undecided: keep the page in place so pickers can scroll
-                            dragOffsetX = 0
-                        }
-                    }
-                    .onEnded { value in
-                        defer {
-                            dragDirection = nil
-                            isPaging = false
-                        }
-                        guard dragDirection == .horizontal else {
-                            withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
-                            return
-                        }
-
-                        let threshold: CGFloat = 80
-                        let horizontal = value.translation.width
-
-                        if horizontal <= -threshold {
-                            withAnimation(.easeInOut(duration: 0.22)) {
-                                dragOffsetX = -containerWidth
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                                goToNextUnlogged()
-                                dragOffsetX = containerWidth
-                                withAnimation(.easeInOut(duration: 0.22)) {
-                                    dragOffsetX = 0
-                                }
-                            }
-                        } else if horizontal >= threshold {
-                            withAnimation(.easeInOut(duration: 0.22)) {
-                                dragOffsetX = containerWidth
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                                goToPrevUnlogged()
-                                dragOffsetX = -containerWidth
-                                withAnimation(.easeInOut(duration: 0.22)) {
-                                    dragOffsetX = 0
-                                }
-                            }
-                        } else {
-                            withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
-                        }
-                    }
-            )
+            .onChange(of: geo.size.height) { _, newHeight in
+                pickerHeight = max(160, (newHeight - 220) / 2)
+            }
+            .simultaneousGesture(dragGesture)
         }
         .navigationTitle("log exercise")
         .navigationBarBackButtonHidden(true)
@@ -618,13 +478,12 @@ struct LogExerciseView: View {
                 Text("All exercises logged")
                     .font(.title2)
                     .bold()
-                Button(action: {
+                Button {
                     dismiss()
-                }) {
+                } label: {
                     VStack(spacing: 2) {
                         Text("Done")
-                        Text("end of workout")
-                            .font(.footnote)
+                        Text("end of workout").font(.footnote)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
@@ -644,6 +503,122 @@ struct LogExerciseView: View {
             }
             .padding()
         }
+    }
+
+    private var buttonRow: some View {
+        HStack {
+            Button {
+                logAndNext()
+            } label: {
+                Text(isLastUnlogged ? "log, end" : "log, next")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            Button("quit") { dismiss() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+            Menu("list") {
+                ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
+                    let exercise = exerciseAt(idx)
+                    Button(exercise?.name ?? "") { currentIndex = idx }
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
+    }
+
+    @State private var pickerHeight: CGFloat = 180
+
+    private func weightPickers(for exercise: ExerciseDef) -> some View {
+        let weightOptions = Array(stride(from: exercise.lowestWeight, through: exercise.highestWeight, by: exercise.weightIncrement))
+        return VStack(spacing: 0) {
+            Divider()
+            GeometryReader { proxy in
+                let count = max(1, exercise.numberOfSeries)
+                HStack(spacing: 0) {
+                    ForEach(0..<count, id: \.self) { series in
+                        Picker("", selection: weightBinding(series: series, defaultValue: exercise.lowestWeight)) {
+                            ForEach(weightOptions, id: \.self) { weight in
+                                Text("\(weight)").tag(weight)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(width: proxy.size.width / CGFloat(count), height: pickerHeight)
+                    }
+                }
+            }
+            .frame(height: pickerHeight)
+            Divider()
+        }
+    }
+
+    private func repsPickers(for exercise: ExerciseDef) -> some View {
+        VStack(spacing: 0) {
+            Divider()
+            GeometryReader { proxy in
+                let count = max(1, exercise.numberOfSeries)
+                HStack(spacing: 0) {
+                    ForEach(0..<count, id: \.self) { series in
+                        Picker("", selection: repsBinding(series: series)) {
+                            ForEach(0...200, id: \.self) { reps in Text("\(reps)").tag(reps) }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(width: proxy.size.width / CGFloat(count), height: pickerHeight)
+                    }
+                }
+            }
+            .frame(height: pickerHeight)
+            Divider()
+        }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .local)
+            .onChanged { value in
+                let translation = value.translation
+                if dragDirection == nil {
+                    let directionSlop: CGFloat = 8
+                    if abs(translation.width) > directionSlop || abs(translation.height) > directionSlop {
+                        dragDirection = abs(translation.width) > abs(translation.height) ? .horizontal : .vertical
+                        isPaging = (dragDirection == .horizontal)
+                    }
+                }
+                dragOffsetX = dragDirection == .horizontal ? translation.width : 0
+            }
+            .onEnded { value in
+                defer {
+                    dragDirection = nil
+                    isPaging = false
+                }
+                guard dragDirection == .horizontal else {
+                    withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
+                    return
+                }
+
+                let threshold: CGFloat = 80
+                let horizontal = value.translation.width
+
+                if horizontal <= -threshold {
+                    withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = -containerWidth }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                        goToNextUnlogged()
+                        dragOffsetX = containerWidth
+                        withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = 0 }
+                    }
+                } else if horizontal >= threshold {
+                    withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = containerWidth }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                        goToPrevUnlogged()
+                        dragOffsetX = -containerWidth
+                        withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = 0 }
+                    }
+                } else {
+                    withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
+                }
+            }
     }
 
     private func exerciseAt(_ index: Int) -> ExerciseDef? {
@@ -811,37 +786,29 @@ struct LogsView: View {
                 } else {
                     List(compactRows()) { row in
                         VStack(spacing: 2) {
-                            // Single separator above content
                             Rectangle()
                                 .fill(Color.secondary.opacity(1.0))
                                 .frame(height: row.isWorkout ? 3 : 1)
-                            // Row content
                             HStack(alignment: .center, spacing: 8) {
-                                // Column 1
                                 Group {
                                     if row.isWorkout {
-                                        Text(row.left)
-                                            .font(.headline)
-                                            .foregroundStyle(.blue)
-                                            .italic()
+                                        Text(row.left).font(.headline).foregroundStyle(.blue).italic()
                                     } else {
-                                        Text(row.left)
-                                            .font(.headline)
+                                        Text(row.left).font(.headline)
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                // Column 2
-                                row.rightView
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Group {
+                                    if row.isWorkout {
+                                        Text(row.date.formatted(date: .abbreviated, time: .shortened))
+                                            .font(.headline).foregroundStyle(.blue)
+                                    } else if let entry = row.entry {
+                                        weightsRepsGrid(for: entry, at: row.date)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .padding(.bottom, 0)
-
-//                        // Single separator below content
-//                        Rectangle()
-//                            .fill(Color.secondary.opacity(0.5))
-//                            .frame(height: row.isWorkout ? 2 : 1)
                         }
-                        .listStyle(.plain)
                         .listRowSeparator(.hidden)
                     }
                 }
@@ -924,91 +891,40 @@ struct LogsView: View {
         exportURL = nil
     }
     
-    // New exportJSON with metadata envelope
-    private func exportJSON() {
-        // Define envelope and nested structs inside LogsView scope
-        struct ExportEnvelope: Codable {
-            let exportVersion: String
-            let appIdentifier: String
-            let appVersion: String
-            let build: String
-            let exportedAt: String
-            let device: DeviceInfo
-            let locale: String
-            let timeZone: String
-            let counts: Counts
-            let data: AllData
-
-            struct DeviceInfo: Codable {
-                let model: String
-                let system: String
-                let version: String
-            }
-
-            struct Counts: Codable {
-                let workouts: Int
-                let exercises: Int
-                let logs: Int
-            }
-
-            struct AllData: Codable {
-                let workouts: [WorkoutDef]
-                let exercises: [ExerciseDef]
-                let logs: [WorkoutLog]
-            }
-        }
-
-        let exportVersion = "logJSON.1"
+    private func buildExportEnvelope() -> ExportEnvelope {
         let bundle = Bundle.main
-
-        let appIdentifier = bundle.bundleIdentifier ?? ""
-
-        let appVersion = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        let build = bundle.infoDictionary?["CFBundleVersion"] as? String ?? ""
-
-        let exportedAt = ISO8601DateFormatter().string(from: Date())
-
-        let device = ExportEnvelope.DeviceInfo(
-            model: UIDevice.current.model,
-            system: UIDevice.current.systemName,
-            version: UIDevice.current.systemVersion
+        return ExportEnvelope(
+            exportVersion: "logJSON.1",
+            appIdentifier: bundle.bundleIdentifier ?? "",
+            appVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+            build: bundle.infoDictionary?["CFBundleVersion"] as? String ?? "",
+            exportedAt: ISO8601DateFormatter().string(from: Date()),
+            device: ExportEnvelope.DeviceInfo(
+                model: UIDevice.current.model,
+                system: UIDevice.current.systemName,
+                version: UIDevice.current.systemVersion
+            ),
+            locale: Locale.current.identifier,
+            timeZone: TimeZone.current.identifier,
+            counts: ExportEnvelope.Counts(
+                workouts: workouts.count,
+                exercises: exercises.count,
+                logs: logs.count
+            ),
+            data: ExportEnvelope.AllData(
+                workouts: workouts,
+                exercises: exercises,
+                logs: logs
+            )
         )
+    }
 
-        let locale = Locale.current.identifier
-        let timeZone = TimeZone.current.identifier
-
-        let counts = ExportEnvelope.Counts(
-            workouts: workouts.count,
-            exercises: exercises.count,
-            logs: logs.count
-        )
-
-        let data = ExportEnvelope.AllData(
-            workouts: workouts,
-            exercises: exercises,
-            logs: logs
-        )
-
-        let envelope = ExportEnvelope(
-            exportVersion: exportVersion,
-            appIdentifier: appIdentifier,
-            appVersion: appVersion,
-            build: build,
-            exportedAt: exportedAt,
-            device: device,
-            locale: locale,
-            timeZone: timeZone,
-            counts: counts,
-            data: data
-        )
-
+    private func exportJSON() {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
-
         do {
-            let jsonData = try encoder.encode(envelope)
-            let tmpDir = FileManager.default.temporaryDirectory
-            let fileURL = tmpDir.appendingPathComponent("workout-logs.json")
+            let jsonData = try encoder.encode(buildExportEnvelope())
+            let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("workout-logs.json")
             try jsonData.write(to: fileURL, options: .atomic)
             exportURL = fileURL
         } catch {
@@ -1017,92 +933,13 @@ struct LogsView: View {
             showResultAlert = true
         }
     }
-    
-    // Backup current data helper - returns URL of backup file
+
     private func backupCurrentData() -> URL? {
-        struct ExportEnvelope: Codable {
-            let exportVersion: String
-            let appIdentifier: String
-            let appVersion: String
-            let build: String
-            let exportedAt: String
-            let device: DeviceInfo
-            let locale: String
-            let timeZone: String
-            let counts: Counts
-            let data: AllData
-
-            struct DeviceInfo: Codable {
-                let model: String
-                let system: String
-                let version: String
-            }
-
-            struct Counts: Codable {
-                let workouts: Int
-                let exercises: Int
-                let logs: Int
-            }
-
-            struct AllData: Codable {
-                let workouts: [WorkoutDef]
-                let exercises: [ExerciseDef]
-                let logs: [WorkoutLog]
-            }
-        }
-
-        let exportVersion = "logJSON.1"
-        let bundle = Bundle.main
-
-        let appIdentifier = bundle.bundleIdentifier ?? ""
-
-        let appVersion = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        let build = bundle.infoDictionary?["CFBundleVersion"] as? String ?? ""
-
-        let exportedAt = ISO8601DateFormatter().string(from: Date())
-
-        let device = ExportEnvelope.DeviceInfo(
-            model: UIDevice.current.model,
-            system: UIDevice.current.systemName,
-            version: UIDevice.current.systemVersion
-        )
-
-        let locale = Locale.current.identifier
-        let timeZone = TimeZone.current.identifier
-
-        let counts = ExportEnvelope.Counts(
-            workouts: workouts.count,
-            exercises: exercises.count,
-            logs: logs.count
-        )
-
-        let data = ExportEnvelope.AllData(
-            workouts: workouts,
-            exercises: exercises,
-            logs: logs
-        )
-
-        let envelope = ExportEnvelope(
-            exportVersion: exportVersion,
-            appIdentifier: appIdentifier,
-            appVersion: appVersion,
-            build: build,
-            exportedAt: exportedAt,
-            device: device,
-            locale: locale,
-            timeZone: timeZone,
-            counts: counts,
-            data: data
-        )
-
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
-
         do {
-            let jsonData = try encoder.encode(envelope)
-            let tmpDir = FileManager.default.temporaryDirectory
-            // Use a unique backup filename
-            let fileURL = tmpDir.appendingPathComponent("workout-backup.json")
+            let jsonData = try encoder.encode(buildExportEnvelope())
+            let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("workout-backup.json")
             try jsonData.write(to: fileURL, options: .atomic)
             return fileURL
         } catch {
@@ -1110,39 +947,6 @@ struct LogsView: View {
             resultMessage = "Failed to backup current data: \(error.localizedDescription)"
             showResultAlert = true
             return nil
-        }
-    }
-    
-    // MARK: - Import Helpers and Types
-    
-    struct ExportEnvelope: Codable {
-        let exportVersion: String
-        let appIdentifier: String
-        let appVersion: String
-        let build: String
-        let exportedAt: String
-        let device: DeviceInfo
-        let locale: String
-        let timeZone: String
-        let counts: Counts
-        let data: AllData
-
-        struct DeviceInfo: Codable {
-            let model: String
-            let system: String
-            let version: String
-        }
-
-        struct Counts: Codable {
-            let workouts: Int
-            let exercises: Int
-            let logs: Int
-        }
-
-        struct AllData: Codable {
-            let workouts: [WorkoutDef]
-            let exercises: [ExerciseDef]
-            let logs: [WorkoutLog]
         }
     }
 
@@ -1260,13 +1064,13 @@ struct LogsView: View {
             }
             let fetchExercises: FetchDescriptor<ExerciseDef> = FetchDescriptor()
             if let existingExercises = try? context.fetch(fetchExercises) {
-                for ex in existingExercises {
-                    context.delete(ex)
+                for exercise in existingExercises {
+                    context.delete(exercise)
                 }
             }
             // Insert imported data
-            for ex in envelope.data.exercises {
-                context.insert(ex)
+            for exercise in envelope.data.exercises {
+                context.insert(exercise)
             }
             for workout in envelope.data.workouts {
                 context.insert(workout)
@@ -1301,10 +1105,6 @@ struct LogsView: View {
                 showResultAlert = true
                 return
             }
-            // Existing ids sets for quick lookup
-            let existingExerciseIDs = Set(exercises.map { $0.id })
-            let existingWorkoutIDs = Set(workouts.map { $0.id })
-            
             var insertedExercises = 0
             var insertedWorkouts = 0
             
@@ -1407,13 +1207,12 @@ struct LogsView: View {
                 let exerciseName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
                 let count = max(entry.weights.count, entry.reps.count)
                 for i in 0..<count {
-                    let w = i < entry.weights.count ? entry.weights[i] : 0
-                    let r = i < entry.reps.count ? entry.reps[i] : 0
+                    let weight = i < entry.weights.count ? entry.weights[i] : 0
+                    let reps = i < entry.reps.count ? entry.reps[i] : 0
                     let dateStr = dateFormatter.string(from: log.date)
-                    // Escape commas by wrapping fields in quotes if needed
-                    let wq = quoteIfNeeded(workoutName)
-                    let eq = quoteIfNeeded(exerciseName)
-                    lines.append("\(dateStr)\t\(wq)\t\(eq)\t\(i+1)\t\(w)\t\(r)")
+                    let quotedWorkout = quoteIfNeeded(workoutName)
+                    let quotedExercise = quoteIfNeeded(exerciseName)
+                    lines.append("\(dateStr)\t\(quotedWorkout)\t\(quotedExercise)\t\(i+1)\t\(weight)\t\(reps)")
                 }
             }
         }
@@ -1432,40 +1231,28 @@ struct LogsView: View {
         let id: String
         let isWorkout: Bool
         let left: String
-        let rightView: AnyView
-        let timestamp: Date
+        let date: Date
+        let entry: ExerciseLogEntry?
         let workoutId: UUID?
         let exerciseId: UUID?
     }
 
     private func compactRows() -> [CompactRow] {
-        // Build rows in reverse chronological order (logs are already reverse sorted)
+        let maxWorkoutPauze: TimeInterval = 3600 // seconds
         var rows: [CompactRow] = []
-        var lastExerciseTimestamp: Date? = nil
+        var lastExerciseDate: Date? = nil
         for log in logs {
             let workoutName = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
             var addedWorkoutForThisLog = false
             for entry in log.entries {
-                // Determine if we need to include a workout row based on gap with previous exercise row
-                let shouldIncludeWorkoutRow: Bool
-                if let prevTs = lastExerciseTimestamp {
-                    // Previous row is more recent; include workout row if gap >= 1 hour
-                    shouldIncludeWorkoutRow = prevTs.timeIntervalSince(log.date) >= 3600
-                } else {
-                    // First exercise encountered -> include workout row
-                    shouldIncludeWorkoutRow = true
-                }
+                let shouldIncludeWorkoutRow = lastExerciseDate.map { $0.timeIntervalSince(log.date) >= maxWorkoutPauze } ?? true
                 if shouldIncludeWorkoutRow && !addedWorkoutForThisLog {
-                    let right = Text(log.date.formatted(date: .abbreviated, time: .shortened)).font(.headline).foregroundStyle(.blue)
-                    rows.append(CompactRow(id: "w-\(log.id.uuidString)-first", isWorkout: true, left: workoutName, rightView: AnyView(right), timestamp: log.date, workoutId: log.workoutId, exerciseId: nil))
+                    rows.append(CompactRow(id: "w-\(log.id.uuidString)-first", isWorkout: true, left: workoutName, date: log.date, entry: nil, workoutId: log.workoutId, exerciseId: nil))
                     addedWorkoutForThisLog = true
                 }
-                // Append exercise row
-                let exName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
-                let right = AnyView(weightsRepsGrid(for: entry, at: log.date))
-                rows.append(CompactRow(id: "e-\(log.id.uuidString)-\(entry.exerciseId.uuidString)", isWorkout: false, left: exName, rightView: right, timestamp: log.date, workoutId: log.workoutId, exerciseId: entry.exerciseId))
-                // Update last exercise timestamp after adding the exercise row
-                lastExerciseTimestamp = log.date
+                let exerciseName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
+                rows.append(CompactRow(id: "e-\(log.id.uuidString)-\(entry.exerciseId.uuidString)", isWorkout: false, left: exerciseName, date: log.date, entry: entry, workoutId: log.workoutId, exerciseId: entry.exerciseId))
+                lastExerciseDate = log.date
             }
         }
         return rows
@@ -1474,32 +1261,30 @@ struct LogsView: View {
     private func weightsRepsGrid(for entry: ExerciseLogEntry, at date: Date) -> some View {
         let previous = previousEntry(for: entry.exerciseId, before: date)
         let maxCount = max(entry.weights.count, entry.reps.count)
-        return AnyView(
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
-                GridRow {
-                    Text("w").font(.headline)
-                    ForEach(0..<maxCount, id: \.self) { i in
-                        let current = i < entry.weights.count ? entry.weights[i] : 0
-                        let prev = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
-                        Text("\(current)")
-                            .foregroundStyle(colorForWeight(current: current, previous: prev))
-                            .font(.headline)
-                    }
-                }
-                GridRow {
-                    Text("r").font(.headline)
-                    ForEach(0..<maxCount, id: \.self) { i in
-                        let current = i < entry.reps.count ? entry.reps[i] : 0
-                        let prevRep = previous?.reps.indices.contains(i) == true ? previous!.reps[i] : nil
-                        let currentW = i < entry.weights.count ? entry.weights[i] : 0
-                        let prevW = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
-                        Text("\(current)")
-                            .foregroundStyle(colorForReps(current: current, previous: prevRep, currentWeight: currentW, previousWeight: prevW))
-                            .font(.headline)
-                    }
+        return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
+            GridRow {
+                Text("w").font(.headline)
+                ForEach(0..<maxCount, id: \.self) { i in
+                    let current = i < entry.weights.count ? entry.weights[i] : 0
+                    let prev = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
+                    Text("\(current)")
+                        .foregroundStyle(colorForWeight(current: current, previous: prev))
+                        .font(.headline)
                 }
             }
-        )
+            GridRow {
+                Text("r").font(.headline)
+                ForEach(0..<maxCount, id: \.self) { i in
+                    let current = i < entry.reps.count ? entry.reps[i] : 0
+                    let prevRep = previous?.reps.indices.contains(i) == true ? previous!.reps[i] : nil
+                    let currentW = i < entry.weights.count ? entry.weights[i] : 0
+                    let prevW = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
+                    Text("\(current)")
+                        .foregroundStyle(colorForReps(current: current, previous: prevRep, currentWeight: currentW, previousWeight: prevW))
+                        .font(.headline)
+                }
+            }
+        }
     }
 
     private func previousEntry(for exerciseId: UUID, before date: Date) -> ExerciseLogEntry? {
@@ -1515,18 +1300,17 @@ struct LogsView: View {
     }
 
     private func colorForWeight(current: Int, previous: Int?) -> Color {
-        guard let previous = previous else { return .primary }
+        guard let previous else { return .primary }
         if current > previous { return .green }
         if current < previous { return .red }
         return .primary
     }
 
     private func colorForReps(current: Int, previous: Int?, currentWeight: Int, previousWeight: Int?) -> Color {
-        guard let previous = previous else { return .primary }
-        // If reps larger and weight same or larger -> green
-        if current > previous, (previousWeight == nil || currentWeight >= (previousWeight ?? currentWeight)) { return .green }
-        // If reps smaller and weight same or smaller -> green per spec
-        if current < previous, (previousWeight == nil || currentWeight <= (previousWeight ?? currentWeight)) { return .red }
+        guard let previous else { return .primary }
+        let prevWeight = previousWeight ?? currentWeight
+        if current > previous && currentWeight >= prevWeight { return .green }
+        if current < previous && currentWeight <= prevWeight { return .red }
         return .primary
     }
 }

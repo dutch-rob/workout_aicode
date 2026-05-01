@@ -17,14 +17,14 @@ final class AppStore: ObservableObject {
         do {
             let workoutsDescriptor = FetchDescriptor<WorkoutDef>(sortBy: [SortDescriptor(\WorkoutDef.name)])
             let exercisesDescriptor = FetchDescriptor<ExerciseDef>(sortBy: [SortDescriptor(\ExerciseDef.name)])
-            workouts = (try context.fetch(workoutsDescriptor)).sorted { lhs, rhs in
-                if lhs.sortIndex != rhs.sortIndex { return lhs.sortIndex < rhs.sortIndex }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            workouts = (try context.fetch(workoutsDescriptor)).sorted { a, b in
+                if a.sortIndex != b.sortIndex { return a.sortIndex < b.sortIndex }
+                return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
             }
             var changed = false
-            for (idx, w) in workouts.enumerated() {
-                if w.sortIndex != idx {
-                    w.sortIndex = idx
+            for (idx, workout) in workouts.enumerated() {
+                if workout.sortIndex != idx {
+                    workout.sortIndex = idx
                     changed = true
                 }
             }
@@ -79,10 +79,10 @@ final class AppStore: ObservableObject {
         try? context.save()
         reloadAll()
     }
-    
+
     func reorderWorkouts(_ newOrder: [WorkoutDef]) {
-        for (idx, w) in newOrder.enumerated() {
-            w.sortIndex = idx
+        for (idx, workout) in newOrder.enumerated() {
+            workout.sortIndex = idx
         }
         try? context.save()
         reloadAll()
@@ -98,10 +98,10 @@ final class AppStore: ObservableObject {
             let logs = try context.fetch(descriptor)
             var map: [UUID: ExerciseLogEntry] = [:]
             let targetSet = Set(workout.exerciseOrder)
-            for log in logs { 
-                for e in log.entries {
-                    if targetSet.contains(e.exerciseId) && map[e.exerciseId] == nil {
-                        map[e.exerciseId] = e
+            for log in logs {
+                for entry in log.entries {
+                    if targetSet.contains(entry.exerciseId) && map[entry.exerciseId] == nil {
+                        map[entry.exerciseId] = entry
                     }
                 }
                 if map.count == targetSet.count { break }
@@ -111,21 +111,21 @@ final class AppStore: ObservableObject {
             return [:]
         }
     }
-    
+
     func exportLogs() -> URL? {
         do {
             let descriptor = FetchDescriptor<WorkoutLog>(sortBy: [SortDescriptor(\WorkoutLog.date, order: .forward)])
             let logs = try context.fetch(descriptor)
             var text = ""
             for log in logs {
-                for e in log.entries {
+                for entry in log.entries {
                     let workoutText = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
-                    let exName = exercises.first(where: { $0.id == e.exerciseId })?.name ?? "Exercise"
-                    let weightsText = e.weights.map(String.init).joined(separator: "\t")
-                    let repsText = e.reps.map(String.init).joined(separator: "\t")
+                    let exerciseName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
+                    let weightsText = entry.weights.map(String.init).joined(separator: "\t")
+                    let repsText = entry.reps.map(String.init).joined(separator: "\t")
                     text += "\(log.date.formatted(date: .numeric, time: .omitted))\t"
                     text += "\(log.date.formatted(date: .omitted, time: .shortened))\t"
-                    text += "workout\t\"\(workoutText)\"\texercise\t\"\(exName)\"\tweights\t\(weightsText)\trepetitions\t\(repsText)\n"
+                    text += "workout\t\"\(workoutText)\"\texercise\t\"\(exerciseName)\"\tweights\t\(weightsText)\trepetitions\t\(repsText)\n"
                 }
             }
             let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appendingPathComponent("workout_logs.txt")
