@@ -14,16 +14,30 @@ struct workout_aicodeApp: App {
     @StateObject private var store: AppStore
 
     init() {
+        let syncEnabled = UserDefaults.standard.bool(forKey: "iCloudSyncEnabled")
         do {
-            let configuration = ModelConfiguration()
+            let config = syncEnabled
+                ? ModelConfiguration(cloudKitDatabase: .automatic)
+                : ModelConfiguration()
             let container = try ModelContainer(
                 for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
-                configurations: configuration
+                configurations: config
             )
             self.sharedModelContainer = container
             _store = StateObject(wrappedValue: AppStore(context: container.mainContext))
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            if syncEnabled {
+                // CloudKit not available (entitlements/container not set up) — fall back to local
+                UserDefaults.standard.set(false, forKey: "iCloudSyncEnabled")
+                let container = try! ModelContainer(
+                    for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+                    configurations: ModelConfiguration()
+                )
+                self.sharedModelContainer = container
+                _store = StateObject(wrappedValue: AppStore(context: container.mainContext))
+            } else {
+                fatalError("Could not create ModelContainer: \(error)")
+            }
         }
     }
 

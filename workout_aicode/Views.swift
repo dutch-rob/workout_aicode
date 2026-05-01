@@ -1315,6 +1315,39 @@ struct LogsView: View {
     }
 }
 
+struct SettingsView: View {
+    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
+    @State private var showRestartAlert = false
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle(isOn: $iCloudSyncEnabled) {
+                        Label("Share log data among your iPhones/iPads", systemImage: "icloud")
+                    }
+                    .onChange(of: iCloudSyncEnabled) { _, _ in showRestartAlert = true }
+                } footer: {
+                    Text("Syncs your workouts, exercises, and logs across all your iPhones and iPads signed into the same iCloud account. Close and reopen the app after changing this setting.")
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .alert("Restart Required", isPresented: $showRestartAlert) {
+                Button("OK") { }
+            } message: {
+                Text("Close and reopen the app for the iCloud sync change to take effect.")
+            }
+        }
+    }
+}
+
 #Preview("Edit Workouts") {
     let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     let context = container.mainContext
