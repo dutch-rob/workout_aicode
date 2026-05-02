@@ -43,7 +43,10 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
 
                     Button { showSettings = true } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundStyle(.blue)
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                 }

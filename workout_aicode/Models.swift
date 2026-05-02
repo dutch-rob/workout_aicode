@@ -3,12 +3,12 @@ import SwiftData
 
 @Model
 final class ExerciseDef: Identifiable, Hashable, Codable {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var numberOfSeries: Int
-    var lowestWeight: Int
-    var highestWeight: Int
-    var weightIncrement: Int
+    var id: UUID = UUID()
+    var name: String = ""
+    var numberOfSeries: Int = 3
+    var lowestWeight: Int = 0
+    var highestWeight: Int = 200
+    var weightIncrement: Int = 5
 
     init(id: UUID = UUID(), name: String, numberOfSeries: Int = 3, lowestWeight: Int = 0, highestWeight: Int = 200, weightIncrement: Int = 5) {
         let clampedNumberOfSeries = max(0, numberOfSeries)
@@ -48,11 +48,10 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
 
 @Model
 final class WorkoutDef: Identifiable, Hashable, Codable {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    // Ordered list of exercise IDs to preserve order
-    var exerciseOrder: [UUID]
-    var sortIndex: Int
+    var id: UUID = UUID()
+    var name: String = ""
+    var exerciseOrder: [UUID] = []
+    var sortIndex: Int = 0
 
     init(id: UUID = UUID(), name: String, exerciseOrder: [UUID] = [], sortIndex: Int = 0) {
         self.id = id
@@ -81,10 +80,10 @@ final class WorkoutDef: Identifiable, Hashable, Codable {
 
 @Model
 final class WorkoutLog: Identifiable, Codable {
-    @Attribute(.unique) var id: UUID
-    var date: Date
-    var workoutId: UUID
-    var entries: [ExerciseLogEntry]
+    var id: UUID = UUID()
+    var date: Date = Date()
+    var workoutId: UUID = UUID()
+    var entries: [ExerciseLogEntry] = []
 
     init(id: UUID = UUID(), date: Date = Date(), workoutId: UUID, entries: [ExerciseLogEntry]) {
         self.id = id

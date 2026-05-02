@@ -63,13 +63,15 @@ struct EditWorkoutsView: View {
                 }
                 .buttonStyle(.bordered)
 
-                Button {
-                    editMode = (editMode == .active ? .inactive : .active)
-                } label: {
-                    Text(editMode == .active ? "end reorder" : "reorder workouts")
-                        .frame(maxWidth: .infinity)
+                if store.workouts.count >= 2 {
+                    Button {
+                        editMode = (editMode == .active ? .inactive : .active)
+                    } label: {
+                        Text(editMode == .active ? "end reorder" : "reorder workouts")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
 
             if store.workouts.isEmpty {
@@ -172,12 +174,14 @@ struct EditWorkoutView: View {
                 }
                 .buttonStyle(.bordered)
 
-                NavigationLink {
-                    ReorderExercisesView(workout: workout)
-                } label: {
-                    Text("reorder exercises").frame(maxWidth: .infinity)
+                if workout.exerciseOrder.count >= 2 {
+                    NavigationLink {
+                        ReorderExercisesView(workout: workout)
+                    } label: {
+                        Text("reorder exercises").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
 
             Form {
@@ -203,20 +207,21 @@ struct EditWorkoutView: View {
                         }
                     }
 
-                    // Add exercise row at the bottom
-                    Menu {
-                        ForEach(allExercises) { choice in
-                            Button(choice.name) {
-                                workout.exerciseOrder.append(choice.id)
+                    if !allExercises.isEmpty {
+                        Menu {
+                            ForEach(allExercises) { choice in
+                                Button(choice.name) {
+                                    workout.exerciseOrder.append(choice.id)
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "plus.circle")
+                                Text("Add exercise")
                             }
                         }
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle")
-                            Text("Add exercise")
-                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
                 }
             }
         }
@@ -1453,7 +1458,7 @@ struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-extension URL: Identifiable {
+extension URL: @retroactive Identifiable {
     public var id: URL { self }
 }
 
