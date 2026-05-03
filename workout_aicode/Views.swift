@@ -1307,24 +1307,37 @@ struct LogsView: View {
 
 struct SettingsView: View {
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
-    @State private var showRestartAlert = false
+    @EnvironmentObject private var setup: AppSetup
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         Form {
             Section {
                 Toggle(isOn: $iCloudSyncEnabled) {
-                    Label("Share log data among your iPhones/iPads", systemImage: "icloud")
+                    Label("Share data among your iPhones/iPads", systemImage: "icloud")
                 }
-                .onChange(of: iCloudSyncEnabled) { _, _ in showRestartAlert = true }
             } footer: {
-                Text("Syncs your workouts, exercises, and logs across all your iPhones and iPads signed into the same iCloud account. Close and reopen the app after changing this setting.")
+                Text("Syncs your workouts, exercises, and logs across all your iPhones and iPads signed into the same iCloud account and that have this option turned on. Changes take effect immediately.")
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Delete all my data", systemImage: "trash")
+                }
+            } footer: {
+                Text("Deletes all of this app's records.")
             }
         }
         .navigationTitle("settings")
-        .alert("Restart Required", isPresented: $showRestartAlert) {
-            Button("OK") { }
+        .confirmationDialog("Delete all data?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete everything", role: .destructive) {
+                setup.deleteAllData()
+            }
+            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Close and reopen the app for the iCloud sync change to take effect.")
+            Text("Deletes all of this app's records. This cannot be undone.")
         }
     }
 }
