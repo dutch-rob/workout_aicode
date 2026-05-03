@@ -68,7 +68,13 @@ struct InfoView: View {
 
                 Group {
                     Text("Settings").font(.headline)
-                    Text("In the settings screen you can choose to store your log data on your phone, or in iCloud so that your log data can update accross your iOS devices.")
+                    Text("In the settings screen you can:")
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("    • Choose to share your log data accross your iOS devices.")
+                            Text("    • Delete the data you made with this app. If you have the sharing data on, that wil also delete your data from you other iPhones or iPads with sharing on.")
+                        }
+                    }
                 }
 
                 Group {

@@ -69,7 +69,9 @@ After importing a JSON file you can:
 
 ## Settings
 
-In the settings screen you can choose to store your log data on your phone, or in iCloud so that your log data can update accross your iOS devices.
+In the settings screen you can:
+   - Choose to share your log data accross your iOS devices.
+   - Delete the data you made with this app. If you have the sharing data on, that wil also delete your data from you other iPhones or iPads with sharing on.
 
 
 ## Notes
