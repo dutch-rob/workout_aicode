@@ -11,7 +11,6 @@ struct ContentView: View {
 
     @State private var pendingNewWorkout: WorkoutDef? = nil
     @State private var pendingNewExercise: ExerciseDef? = nil
-    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -42,7 +41,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    Button { showSettings = true } label: {
+                    NavigationLink(destination: SettingsView()) {
                         Image(systemName: "gearshape.fill")
                             .font(.system(size: 18, weight: .regular))
                             .foregroundStyle(.blue)
@@ -112,9 +111,6 @@ struct ContentView: View {
             }
             .navigationDestination(item: $pendingNewExercise) { exercise in
                 EditExerciseView(exercise: exercise)
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
             }
         }
     }

@@ -358,63 +358,48 @@ struct EditExercisesView: View {
 
 // MARK: - Edit Exercise Screen
 struct EditExerciseView: View {
-    @EnvironmentObject private var store: AppStore
-    @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
-
     @Bindable var exercise: ExerciseDef
-    @State private var hasInserted = false
-
-    private var isExerciseValid: Bool {
-        let nameOK = !exercise.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let incrementOK = exercise.weightIncrement >= 1
-        let rangeOK = exercise.lowestWeight <= exercise.highestWeight
-        return nameOK && incrementOK && rangeOK
-    }
 
     var body: some View {
         Form {
             TextField("Exercise name", text: $exercise.name)
+
             LabeledContent {
-                Stepper(value: $exercise.numberOfSeries, in: 0...200) {
+                Stepper(value: $exercise.numberOfSeries, in: 1...10) {
                     Text("\(exercise.numberOfSeries)")
                 }
             } label: { Text("Number of series") }
+
             LabeledContent {
-                Stepper(value: $exercise.lowestWeight, in: 0...2000) {
-                    Text("\(exercise.lowestWeight)")
-                }
+                TextField("", value: $exercise.lowestWeight, format: .number)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
             } label: { Text("Lowest weight") }
+
             LabeledContent {
-                Stepper(value: $exercise.highestWeight, in: 0...2000) {
-                    Text("\(exercise.highestWeight)")
-                }
+                TextField("", value: $exercise.highestWeight, format: .number)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
             } label: { Text("Highest weight") }
+
             LabeledContent {
-                Stepper(value: $exercise.weightIncrement, in: 1...200) {
-                    Text("\(exercise.weightIncrement)")
-                }
+                TextField("", value: $exercise.weightIncrement, format: .number)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
             } label: { Text("Weight increment") }
         }
         .onChange(of: exercise.lowestWeight) { _, newValue in
+            if newValue < 1 { exercise.lowestWeight = 1 }
             if exercise.highestWeight < newValue { exercise.highestWeight = newValue }
         }
         .onChange(of: exercise.highestWeight) { _, newValue in
+            if newValue < 1 { exercise.highestWeight = 1 }
             if newValue < exercise.lowestWeight { exercise.lowestWeight = newValue }
         }
         .onChange(of: exercise.weightIncrement) { _, newValue in
             if newValue < 1 { exercise.weightIncrement = 1 }
         }
         .navigationTitle("edit exercise")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    store.saveExercise(exercise)
-                    dismiss()
-                }
-                .disabled(!isExerciseValid)
-            }
-        }
     }
 }
 
@@ -1323,32 +1308,23 @@ struct LogsView: View {
 struct SettingsView: View {
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @State private var showRestartAlert = false
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Toggle(isOn: $iCloudSyncEnabled) {
-                        Label("Share log data among your iPhones/iPads", systemImage: "icloud")
-                    }
-                    .onChange(of: iCloudSyncEnabled) { _, _ in showRestartAlert = true }
-                } footer: {
-                    Text("Syncs your workouts, exercises, and logs across all your iPhones and iPads signed into the same iCloud account. Close and reopen the app after changing this setting.")
+        Form {
+            Section {
+                Toggle(isOn: $iCloudSyncEnabled) {
+                    Label("Share log data among your iPhones/iPads", systemImage: "icloud")
                 }
+                .onChange(of: iCloudSyncEnabled) { _, _ in showRestartAlert = true }
+            } footer: {
+                Text("Syncs your workouts, exercises, and logs across all your iPhones and iPads signed into the same iCloud account. Close and reopen the app after changing this setting.")
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .alert("Restart Required", isPresented: $showRestartAlert) {
-                Button("OK") { }
-            } message: {
-                Text("Close and reopen the app for the iCloud sync change to take effect.")
-            }
+        }
+        .navigationTitle("settings")
+        .alert("Restart Required", isPresented: $showRestartAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Close and reopen the app for the iCloud sync change to take effect.")
         }
     }
 }
