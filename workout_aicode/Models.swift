@@ -1,6 +1,29 @@
 import Foundation
 import SwiftData
 
+// MARK: - MovementType
+//
+// The dominant axis the wrist follows during a single rep. Used by the
+// (upcoming) Apple Watch sensor counter to decide which signal to peak-
+// detect. Direction-agnostic: one rep = one full cycle in either direction.
+enum MovementType: String, Codable, CaseIterable, Identifiable {
+    case none           // no auto-counting (planks, complex moves, unknown)
+    case vertical       // up/down: pull-downs, presses, vertical curls
+    case horizontal     // back/forth: rows, machine chest press
+    case rotational     // arc: bicep curls, hammer curls, lateral raises
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .none:       return "None"
+        case .vertical:   return "Vertical (up / down)"
+        case .horizontal: return "Horizontal (back / forth)"
+        case .rotational: return "Rotational (arc)"
+        }
+    }
+}
+
 @Model
 final class ExerciseDef: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
@@ -9,8 +32,15 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     var lowestWeight: Int = 0
     var highestWeight: Int = 200
     var weightIncrement: Int = 5
+    var movementType: MovementType = MovementType.none
 
-    init(id: UUID = UUID(), name: String, numberOfSeries: Int = 3, lowestWeight: Int = 0, highestWeight: Int = 200, weightIncrement: Int = 5) {
+    init(id: UUID = UUID(),
+         name: String,
+         numberOfSeries: Int = 3,
+         lowestWeight: Int = 0,
+         highestWeight: Int = 200,
+         weightIncrement: Int = 5,
+         movementType: MovementType = .none) {
         let clampedNumberOfSeries = max(0, numberOfSeries)
         let clampedLowest = max(0, lowestWeight)
         let clampedHighest = max(clampedLowest, highestWeight)
@@ -22,9 +52,12 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         self.lowestWeight = clampedLowest
         self.highestWeight = clampedHighest
         self.weightIncrement = clampedIncrement
+        self.movementType = movementType
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement }
+    enum CodingKeys: String, CodingKey {
+        case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement, movementType
+    }
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let id = try c.decode(UUID.self, forKey: .id)
@@ -33,7 +66,14 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         let lowestWeight = try c.decode(Int.self, forKey: .lowestWeight)
         let highestWeight = try c.decode(Int.self, forKey: .highestWeight)
         let weightIncrement = try c.decode(Int.self, forKey: .weightIncrement)
-        self.init(id: id, name: name, numberOfSeries: numberOfSeries, lowestWeight: lowestWeight, highestWeight: highestWeight, weightIncrement: weightIncrement)
+        // movementType is a new field — accept old exports without it.
+        let movementType = try c.decodeIfPresent(MovementType.self, forKey: .movementType) ?? .none
+        self.init(id: id, name: name,
+                  numberOfSeries: numberOfSeries,
+                  lowestWeight: lowestWeight,
+                  highestWeight: highestWeight,
+                  weightIncrement: weightIncrement,
+                  movementType: movementType)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -43,6 +83,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         try c.encode(lowestWeight, forKey: .lowestWeight)
         try c.encode(highestWeight, forKey: .highestWeight)
         try c.encode(weightIncrement, forKey: .weightIncrement)
+        try c.encode(movementType, forKey: .movementType)
     }
 }
 

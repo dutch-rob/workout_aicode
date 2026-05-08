@@ -387,6 +387,16 @@ struct EditExerciseView: View {
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
             } label: { Text("Weight increment") }
+
+            Section {
+                Picker("Movement type", selection: $exercise.movementType) {
+                    ForEach(MovementType.allCases) { type in
+                        Text(type.label).tag(type)
+                    }
+                }
+            } footer: {
+                Text("Used by the Apple Watch sensor counter to detect reps. Pick the dominant axis your wrist follows during one rep.")
+            }
         }
         .onChange(of: exercise.lowestWeight) { _, newValue in
             if newValue < 1 { exercise.lowestWeight = 1 }
