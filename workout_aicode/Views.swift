@@ -422,6 +422,9 @@ struct LogExerciseView: View {
 
     let workout: WorkoutDef
 
+    // Watch connectivity — observe completed-rep signals from Apple Watch
+    @ObservedObject private var watchSession = PhoneSessionManager.shared
+
     @State private var currentIndex: Int = 0
     @State private var weights: [[Int]] = []
     @State private var reps: [[Int]] = []
@@ -462,12 +465,27 @@ struct LogExerciseView: View {
                 containerWidth = width
                 pickerHeight = max(160, (geo.size.height - 220) / 2)
                 prepareBuffers()
+                // Push the first exercise's context to the Watch immediately.
+                if let ex = exerciseAt(currentIndex) {
+                    sendWatchContext(for: ex, setNumber: 1)
+                }
             }
             .onChange(of: geo.size.width) { _, newWidth in
                 containerWidth = newWidth
             }
             .onChange(of: geo.size.height) { _, newHeight in
                 pickerHeight = max(160, (newHeight - 220) / 2)
+            }
+            // Send fresh context to Watch whenever the user swipes to a
+            // different exercise.
+            .onChange(of: currentIndex) { _, newIndex in
+                if let ex = exerciseAt(newIndex) {
+                    sendWatchContext(for: ex, setNumber: 1)
+                }
+            }
+            // Apply the rep count that just arrived from the Watch.
+            .onChange(of: watchSession.setCompleteTrigger) { _, _ in
+                applyWatchRepCount(watchSession.completedRepCount)
             }
             .simultaneousGesture(dragGesture)
         }
@@ -666,6 +684,39 @@ struct LogExerciseView: View {
         }, set: { newValue in
             setRep(newValue, series: series)
         })
+    }
+
+    // MARK: - Watch connectivity helpers
+
+    /// Push the exercise context to the Apple Watch so its rep counter
+    /// shows the right exercise name, set number and target.
+    private func sendWatchContext(for exercise: ExerciseDef, setNumber: Int) {
+        let previous = store.lastEntries(for: workout)[exercise.id]
+        let targetReps      = previous?.reps.first    ?? 10
+        let suggestedWeight = previous?.weights.first ?? exercise.lowestWeight
+        PhoneSessionManager.shared.sendSetContext(
+            exerciseName:    exercise.name,
+            movementType:    exercise.movementType,
+            setNumber:       setNumber,
+            targetReps:      targetReps,
+            suggestedWeight: suggestedWeight
+        )
+    }
+
+    /// When the Watch sends a completed-set rep count, fill the first
+    /// zero-reps series slot for the current exercise.
+    private func applyWatchRepCount(_ count: Int) {
+        guard count > 0 else { return }
+        let numSeries = exerciseAt(currentIndex)?.numberOfSeries ?? 1
+        for series in 0..<numSeries {
+            if safeValue(reps, currentIndex, series, default: 0) == 0 {
+                setRep(count, series: series)
+                return
+            }
+        }
+        // All slots already filled — overwrite the last one so there is
+        // always some way for the Watch to update the reps value.
+        setRep(count, series: numSeries - 1)
     }
 
     private func logAndNext() {

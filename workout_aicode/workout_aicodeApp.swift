@@ -155,6 +155,8 @@ final class AppSetup: ObservableObject {
 struct workout_aicodeApp: App {
     @StateObject private var setup = AppSetup()
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
+    // Activating WCSession here keeps it live for the app's full lifetime.
+    @StateObject private var watchSession = PhoneSessionManager.shared
 
     var body: some Scene {
         WindowGroup {
