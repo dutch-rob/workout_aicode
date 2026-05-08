@@ -290,12 +290,16 @@ final class AppSetup: ObservableObject {
         // ── Step 5: import recovered data ────────────────────────────────
         let ctx = v2Container.mainContext
         for e in exs {
+            // Do NOT read e.movementType — the old store doesn't have that
+            // column, so SwiftData leaves it as NULL and crashes on the cast
+            // from Optional<Any> to the non-optional MovementType enum.
+            // All pre-movementType exercises default to .none.
             ctx.insert(ExerciseDef(id: e.id, name: e.name,
                                    numberOfSeries: e.numberOfSeries,
                                    lowestWeight: e.lowestWeight,
                                    highestWeight: e.highestWeight,
                                    weightIncrement: e.weightIncrement,
-                                   movementType: e.movementType))
+                                   movementType: .none))
         }
         for w in wos {
             ctx.insert(WorkoutDef(id: w.id, name: w.name,
