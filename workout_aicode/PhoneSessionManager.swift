@@ -66,30 +66,35 @@ final class PhoneSessionManager: NSObject, ObservableObject {
 // MARK: - WCSessionDelegate (iOS)
 extension PhoneSessionManager: WCSessionDelegate {
 
+    // WatchConnectivity calls these on its own internal queue — always
+    // hop to the main thread before touching @Published properties.
+
     func session(_ session: WCSession,
                  activationDidCompleteWith state: WCSessionActivationState,
                  error: Error?) {
-        isWatchReachable = session.isReachable
+        let reachable = session.isReachable
+        DispatchQueue.main.async { self.isWatchReachable = reachable }
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {
-        isWatchReachable = session.isReachable
+        let reachable = session.isReachable
+        DispatchQueue.main.async { self.isWatchReachable = reachable }
     }
 
     func session(_ session: WCSession,
                  didReceiveMessage message: [String: Any]) {
-        guard let type = message["type"] as? String else { return }
-        if type == "setComplete" {
-            completedRepCount  = message["count"] as? Int ?? 0
-            setCompleteTrigger = UUID()   // unique value → onChange fires once
+        guard let type = message["type"] as? String,
+              type == "setComplete" else { return }
+        let count = message["count"] as? Int ?? 0
+        DispatchQueue.main.async {
+            self.completedRepCount  = count
+            self.setCompleteTrigger = UUID()   // unique value → onChange fires once
         }
     }
 
     // Required on iOS (not needed on watchOS)
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) {
-        // Re-activate after paired watch changes (rare, e.g. when user
-        // pairs a different Apple Watch).
         WCSession.default.activate()
     }
 }

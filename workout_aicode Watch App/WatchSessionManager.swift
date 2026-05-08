@@ -83,6 +83,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
 // MARK: - WCSessionDelegate (watchOS)
 extension WatchSessionManager: WCSessionDelegate {
 
+    // WatchConnectivity calls these on its own internal queue — always
+    // hop to the main thread before touching @Published properties.
+
     func session(_ session: WCSession,
                  activationDidCompleteWith state: WCSessionActivationState,
                  error: Error?) {}
@@ -92,11 +95,19 @@ extension WatchSessionManager: WCSessionDelegate {
         guard let type = message["type"] as? String,
               type == "setStart" else { return }
 
-        exerciseName    = message["exerciseName"]    as? String ?? ""
-        movementTypeRaw = message["movementType"]    as? String ?? "none"
-        setNumber       = message["setNumber"]       as? Int    ?? 1
-        targetReps      = message["targetReps"]      as? Int    ?? 0
-        suggestedWeight = message["suggestedWeight"] as? Int    ?? 0
-        repCount        = 0   // reset counter for the new set
+        let name    = message["exerciseName"]    as? String ?? ""
+        let mvType  = message["movementType"]    as? String ?? "none"
+        let setNum  = message["setNumber"]       as? Int    ?? 1
+        let target  = message["targetReps"]      as? Int    ?? 0
+        let weight  = message["suggestedWeight"] as? Int    ?? 0
+
+        DispatchQueue.main.async {
+            self.exerciseName    = name
+            self.movementTypeRaw = mvType
+            self.setNumber       = setNum
+            self.targetReps      = target
+            self.suggestedWeight = weight
+            self.repCount        = 0   // reset counter for the new set
+        }
     }
 }
