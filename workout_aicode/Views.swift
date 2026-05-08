@@ -663,15 +663,19 @@ struct LogExerciseView: View {
         // If this is the last unlogged exercise, log and dismiss immediately
         if loggedIndices.count + 1 >= workout.exerciseOrder.count {
             loggedIndices.insert(currentIndex)
-            let entry = ExerciseLogEntry(exerciseId: ex.id, weights: weights[currentIndex], reps: reps[currentIndex])
-            let log = WorkoutLog(workoutId: workout.id, entries: [entry])
+            let log = WorkoutLog(workoutId: workout.id,
+                                 exerciseId: ex.id,
+                                 weights: weights[currentIndex],
+                                 reps: reps[currentIndex])
             context.insert(log)
             dismiss()
             return
         }
         loggedIndices.insert(currentIndex)
-        let entry = ExerciseLogEntry(exerciseId: ex.id, weights: weights[currentIndex], reps: reps[currentIndex])
-        let log = WorkoutLog(workoutId: workout.id, entries: [entry])
+        let log = WorkoutLog(workoutId: workout.id,
+                             exerciseId: ex.id,
+                             weights: weights[currentIndex],
+                             reps: reps[currentIndex])
         context.insert(log)
 
         guard loggedIndices.count < workout.exerciseOrder.count else {
@@ -792,8 +796,8 @@ struct LogsView: View {
                                     if row.isWorkout {
                                         Text(row.date.formatted(date: .abbreviated, time: .shortened))
                                             .font(.headline).foregroundStyle(.blue)
-                                    } else if let entry = row.entry {
-                                        weightsRepsGrid(for: entry, at: row.date)
+                                    } else if let log = row.log {
+                                        weightsRepsGrid(for: log, at: row.date)
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -884,7 +888,7 @@ struct LogsView: View {
     private func buildExportEnvelope() -> ExportEnvelope {
         let bundle = Bundle.main
         return ExportEnvelope(
-            exportVersion: "logJSON.1",
+            exportVersion: "logJSON.2",
             appIdentifier: bundle.bundleIdentifier ?? "",
             appVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
             build: bundle.infoDictionary?["CFBundleVersion"] as? String ?? "",
@@ -940,12 +944,48 @@ struct LogsView: View {
         }
     }
 
+    /// Returns an envelope in the *current* (logJSON.2) flat shape regardless
+    /// of whether the source file is logJSON.1 or logJSON.2. Old single-row,
+    /// multi-entry logs get expanded into one flat WorkoutLog per entry.
     private func loadEnvelope(from url: URL) throws -> ExportEnvelope {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: url)
+
+        // Peek at exportVersion without committing to either schema yet.
+        struct VersionPeek: Decodable { let exportVersion: String }
+        let version = (try? JSONDecoder().decode(VersionPeek.self, from: data))?.exportVersion ?? ""
+
         let decoder = JSONDecoder()
-        return try decoder.decode(ExportEnvelope.self, from: data)
+        if version == "logJSON.2" {
+            return try decoder.decode(ExportEnvelope.self, from: data)
+        } else if version.hasPrefix("logJSON.1") {
+            let legacy = try decoder.decode(LegacyExportEnvelope.self, from: data)
+            let flatLogs: [WorkoutLog] = legacy.data.logs.flatMap { $0.flatten() }
+            return ExportEnvelope(
+                exportVersion: "logJSON.2",            // normalized
+                appIdentifier: legacy.appIdentifier,
+                appVersion:    legacy.appVersion,
+                build:         legacy.build,
+                exportedAt:    legacy.exportedAt,
+                device:        legacy.device,
+                locale:        legacy.locale,
+                timeZone:      legacy.timeZone,
+                counts: ExportEnvelope.Counts(
+                    workouts:  legacy.data.workouts.count,
+                    exercises: legacy.data.exercises.count,
+                    logs:      flatLogs.count            // flattened count
+                ),
+                data: ExportEnvelope.AllData(
+                    workouts:  legacy.data.workouts,
+                    exercises: legacy.data.exercises,
+                    logs:      flatLogs
+                )
+            )
+        } else {
+            // Try V2 anyway so a forward-compat exportVersion still parses.
+            return try decoder.decode(ExportEnvelope.self, from: data)
+        }
     }
 
     private func validateImport(at url: URL) {
@@ -1082,10 +1122,10 @@ struct LogsView: View {
     }
 
     private func mergeData(with url: URL) {
-        struct LogSignature: Hashable {
+        struct LogSig: Hashable {
             let date: Date
             let workoutId: UUID
-            let exerciseIds: Set<UUID>
+            let exerciseId: UUID
         }
         do {
             let envelope = try loadEnvelope(from: url)
@@ -1097,11 +1137,9 @@ struct LogsView: View {
             }
             var insertedExercises = 0
             var insertedWorkouts = 0
-            
-            // To track name updates
             var updatedExerciseNames = 0
             var updatedWorkoutNames = 0
-            
+
             // Insert new exercises only; update names for existing
             for importedEx in envelope.data.exercises {
                 if let existingEx = exercises.first(where: { $0.id == importedEx.id }) {
@@ -1126,40 +1164,29 @@ struct LogsView: View {
                     insertedWorkouts += 1
                 }
             }
-            // For logs:
-            // We consider a log duplicate if date + workoutId + all entry exerciseIds are the same
-            let existingLogsSet = Set(logs.map { LogSignature(date: $0.date, workoutId: $0.workoutId, exerciseIds: Set($0.entries.map { $0.exerciseId })) })
-            
+            // Logs: dedupe by (date, workoutId, exerciseId). Same signature with
+            // differing weights/reps is treated as a conflict; existing wins.
+            let existingByKey: [LogSig: WorkoutLog] = Dictionary(
+                uniqueKeysWithValues: logs.map {
+                    (LogSig(date: $0.date, workoutId: $0.workoutId, exerciseId: $0.exerciseId), $0)
+                }
+            )
+
             var insertedLogs = 0
             var conflictCount = 0
-            
+
             for importedLog in envelope.data.logs {
-                let signature = LogSignature(date: importedLog.date, workoutId: importedLog.workoutId, exerciseIds: Set(importedLog.entries.map { $0.exerciseId }))
-                if !existingLogsSet.contains(signature) {
+                let key = LogSig(date: importedLog.date,
+                                 workoutId: importedLog.workoutId,
+                                 exerciseId: importedLog.exerciseId)
+                if let existing = existingByKey[key] {
+                    if existing.weights != importedLog.weights || existing.reps != importedLog.reps {
+                        conflictCount += 1
+                        // TODO: present UI to resolve; for now keep existing
+                    }
+                } else {
                     context.insert(importedLog)
                     insertedLogs += 1
-                } else {
-                    // Potential conflict: same date and workoutId and exerciseIds; check if weights/reps differ
-                    if let existingLog = logs.first(where: {
-                        $0.date == importedLog.date && $0.workoutId == importedLog.workoutId
-                    }) {
-                        var conflictFound = false
-                        for importedEntry in importedLog.entries {
-                            if let existingEntry = existingLog.entries.first(where: { $0.exerciseId == importedEntry.exerciseId }) {
-                                if existingEntry.weights != importedEntry.weights || existingEntry.reps != importedEntry.reps {
-                                    // Conflict detected
-                                    conflictFound = true
-                                }
-                            } else {
-                                // New entry in existing log, add it
-                                existingLog.entries.append(importedEntry)
-                            }
-                        }
-                        if conflictFound {
-                            conflictCount += 1
-                            // TODO: Present a UI to resolve conflict; for now keep existing
-                        }
-                    }
                 }
             }
             try context.save()
@@ -1171,7 +1198,7 @@ struct LogsView: View {
             message += "Updated Exercise Names: \(updatedExerciseNames)\n"
             message += "Updated Workout Names: \(updatedWorkoutNames)\n"
             if conflictCount > 0 {
-                message += "Conflicts detected in \(conflictCount) log entries; existing entries kept."
+                message += "Conflicts detected in \(conflictCount) log rows; existing kept."
             }
             resultTitle = "Merge Complete"
             resultMessage = message
@@ -1193,17 +1220,15 @@ struct LogsView: View {
         // Logs are reverse sorted; export newest first is fine
         for log in logs {
             let workoutName = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
-            for entry in log.entries {
-                let exerciseName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
-                let count = max(entry.weights.count, entry.reps.count)
-                for i in 0..<count {
-                    let weight = i < entry.weights.count ? entry.weights[i] : 0
-                    let reps = i < entry.reps.count ? entry.reps[i] : 0
-                    let dateStr = dateFormatter.string(from: log.date)
-                    let quotedWorkout = quoteIfNeeded(workoutName)
-                    let quotedExercise = quoteIfNeeded(exerciseName)
-                    lines.append("\(dateStr)\t\(quotedWorkout)\t\(quotedExercise)\t\(i+1)\t\(weight)\t\(reps)")
-                }
+            let exerciseName = exercises.first(where: { $0.id == log.exerciseId })?.name ?? "Exercise"
+            let count = max(log.weights.count, log.reps.count)
+            for i in 0..<count {
+                let weight = i < log.weights.count ? log.weights[i] : 0
+                let reps   = i < log.reps.count    ? log.reps[i]    : 0
+                let dateStr = dateFormatter.string(from: log.date)
+                let quotedWorkout = quoteIfNeeded(workoutName)
+                let quotedExercise = quoteIfNeeded(exerciseName)
+                lines.append("\(dateStr)\t\(quotedWorkout)\t\(quotedExercise)\t\(i+1)\t\(weight)\t\(reps)")
             }
         }
         return lines.joined(separator: "\n")
@@ -1222,7 +1247,7 @@ struct LogsView: View {
         let isWorkout: Bool
         let left: String
         let date: Date
-        let entry: ExerciseLogEntry?
+        let log: WorkoutLog?
         let workoutId: UUID?
         let exerciseId: UUID?
     }
@@ -1231,31 +1256,53 @@ struct LogsView: View {
         let maxWorkoutPauze: TimeInterval = 3600 // seconds
         var rows: [CompactRow] = []
         var lastExerciseDate: Date? = nil
+        var lastWorkoutId: UUID? = nil
         for log in logs {
             let workoutName = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
-            var addedWorkoutForThisLog = false
-            for entry in log.entries {
-                let shouldIncludeWorkoutRow = lastExerciseDate.map { $0.timeIntervalSince(log.date) >= maxWorkoutPauze } ?? true
-                if shouldIncludeWorkoutRow && !addedWorkoutForThisLog {
-                    rows.append(CompactRow(id: "w-\(log.id.uuidString)-first", isWorkout: true, left: workoutName, date: log.date, entry: nil, workoutId: log.workoutId, exerciseId: nil))
-                    addedWorkoutForThisLog = true
-                }
-                let exerciseName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
-                rows.append(CompactRow(id: "e-\(log.id.uuidString)-\(entry.exerciseId.uuidString)", isWorkout: false, left: exerciseName, date: log.date, entry: entry, workoutId: log.workoutId, exerciseId: entry.exerciseId))
-                lastExerciseDate = log.date
+            // Insert a workout-header row when more than maxWorkoutPauze has
+            // elapsed since the previous logged exercise OR the workout id
+            // changed (so adjacent same-workout exercises group together).
+            let shouldInsertHeader: Bool = {
+                guard let last = lastExerciseDate else { return true }
+                if last.timeIntervalSince(log.date) >= maxWorkoutPauze { return true }
+                if lastWorkoutId != log.workoutId { return true }
+                return false
+            }()
+            if shouldInsertHeader {
+                rows.append(CompactRow(
+                    id: "w-\(log.id.uuidString)",
+                    isWorkout: true,
+                    left: workoutName,
+                    date: log.date,
+                    log: nil,
+                    workoutId: log.workoutId,
+                    exerciseId: nil
+                ))
             }
+            let exerciseName = exercises.first(where: { $0.id == log.exerciseId })?.name ?? "Exercise"
+            rows.append(CompactRow(
+                id: "e-\(log.id.uuidString)",
+                isWorkout: false,
+                left: exerciseName,
+                date: log.date,
+                log: log,
+                workoutId: log.workoutId,
+                exerciseId: log.exerciseId
+            ))
+            lastExerciseDate = log.date
+            lastWorkoutId = log.workoutId
         }
         return rows
     }
 
-    private func weightsRepsGrid(for entry: ExerciseLogEntry, at date: Date) -> some View {
-        let previous = previousEntry(for: entry.exerciseId, before: date)
-        let maxCount = max(entry.weights.count, entry.reps.count)
+    private func weightsRepsGrid(for log: WorkoutLog, at date: Date) -> some View {
+        let previous = previousEntry(for: log.exerciseId, before: date)
+        let maxCount = max(log.weights.count, log.reps.count)
         return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
             GridRow {
                 Text("w").font(.headline)
                 ForEach(0..<maxCount, id: \.self) { i in
-                    let current = i < entry.weights.count ? entry.weights[i] : 0
+                    let current = i < log.weights.count ? log.weights[i] : 0
                     let prev = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
                     Text("\(current)")
                         .foregroundStyle(colorForWeight(current: current, previous: prev))
@@ -1265,9 +1312,9 @@ struct LogsView: View {
             GridRow {
                 Text("r").font(.headline)
                 ForEach(0..<maxCount, id: \.self) { i in
-                    let current = i < entry.reps.count ? entry.reps[i] : 0
+                    let current = i < log.reps.count ? log.reps[i] : 0
                     let prevRep = previous?.reps.indices.contains(i) == true ? previous!.reps[i] : nil
-                    let currentW = i < entry.weights.count ? entry.weights[i] : 0
+                    let currentW = i < log.weights.count ? log.weights[i] : 0
                     let prevW = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
                     Text("\(current)")
                         .foregroundStyle(colorForReps(current: current, previous: prevRep, currentWeight: currentW, previousWeight: prevW))
@@ -1277,13 +1324,11 @@ struct LogsView: View {
         }
     }
 
-    private func previousEntry(for exerciseId: UUID, before date: Date) -> ExerciseLogEntry? {
+    private func previousEntry(for exerciseId: UUID, before date: Date) -> WorkoutLog? {
         // Search older logs (since logs are reverse sorted)
         for log in logs.dropFirst() {
-            if log.date < date {
-                if let entry = log.entries.first(where: { $0.exerciseId == exerciseId }) {
-                    return entry
-                }
+            if log.date < date && log.exerciseId == exerciseId {
+                return log
             }
         }
         return nil
@@ -1418,14 +1463,16 @@ struct SettingsView: View {
     let e1 = ExerciseDef(name: "Curl")
     let e2 = ExerciseDef(name: "Press")
     let workout = WorkoutDef(name: "Mixed", exerciseOrder: [e1.id, e2.id])
-    let logEntry1 = ExerciseLogEntry(exerciseId: e1.id, weights: [10, 12, 12], reps: [12, 10, 8])
-    let logEntry2 = ExerciseLogEntry(exerciseId: e2.id, weights: [20, 22, 24], reps: [10, 10, 8])
-    let log = WorkoutLog(workoutId: workout.id, entries: [logEntry1, logEntry2])
+    let log1 = WorkoutLog(workoutId: workout.id, exerciseId: e1.id,
+                          weights: [10, 12, 12], reps: [12, 10, 8])
+    let log2 = WorkoutLog(workoutId: workout.id, exerciseId: e2.id,
+                          weights: [20, 22, 24], reps: [10, 10, 8])
 
     context.insert(e1)
     context.insert(e2)
     context.insert(workout)
-    context.insert(log)
+    context.insert(log1)
+    context.insert(log2)
     try? context.save()
     store.reloadAll()
 

@@ -52,7 +52,8 @@ final class AppSetup: ObservableObject {
         let id: UUID, name: String, exerciseOrder: [UUID], sortIndex: Int
     }
     private struct LogSnap {
-        let id: UUID, date: Date, workoutId: UUID, entries: [ExerciseLogEntry]
+        let id: UUID, date: Date, workoutId: UUID, exerciseId: UUID
+        let weights: [Int], reps: [Int]
     }
     private typealias Snap = ([ExSnap], [WoSnap], [LogSnap])
 
@@ -67,7 +68,8 @@ final class AppSetup: ObservableObject {
             wos.map  { WoSnap(id: $0.id, name: $0.name, exerciseOrder: $0.exerciseOrder,
                                sortIndex: $0.sortIndex) },
             logs.map { LogSnap(id: $0.id, date: $0.date, workoutId: $0.workoutId,
-                                entries: $0.entries) }
+                                exerciseId: $0.exerciseId,
+                                weights: $0.weights, reps: $0.reps) }
         )
     }
 
@@ -101,19 +103,18 @@ final class AppSetup: ObservableObject {
         }
 
         struct LogSig: Hashable {
-            let date: Date, workoutId: UUID, exerciseIds: Set<UUID>
+            let date: Date, workoutId: UUID, exerciseId: UUID
         }
         let destLogs = (try? ctx.fetch(FetchDescriptor<WorkoutLog>())) ?? []
         let destSigs = Set(destLogs.map {
-            LogSig(date: $0.date, workoutId: $0.workoutId,
-                   exerciseIds: Set($0.entries.map { $0.exerciseId }))
+            LogSig(date: $0.date, workoutId: $0.workoutId, exerciseId: $0.exerciseId)
         })
         for s in logSnaps {
-            let sig = LogSig(date: s.date, workoutId: s.workoutId,
-                             exerciseIds: Set(s.entries.map { $0.exerciseId }))
+            let sig = LogSig(date: s.date, workoutId: s.workoutId, exerciseId: s.exerciseId)
             if !destSigs.contains(sig) {
                 ctx.insert(WorkoutLog(id: s.id, date: s.date,
-                                      workoutId: s.workoutId, entries: s.entries))
+                                      workoutId: s.workoutId, exerciseId: s.exerciseId,
+                                      weights: s.weights, reps: s.reps))
             }
         }
         try? ctx.save()
@@ -134,6 +135,7 @@ final class AppSetup: ObservableObject {
                 : ModelConfiguration(url: localStoreURL, cloudKitDatabase: .none)
             let c = try ModelContainer(
                 for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+                migrationPlan: WorkoutMigrationPlan.self,
                 configurations: config
             )
             return (c, AppStore(context: c.mainContext))

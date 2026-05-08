@@ -88,7 +88,9 @@ final class AppStore: ObservableObject {
         reloadAll()
     }
 
-    func lastEntries(for workout: WorkoutDef) -> [UUID: ExerciseLogEntry] {
+    /// For each exercise in the workout, the most recent log row (used to
+    /// pre-fill the picker wheels). Returns at most one row per exercise.
+    func lastEntries(for workout: WorkoutDef) -> [UUID: WorkoutLog] {
         do {
             let workoutID = workout.id
             let descriptor = FetchDescriptor<WorkoutLog>(
@@ -96,13 +98,11 @@ final class AppStore: ObservableObject {
                 sortBy: [SortDescriptor(\WorkoutLog.date, order: .reverse)]
             )
             let logs = try context.fetch(descriptor)
-            var map: [UUID: ExerciseLogEntry] = [:]
+            var map: [UUID: WorkoutLog] = [:]
             let targetSet = Set(workout.exerciseOrder)
             for log in logs {
-                for entry in log.entries {
-                    if targetSet.contains(entry.exerciseId) && map[entry.exerciseId] == nil {
-                        map[entry.exerciseId] = entry
-                    }
+                if targetSet.contains(log.exerciseId) && map[log.exerciseId] == nil {
+                    map[log.exerciseId] = log
                 }
                 if map.count == targetSet.count { break }
             }
@@ -118,15 +118,13 @@ final class AppStore: ObservableObject {
             let logs = try context.fetch(descriptor)
             var text = ""
             for log in logs {
-                for entry in log.entries {
-                    let workoutText = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
-                    let exerciseName = exercises.first(where: { $0.id == entry.exerciseId })?.name ?? "Exercise"
-                    let weightsText = entry.weights.map(String.init).joined(separator: "\t")
-                    let repsText = entry.reps.map(String.init).joined(separator: "\t")
-                    text += "\(log.date.formatted(date: .numeric, time: .omitted))\t"
-                    text += "\(log.date.formatted(date: .omitted, time: .shortened))\t"
-                    text += "workout\t\"\(workoutText)\"\texercise\t\"\(exerciseName)\"\tweights\t\(weightsText)\trepetitions\t\(repsText)\n"
-                }
+                let workoutText = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
+                let exerciseName = exercises.first(where: { $0.id == log.exerciseId })?.name ?? "Exercise"
+                let weightsText = log.weights.map(String.init).joined(separator: "\t")
+                let repsText = log.reps.map(String.init).joined(separator: "\t")
+                text += "\(log.date.formatted(date: .numeric, time: .omitted))\t"
+                text += "\(log.date.formatted(date: .omitted, time: .shortened))\t"
+                text += "workout\t\"\(workoutText)\"\texercise\t\"\(exerciseName)\"\tweights\t\(weightsText)\trepetitions\t\(repsText)\n"
             }
             let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appendingPathComponent("workout_logs.txt")
             try text.write(to: url, atomically: true, encoding: .utf8)
