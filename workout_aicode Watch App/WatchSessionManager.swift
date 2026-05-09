@@ -10,14 +10,11 @@ import WatchConnectivity
 //   • Activate WCSession at launch (App entry point holds a @StateObject).
 //   • Receive "setStart" messages from the iPhone and expose the exercise
 //     context as @Published properties so ContentView reacts automatically.
-//   • Expose a manual rep counter (+/-) that the user can tap on the crown
-//     dial or buttons.
+//   • Own a WatchRepCounter that auto-counts reps via CoreMotion when the
+//     exercise has a movementType other than "none".
+//   • Expose manual +/- rep buttons so the user can correct the count.
 //   • Send "setComplete" back to the iPhone when the user taps Done, then
 //     reset local state so the next setStart feels fresh.
-//
-// Next step (CoreMotion layer, separate commit):
-//   WatchRepCounter will read movementTypeRaw and start CMMotionManager
-//   peak-detection, driving repCount automatically instead of manually.
 
 @MainActor
 final class WatchSessionManager: NSObject, ObservableObject {
@@ -42,14 +39,25 @@ final class WatchSessionManager: NSObject, ObservableObject {
     /// Weight suggested based on the last log entry.
     @Published private(set) var suggestedWeight: Int    = 0
 
-    // MARK: Live rep counter (manual; CoreMotion auto-count added later)
+    // MARK: Live rep counter (manual tap OR CoreMotion auto-count)
     @Published var repCount: Int = 0
+
+    /// True while the CoreMotion counter is actively sampling.
+    /// ContentView uses this to show the "AUTO" badge.
+    var isAutoCountingActive: Bool { repCounter.isRunning }
 
     /// Convenience: true when there is an active exercise context to display.
     var isActive: Bool { !exerciseName.isEmpty }
 
+    private let repCounter = WatchRepCounter()
+
     private override init() {
         super.init()
+        // Wire up CoreMotion rep callback — fires on main thread.
+        repCounter.onRep = { [weak self] in
+            guard let self else { return }
+            self.repCount += 1
+        }
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
@@ -65,8 +73,10 @@ final class WatchSessionManager: NSObject, ObservableObject {
         repCount = max(0, repCount - 1)
     }
 
-    /// Finalise the set: send the rep count to the iPhone, then reset to idle.
+    /// Finalise the set: stop CoreMotion, send the rep count to the iPhone,
+    /// then reset to idle.
     func completeSet() {
+        repCounter.stop()
         if WCSession.default.isReachable {
             WCSession.default.sendMessage(
                 ["type": "setComplete", "count": repCount],
@@ -108,6 +118,8 @@ extension WatchSessionManager: WCSessionDelegate {
             self.targetReps      = target
             self.suggestedWeight = weight
             self.repCount        = 0   // reset counter for the new set
+            // Start CoreMotion auto-counting (no-ops for movementType == "none")
+            self.repCounter.start(movementTypeRaw: mvType)
         }
     }
 }

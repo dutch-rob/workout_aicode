@@ -57,11 +57,24 @@ struct ContentView: View {
                 Divider()
                     .padding(.vertical, 4)
 
-                // Big rep count
-                Text("\(session.repCount)")
-                    .font(.system(size: 52, weight: .bold, design: .rounded))
-                    .foregroundStyle(.tint)
-                    .contentTransition(.numericText())
+                // Big rep count + optional AUTO badge
+                ZStack(alignment: .topTrailing) {
+                    Text("\(session.repCount)")
+                        .font(.system(size: 52, weight: .bold, design: .rounded))
+                        .foregroundStyle(.tint)
+                        .contentTransition(.numericText())
+
+                    if session.isAutoCountingActive {
+                        Text("AUTO")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(.green, in: Capsule())
+                            .offset(x: 6, y: -4)
+                    }
+                }
+                .padding(.trailing, session.isAutoCountingActive ? 14 : 0)
 
                 Text("of \(session.targetReps) target")
                     .font(.caption2)
