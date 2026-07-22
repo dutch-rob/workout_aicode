@@ -61,6 +61,13 @@ final class WatchSessionManager: NSObject, ObservableObject {
 
     // MARK: - Ingest phone application context (definitions + session stash)
     private func ingest(context: [String: Any]) {
+        #if DEBUG
+        // Screenshot runs must show the demo data and nothing else. A simulator
+        // keeps the last received application context inside the app's data
+        // container, so without this an old context from a previously paired
+        // phone gets replayed on activation and silently replaces the seed.
+        if DemoMode.isEnabled { return }
+        #endif
         if let data = context["payload"] as? Data,
            let payload = try? JSONDecoder().decode(SyncPayload.self, from: data) {
             workouts    = payload.workouts

@@ -95,6 +95,10 @@ run_device() {   # devicename  bundle  app  settle  minkb  screens...
   echo "== $name =="
   xcrun simctl boot "$udid" >/dev/null 2>&1
   xcrun simctl bootstatus "$udid" >/dev/null 2>&1
+  # Uninstall first: `install` alone replaces the binary but keeps the data
+  # container, and on the Watch that container holds the last received
+  # WatchConnectivity context, which would be replayed over the demo data.
+  xcrun simctl uninstall "$udid" "$bundle" >/dev/null 2>&1
   xcrun simctl install "$udid" "$app" >/dev/null 2>&1 || { echo "!! install failed"; return; }
   # Warm-up launch: the first launch after installing is far slower, and without
   # this the first capture is a blank, still-rendering screen.
@@ -112,7 +116,11 @@ for group in $WHICH; do
     # captures solid black. minkb rejects a frame that is asleep anyway.
     phone) run_device "iPhone 17 Pro Max"       "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  "${IOS_SCREENS[@]}" ;;
     ipad)  run_device "iPad Pro 13-inch (M5)"   "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  "${IOS_SCREENS[@]}" ;;
-    watch) run_device "Apple Watch Series 11 (42mm)" "$WATCH_BUNDLE" "$WATCH_APP" 4 8 "${WATCH_SCREENS[@]}" ;;
+    # 46mm, NOT 42mm: App Store Connect accepts only 422x514, 410x502, 416x496,
+    # 396x484, 368x448 or 312x390 for Watch, and the 42mm renders at 374x446 —
+    # a real device size that is simply not on Apple's accepted list. The 46mm
+    # gives 416x496 and uploads fine.
+    watch) run_device "Apple Watch Series 11 (46mm)" "$WATCH_BUNDLE" "$WATCH_APP" 4 8 "${WATCH_SCREENS[@]}" ;;
     *) echo "unknown group: $group" ;;
   esac
 done
