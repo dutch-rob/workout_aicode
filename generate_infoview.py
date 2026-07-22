@@ -10,14 +10,15 @@ Usage (from the repo root):
     python3 generate_infoview.py
 
 Markdown rules:
-  ## Heading        →  Text("Heading").font(.headline)
-  blank line        →  paragraph separator
-  1. text           →  Text("1. text")  (in a VStack)
-     https://url    →  Link(...)         (indented URL under a numbered item)
-     - bullet       →  Text("    • bullet")  (indented, in a nested VStack)
-  [label](url)      →  Link("label", destination: URL(string: "url")!)
-  https://url       →  Link("url", ...)   (bare URL on its own line)
-  plain text        →  Text("text")
+  ## Heading           →  Text("Heading").font(.headline).id("heading-slug")
+  blank line           →  paragraph separator
+  - [label](#anchor)   →  Button that scrolls to that heading (table of contents)
+  1. text              →  Text("1. text")  (in a VStack)
+     https://url       →  Link(...)         (indented URL under a numbered item)
+     - bullet          →  Text("    • bullet")  (indented, in a nested VStack)
+  [label](url)         →  Link("label", destination: URL(string: "url")!)
+  https://url          →  Link("url", ...)   (bare URL on its own line)
+  plain text           →  Text("text")
 """
 
 import re
@@ -32,6 +33,14 @@ PARA     = "PARA"
 NUMBERED = "NUMBERED"
 BULLET   = "BULLET"
 LINK     = "LINK"
+TOC      = "TOC"      # table-of-contents entry: "- [label](#anchor) — desc"
+
+
+def slug(text: str) -> str:
+    """GitHub-style heading anchor: lowercase, drop non [a-z0-9 -], spaces→hyphens."""
+    s = text.strip().lower()
+    s = re.sub(r"[^a-z0-9 \-]", "", s)
+    return s.replace(" ", "-")
 
 
 def extract_section(md: str) -> str:
@@ -63,6 +72,14 @@ def parse_items(section: str) -> list:
         if line.startswith("## "):
             flush()
             items.append((HEADING, line[3:].strip(), 0))
+            continue
+
+        # Table-of-contents entry: "- [label](#anchor)" optionally "— description"
+        m = re.match(r'^\-\s*\[([^\]]+)\]\(#([^)]+)\)\s*(?:[—-]\s*(.*))?$', line)
+        if m:
+            flush()
+            label, anchor, desc = m.group(1).strip(), m.group(2).strip(), (m.group(3) or "").strip()
+            items.append((TOC, f"{label}|{anchor}|{desc}", 0))
             continue
 
         # Numbered: "1. text"
@@ -115,6 +132,16 @@ def swift_link(content: str) -> str:
     return f'Link("{esc(content)}", destination: URL(string: "{esc(content)}")!)'
 
 
+def swift_toc(content: str) -> str:
+    label, anchor, desc = (content.split("|", 2) + ["", ""])[:3]
+    text = label if not desc else f"{label} — {desc}"
+    # multilineTextAlignment matters: without it a wrapped entry centres its
+    # second line, which looks broken next to the left-aligned first line.
+    return (f'Button {{ withAnimation {{ proxy.scrollTo("{esc(anchor)}", anchor: .top) }} }} '
+            f'label: {{ {swift_text(text)}.multilineTextAlignment(.leading)'
+            f'.frame(maxWidth: .infinity, alignment: .leading) }}')
+
+
 def generate(items: list) -> str:
     # Split items into per-section groups (each group starts with a HEADING)
     groups: list[list] = []
@@ -128,11 +155,11 @@ def generate(items: list) -> str:
     if current:
         groups.append(current)
 
-    # Indentation levels (4 spaces per level)
-    L4 = "    " * 4   # 16 spaces — Group { / }
-    L5 = "    " * 5   # 20 spaces — content inside Group
-    L6 = "    " * 6   # 24 spaces — content inside outer VStack
-    L7 = "    " * 7   # 28 spaces — content inside nested VStack
+    # Indentation levels (cosmetic only)
+    L4 = "    " * 4
+    L5 = "    " * 5
+    L6 = "    " * 6
+    L7 = "    " * 7
 
     out = [
         "import SwiftUI",
@@ -141,8 +168,9 @@ def generate(items: list) -> str:
         "",
         "struct InfoView: View {",
         "    var body: some View {",
-        "        ScrollView {",
-        "            VStack(alignment: .leading, spacing: 16) {",
+        "        ScrollViewReader { proxy in",
+        "            ScrollView {",
+        "                VStack(alignment: .leading, spacing: 16) {",
     ]
 
     for group in groups:
@@ -153,7 +181,7 @@ def generate(items: list) -> str:
             typ, content, indent = group[i]
 
             if typ == HEADING:
-                out.append(f'{L5}{swift_text(content)}.font(.headline)')
+                out.append(f'{L5}{swift_text(content)}.font(.headline).id("{slug(content)}")')
                 i += 1
                 continue
 
@@ -167,13 +195,13 @@ def generate(items: list) -> str:
                 i += 1
                 continue
 
-            # Collect a consecutive run of list items (NUMBERED / BULLET / LINK)
+            # Collect a consecutive run of list / toc items
             block = []
-            while i < len(group) and group[i][0] in (NUMBERED, BULLET, LINK):
+            while i < len(group) and group[i][0] in (NUMBERED, BULLET, LINK, TOC):
                 block.append(group[i])
                 i += 1
 
-            has_outer = any(t in (NUMBERED, LINK) or (t == BULLET and bi == 0)
+            has_outer = any(t in (NUMBERED, LINK, TOC) or (t == BULLET and bi == 0)
                             for t, _, bi in block)
             has_indented = any(t == BULLET and bi > 0 for t, _, bi in block)
 
@@ -185,11 +213,13 @@ def generate(items: list) -> str:
                     if bt == NUMBERED:
                         out.append(f'{L6}{swift_text(bc)}')
                         j += 1
+                    elif bt == TOC:
+                        out.append(f'{L6}{swift_toc(bc)}')
+                        j += 1
                     elif bt == LINK:
                         out.append(f'{L6}{swift_link(bc)}')
                         j += 1
                     elif bt == BULLET and bi > 0:
-                        # Collect consecutive indented sub-bullets
                         subs = []
                         while j < len(block) and block[j][0] == BULLET and block[j][2] > 0:
                             subs.append(block[j])
@@ -209,6 +239,8 @@ def generate(items: list) -> str:
                 for bt, bc, bi in block:
                     if bt == NUMBERED:
                         out.append(f'{L5}{swift_text(bc)}')
+                    elif bt == TOC:
+                        out.append(f'{L5}{swift_toc(bc)}')
                     elif bt == LINK:
                         out.append(f'{L5}{swift_link(bc)}')
                     else:
@@ -221,12 +253,13 @@ def generate(items: list) -> str:
         out.pop()
 
     out += [
+        "                }",
+        "                .padding(.horizontal, 16)",
+        "                .padding(.vertical, 16)",
         "            }",
-        "            .padding(.horizontal, 16)",
-        "            .padding(.vertical, 16)",
         "        }",
-        '        .navigationTitle("Info")',
         "        .navigationBarTitleDisplayMode(.inline)",
+        '        .navigationTitle("Info")',
         "        .textSelection(.enabled)",
         "    }",
         "}",
@@ -242,7 +275,7 @@ def generate(items: list) -> str:
 
 
 def main():
-    root = Path(__file__).parent
+    root = Path(__file__).resolve().parent          # repo root (script lives there)
     readme   = root / "README.md"
     infoview = root / "workout_aicode" / "InfoView.swift"
 

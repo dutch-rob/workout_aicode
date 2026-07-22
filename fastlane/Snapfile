@@ -1,0 +1,18 @@
+# Screenshot configuration — App Store screenshots for SetsRepsWheels.
+# Run with:  fastlane screenshots
+#
+# Kept for reference/parity with the MyFeelsLike project. The actual capture is
+# done by tools/make-screenshots.sh (see the note in the Fastfile), so these
+# values are documentation of intent rather than settings snapshot reads.
+
+devices([
+  "iPhone 17 Pro Max",          # 6.9" — required iPhone size class
+  "iPad Pro 13-inch (M5)",      # 13"  — required iPad size class
+  "Apple Watch Series 11 (42mm)"
+])
+
+languages(["en-US"])
+scheme("workout_aicode")
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+concurrent_simulators(false)

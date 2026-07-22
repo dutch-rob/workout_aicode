@@ -34,6 +34,8 @@ final class AppStore: ObservableObject {
             workouts = []
             exercises = []
         }
+        // Keep the Apple Watch in sync with the latest definitions.
+        PhoneSessionManager.shared.pushDefinitions()
     }
 
     func saveWorkout(_ workout: WorkoutDef) {
@@ -75,6 +77,15 @@ final class AppStore: ObservableObject {
     }
 
     func deleteExercise(_ exercise: ExerciseDef) {
+        // Also drop it from every workout that referenced it. Leaving the id
+        // behind produced a blank "phantom" exercise at the end of a workout
+        // that the log button could not get past.
+        let deletedID = exercise.id
+        if let allWorkouts = try? context.fetch(FetchDescriptor<WorkoutDef>()) {
+            for workout in allWorkouts where workout.exerciseOrder.contains(deletedID) {
+                workout.exerciseOrder.removeAll { $0 == deletedID }
+            }
+        }
         context.delete(exercise)
         try? context.save()
         reloadAll()
@@ -110,6 +121,70 @@ final class AppStore: ObservableObject {
         } catch {
             return [:]
         }
+    }
+
+    // MARK: - Apple Watch sync
+
+    /// Build the JSON payload the Watch needs to select and log a workout on its
+    /// own: all workout + exercise definitions plus the most recent logged
+    /// weights/reps per (workout, exercise) so the Watch pickers pre-fill.
+    func watchSyncPayloadData() -> Data? {
+        var lastMap: [String: SyncLastEntry] = [:]
+        for workout in workouts {
+            let entries = lastEntries(for: workout)
+            for (exId, log) in entries {
+                let key = SyncPayload.lastEntryKey(workoutId: workout.id.uuidString,
+                                                   exerciseId: exId.uuidString)
+                lastMap[key] = SyncLastEntry(weights: log.weights, reps: log.reps)
+            }
+        }
+
+        // Drop references to exercises that no longer exist, so the Watch never
+        // shows a blank "phantom" exercise.
+        let existingExerciseIDs = Set(exercises.map(\.id))
+        let syncWorkouts = workouts
+            .filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { workout in
+                SyncWorkout(id: workout.id.uuidString,
+                            name: workout.name,
+                            exerciseOrder: workout.exerciseOrder
+                                .filter { existingExerciseIDs.contains($0) }
+                                .map(\.uuidString))
+            }
+
+        let syncExercises = exercises.map {
+            SyncExercise(id: $0.id.uuidString,
+                         name: $0.name,
+                         numberOfSeries: $0.numberOfSeries,
+                         lowestWeight: $0.lowestWeight,
+                         highestWeight: $0.highestWeight,
+                         weightIncrement: $0.weightIncrement)
+        }
+
+        let payload = SyncPayload(
+            workouts: syncWorkouts,
+            exercises: syncExercises,
+            lastEntries: lastMap,
+            healthSharingEnabled: UserDefaults.standard.bool(forKey: "healthSharingEnabled")
+        )
+        return try? JSONEncoder().encode(payload)
+    }
+
+    /// Insert a set logged on the Apple Watch. De-duplicates on the incoming id
+    /// so re-delivered messages don't create duplicate rows.
+    func addWatchLog(id: UUID, date: Date, workoutId: UUID, exerciseId: UUID,
+                     weights: [Int], reps: [Int]) {
+        let targetID = id
+        let descriptor = FetchDescriptor<WorkoutLog>(
+            predicate: #Predicate<WorkoutLog> { $0.id == targetID }
+        )
+        if let existing = try? context.fetch(descriptor), !existing.isEmpty { return }
+
+        let log = WorkoutLog(id: id, date: date, workoutId: workoutId,
+                             exerciseId: exerciseId, weights: weights, reps: reps)
+        context.insert(log)
+        try? context.save()
+        reloadAll()
     }
 
     func exportLogs() -> URL? {

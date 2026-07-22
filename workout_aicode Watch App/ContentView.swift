@@ -1,119 +1,121 @@
 import SwiftUI
 
-// MARK: - ContentView (watchOS)
+// MARK: - ContentView (watchOS home)
 //
-// Two states:
-//  • Idle   – shown before iPhone sends any exercise context.
-//  • Active – shown while a set is in progress; displays exercise name,
-//             set number, suggested weight, a large rep counter, ±1 buttons
-//             and a "Done" button that ships the count back to the iPhone.
+// The opening screen: a list of workout buttons. Tapping one opens the log
+// screen for that workout. The current time is shown automatically by watchOS
+// in the top status bar.
+//
+// When a workout is active on the iPhone, opening the Watch app takes the
+// session over here (jumping straight into that workout); the phone then shows
+// its Paused screen. Tapping a workout in the list starts/joins that session.
 
 struct ContentView: View {
     @StateObject private var session = WatchSessionManager.shared
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var path: [String] = []   // workout ids on the nav stack
 
     var body: some View {
-        Group {
-            if session.isActive {
-                activeSetView
-            } else {
-                idleView
+        NavigationStack(path: $path) {
+            Group {
+                if session.workouts.isEmpty {
+                    emptyState
+                } else {
+                    List(session.workouts) { workout in
+                        NavigationLink(value: workout.id) {
+                            Text(workout.name)
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Workouts")
+            .navigationDestination(for: String.self) { workoutId in
+                WorkoutLoaderView(workoutId: workoutId, onEndSession: { path.removeAll() })
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: session.isActive)
+        // Take over into a workout being handed over from the iPhone.
+        .onChange(of: session.routeWorkoutId) { _, id in
+            guard let id else { return }
+            if path.last != id { path = [id] }
+            session.routeWorkoutId = nil
+        }
+        // Opening / returning to the Watch app pulls fresh data and checks
+        // whether the phone is mid-workout (shown as a Paused screen).
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { session.onForeground() }
+        }
+        // When the workout session ends (finished or quit), pop back to the list.
+        // Driven from here (not the log view's dismiss()) so it's reliable with
+        // the path-bound NavigationStack.
+        .onChange(of: session.role) { _, newRole in
+            if newRole == .none, !path.isEmpty { path.removeAll() }
+        }
+        .onAppear {
+            session.requestSync()
+            if let id = session.routeWorkoutId {
+                if path.last != id { path = [id] }
+                session.routeWorkoutId = nil
+            }
+            #if DEBUG
+            // Screenshot demo mode — see DemoMode.swift.
+            guard DemoMode.isEnabled else { return }
+            session.loadDemoData()
+            switch DemoMode.screen {
+            case "log":    path = [DemoMode.workoutId]
+            case "paused": session.showDemoPaused()
+            default:       break
+            }
+            #endif
+        }
+        // A workout active on the iPhone shows here as a Paused screen; the
+        // session only moves over when the user taps "Continue here".
+        .overlay {
+            if session.role == .paused {
+                WatchPausedView(onContinue: { session.reclaim() },
+                                onDismiss: { session.dismissPaused() })
+            }
+        }
     }
 
-    // MARK: - Idle screen
-
-    private var idleView: some View {
+    private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "dumbbell")
                 .font(.system(size: 30))
                 .foregroundStyle(.tint)
-            Text("Open SetsRepsWheels on iPhone to begin logging")
+            Text("Open SetsRepsWheels on iPhone to set up your workouts")
                 .multilineTextAlignment(.center)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .padding()
     }
+}
 
-    // MARK: - Active set screen
+// MARK: - WorkoutLoaderView
+//
+// Resolves a workout id to its definition. If the definition hasn't synced yet
+// (e.g. the phone mirrored us into a workout before data arrived), it shows a
+// brief loading state and pulls from the phone; the view swaps to the log
+// screen automatically once the workout appears.
 
-    private var activeSetView: some View {
-        ScrollView {
-            VStack(spacing: 3) {
+private struct WorkoutLoaderView: View {
+    @ObservedObject private var session = WatchSessionManager.shared
+    let workoutId: String
+    var onEndSession: () -> Void = {}
 
-                // Exercise name + context
-                Text(session.exerciseName)
-                    .font(.headline)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.7)
-
-                Text("Set \(session.setNumber)  ·  \(session.suggestedWeight) kg")
+    var body: some View {
+        if let workout = session.workout(id: workoutId) {
+            WatchLogExerciseView(workout: workout, onEndSession: onEndSession)
+        } else {
+            VStack(spacing: 8) {
+                ProgressView()
+                Text("Loading workout…")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-
-                Divider()
-                    .padding(.vertical, 4)
-
-                // Big rep count + optional AUTO badge
-                ZStack(alignment: .topTrailing) {
-                    Text("\(session.repCount)")
-                        .font(.system(size: 52, weight: .bold, design: .rounded))
-                        .foregroundStyle(.tint)
-                        .contentTransition(.numericText())
-
-                    if session.isAutoCountingActive {
-                        Text("AUTO")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(.green, in: Capsule())
-                            .offset(x: 6, y: -4)
-                    }
-                }
-                .padding(.trailing, session.isAutoCountingActive ? 14 : 0)
-
-                Text("of \(session.targetReps) target")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                Divider()
-                    .padding(.vertical, 4)
-
-                // Manual ±1 buttons
-                HStack(spacing: 24) {
-                    Button {
-                        session.decrementRep()
-                    } label: {
-                        Image(systemName: "minus.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.red)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        session.incrementRep()
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.green)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // Done — sends count to iPhone
-                Button("Done") {
-                    session.completeSet()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .padding(.top, 4)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 6)
+            .onAppear { session.requestSync() }
         }
     }
 }

@@ -20,6 +20,17 @@ final class AppSetup: ObservableObject {
     @Published private(set) var isRecoveryNeeded: Bool = false
 
     init() {
+        #if DEBUG
+        // Screenshot demo mode: an in-memory store with sample data, so captures
+        // never touch real data. See DemoMode.swift.
+        if DemoMode.isEnabled {
+            let c = DemoMode.makeContainer()
+            container = c
+            store = AppStore(context: c.mainContext)
+            return
+        }
+        #endif
+
         let syncEnabled = UserDefaults.standard.bool(forKey: "iCloudSyncEnabled")
 
         // Stage 1: normal load (with migration plan).
@@ -351,6 +362,11 @@ struct workout_aicodeApp: App {
                     .environmentObject(setup.store)
                     .environmentObject(setup)
                     .modelContainer(setup.container)
+                    .task(id: setup.containerKey) {
+                        // Give the Watch connectivity layer the current store so
+                        // it can push definitions and insert logs from the Watch.
+                        PhoneSessionManager.shared.attach(store: setup.store)
+                    }
                     .onChange(of: iCloudSyncEnabled) { _, newValue in
                         setup.reconfigure(syncEnabled: newValue)
                     }

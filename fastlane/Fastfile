@@ -1,0 +1,19 @@
+default_platform(:ios)
+
+# NOTE: fastlane's built-in `capture_screenshots` (snapshot) crashes on Xcode 26
+# — the new `simctl` JSON makes snapshot call `.name` on a String
+# (test_command_generator.rb: `device.devicetype.name`). Until that's fixed
+# upstream, we drive App Store screenshots through tools/make-screenshots.sh,
+# which uses the app's DEBUG-only demo mode (-SRWDemo / -SRWScreen) and captures
+# with `xcrun simctl io screenshot`. Output lands in fastlane/screenshots/en-US.
+
+platform :ios do
+  desc "Generate App Store screenshots for iPhone, iPad and Apple Watch"
+  lane :screenshots do
+    sh("cd .. && xcodebuild build -scheme workout_aicode " \
+       "-destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' -quiet")
+    sh("cd .. && xcodebuild build -scheme 'workout_aicode Watch App-' " \
+       "-destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (42mm)' -quiet")
+    sh("cd .. && bash tools/make-screenshots.sh")
+  end
+end

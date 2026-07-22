@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSHealthShareUsageDescription</key>
+	<string>SetsRepsWheels does not read any information from Apple Health. Health access is requested only so that the workouts you log can be saved to Health; your existing health and fitness data is never read or used by this app.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>When you turn on “Save workouts to Apple Health” in Settings, SetsRepsWheels saves each workout you finish as a Traditional Strength Training session, recording only its start time, end time and duration. Nothing else is shared, and no data is sent anywhere outside your devices.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

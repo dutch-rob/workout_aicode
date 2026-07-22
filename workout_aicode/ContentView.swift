@@ -3,6 +3,8 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var handoff = PhoneSessionManager.shared
     @Query(sort: [
         SortDescriptor(\WorkoutDef.sortIndex),
         SortDescriptor(\WorkoutDef.name)
@@ -11,9 +13,10 @@ struct ContentView: View {
 
     @State private var pendingNewWorkout: WorkoutDef? = nil
     @State private var pendingNewExercise: ExerciseDef? = nil
+    @State private var path: [WorkoutDef] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("workouts")
                     .font(.largeTitle).bold()
@@ -91,7 +94,7 @@ struct ContentView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 8) {
                             ForEach(workouts.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, id: \.self) { workout in
-                                NavigationLink(destination: LogExerciseView(workout: workout)) {
+                                NavigationLink(value: workout) {
                                     Text(workout.name)
                                         .font(.headline)
                                         .foregroundStyle(.white)
@@ -106,6 +109,9 @@ struct ContentView: View {
                 }
             }
             .padding()
+            .navigationDestination(for: WorkoutDef.self) { workout in
+                LogExerciseView(workout: workout, onEndSession: { path.removeAll() })
+            }
             .navigationDestination(item: $pendingNewWorkout) { workout in
                 EditWorkoutView(workout: workout)
             }
@@ -113,6 +119,50 @@ struct ContentView: View {
                 EditExerciseView(exercise: exercise)
             }
         }
+        // Bring the app forward into an active workout that's being handed over.
+        .onChange(of: handoff.routeWorkoutId) { _, id in
+            guard let id, let workout = workouts.first(where: { $0.id.uuidString == id })
+            else { return }
+            if path.last?.id != workout.id { path = [workout] }
+            handoff.routeWorkoutId = nil
+        }
+        // Opening / returning to the app checks for an active session elsewhere.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { handoff.onForeground() }
+        }
+        // When the workout session ends (finished or quit), pop back to the list.
+        // Driven from here (not the log view's dismiss()) so it's reliable with
+        // the path-bound NavigationStack.
+        .onChange(of: handoff.role) { _, newRole in
+            if newRole == .none, !path.isEmpty { path.removeAll() }
+        }
+        // A workout active on the Watch shows here as a Paused screen; the
+        // session only moves over when the user taps "Continue here".
+        .overlay {
+            if handoff.role == .paused {
+                HandoverPausedView(otherDeviceName: "Apple Watch",
+                                   onContinue: { handoff.reclaim() },
+                                   onDismiss: { handoff.dismissPaused() })
+            }
+        }
+        #if DEBUG
+        // Screenshot demo mode — open the requested screen. See DemoMode.swift.
+        .overlay {
+            switch DemoMode.screen {
+            case "logs":     NavigationStack { LogsView() }
+            case "info":     NavigationStack { InfoView() }
+            case "settings": NavigationStack { SettingsView() }
+            default:         EmptyView()
+            }
+        }
+        .task {
+            guard DemoMode.screen == "log", path.isEmpty,
+                  let w = workouts.first(where: {
+                      !$0.name.trimmingCharacters(in: .whitespaces).isEmpty
+                  }) else { return }
+            path = [w]
+        }
+        #endif
     }
 }
 

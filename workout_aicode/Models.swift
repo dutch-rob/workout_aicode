@@ -1,27 +1,23 @@
 import Foundation
 import SwiftData
 
-// MARK: - MovementType
+// MARK: - MovementType  (legacy — no longer used)
 //
-// The dominant axis the wrist follows during a single rep. Used by the
-// (upcoming) Apple Watch sensor counter to decide which signal to peak-
-// detect. Direction-agnostic: one rep = one full cycle in either direction.
+// This once described the axis a wrist follows during a rep, for an Apple Watch
+// motion rep-counter that was abandoned. Nothing reads it any more: there is no
+// motion sensing anywhere in the app, and the editor no longer offers it.
+//
+// It is kept ONLY so stored data and previously exported JSON still decode —
+// `ExerciseDef` persists the field and the exporter writes it. Removing the type
+// would break existing databases and older export files. Every exercise is
+// `.none` in practice.
 enum MovementType: String, Codable, CaseIterable, Identifiable {
-    case none           // no auto-counting (planks, complex moves, unknown)
-    case vertical       // up/down: pull-downs, presses, vertical curls
-    case horizontal     // back/forth: rows, machine chest press
-    case rotational     // arc: bicep curls, hammer curls, lateral raises
+    case none
+    case vertical
+    case horizontal
+    case rotational
 
     var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .none:       return "None"
-        case .vertical:   return "Vertical (up / down)"
-        case .horizontal: return "Horizontal (back / forth)"
-        case .rotational: return "Rotational (arc)"
-        }
-    }
 }
 
 @Model

@@ -388,15 +388,10 @@ struct EditExerciseView: View {
                     .multilineTextAlignment(.trailing)
             } label: { Text("Weight increment") }
 
-            Section {
-                Picker("Movement type", selection: $exercise.movementType) {
-                    ForEach(MovementType.allCases) { type in
-                        Text(type.label).tag(type)
-                    }
-                }
-            } footer: {
-                Text("Used by the Apple Watch sensor counter to detect reps. Pick the dominant axis your wrist follows during one rep.")
-            }
+            // NOTE: the "Movement type" picker used to live here. It only fed the
+            // Watch's motion-based rep counter, which no longer exists, so the
+            // control did nothing while promising a feature. `movementType` stays
+            // on the model so existing data and JSON exports keep working.
         }
         .onChange(of: exercise.lowestWeight) { _, newValue in
             if newValue < 1 { exercise.lowestWeight = 1 }
@@ -421,10 +416,14 @@ struct LogExerciseView: View {
     @Query private var allExercises: [ExerciseDef]
 
     let workout: WorkoutDef
+    /// Clears the navigation path in ContentView. Popping this way is
+    /// deterministic — `dismiss()` and state-change propagation both proved
+    /// unreliable here with a path-bound NavigationStack.
+    var onEndSession: () -> Void = {}
 
-    // Watch connectivity — observe completed-rep signals from Apple Watch
-    @ObservedObject private var watchSession = PhoneSessionManager.shared
+    @ObservedObject private var handoff = PhoneSessionManager.shared
 
+    @State private var startedAt = Date()
     @State private var currentIndex: Int = 0
     @State private var weights: [[Int]] = []
     @State private var reps: [[Int]] = []
@@ -437,90 +436,149 @@ struct LogExerciseView: View {
     @State private var dragDirection: DragDirection? = nil
     @State private var isPaging: Bool = false
 
+    /// The workout's exercises that still exist. A workout can retain a
+    /// reference to a deleted exercise; including it produced a blank "phantom"
+    /// exercise at the end that the log button could not get past.
+    private var exerciseIds: [UUID] {
+        let existing = Set(allExercises.map(\.id))
+        return workout.exerciseOrder.filter { existing.contains($0) }
+    }
+
     private var isLastUnlogged: Bool {
-        let total = workout.exerciseOrder.count
+        let total = exerciseIds.count
         // If after adding currentIndex, loggedIndices count would equal total, means last unlogged
         return loggedIndices.count == total - 1 && !loggedIndices.contains(currentIndex)
     }
 
     var body: some View {
-        let exercise = exerciseAt(currentIndex)
         GeometryReader { geo in
-            let width = geo.size.width
-            VStack(spacing: 4) {
-                buttonRow
-                Text(exercise?.name ?? "").font(.title2).bold()
-                if let exercise {
-                    Text("weight used").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
-                    weightPickers(for: exercise)
-                    Text("repetitions").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
-                    repsPickers(for: exercise)
+            pageContent(exercise: exerciseAt(currentIndex))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .contentShape(Rectangle())
+                .offset(x: dragOffsetX)
+                .padding()
+                .onAppear {
+                    containerWidth = geo.size.width
+                    pickerHeight = max(160, (geo.size.height - 220) / 2)
+                    prepareBuffers()
+                    ensureBufferShape()
+                    startOrAdoptSession()
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .contentShape(Rectangle())
-            .offset(x: dragOffsetX)
-            .padding()
-            .onAppear {
-                containerWidth = width
-                pickerHeight = max(160, (geo.size.height - 220) / 2)
-                prepareBuffers()
-                // Push the first exercise's context to the Watch immediately.
-                if let ex = exerciseAt(currentIndex) {
-                    sendWatchContext(for: ex, setNumber: 1)
+                .onChange(of: geo.size.width) { _, newWidth in
+                    containerWidth = newWidth
                 }
-            }
-            .onChange(of: geo.size.width) { _, newWidth in
-                containerWidth = newWidth
-            }
-            .onChange(of: geo.size.height) { _, newHeight in
-                pickerHeight = max(160, (newHeight - 220) / 2)
-            }
-            // Send fresh context to Watch whenever the user swipes to a
-            // different exercise.
-            .onChange(of: currentIndex) { _, newIndex in
-                if let ex = exerciseAt(newIndex) {
-                    sendWatchContext(for: ex, setNumber: 1)
+                .onChange(of: geo.size.height) { _, newHeight in
+                    pickerHeight = max(160, (newHeight - 220) / 2)
                 }
-            }
-            // Apply the rep count that just arrived from the Watch.
-            .onChange(of: watchSession.setCompleteTrigger) { _, _ in
-                applyWatchRepCount(watchSession.completedRepCount)
-            }
-            .simultaneousGesture(dragGesture)
+                // Report state to the handover coordinator so the Watch can take
+                // over from exactly here. Exercise/log boundaries also checkpoint.
+                .onChange(of: currentIndex) { _, _ in
+                    handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
+                }
+                .onChange(of: weights) { _, _ in handoff.updateLiveSnapshot(currentSnapshot()) }
+                .onChange(of: reps) { _, _ in handoff.updateLiveSnapshot(currentSnapshot()) }
+                .onChange(of: loggedIndices) { _, _ in
+                    handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
+                }
+                .onDisappear { handoff.leaveSession() }
+                // Reloaded state after reclaiming the session in place.
+                .onChange(of: handoff.adoptSnapshot) { _, _ in
+                    if let snap = handoff.takeAdoptSnapshot(for: workout.id.uuidString) {
+                        adopt(snap)
+                    }
+                }
+                // While paused, the root Paused screen covers us; ignore drags.
+                .simultaneousGesture(handoff.role == .paused ? nil : dragGesture)
         }
         .navigationTitle("log exercise")
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showAllLoggedAlert) {
-            VStack(spacing: 20) {
-                Text("All exercises logged")
-                    .font(.title2)
-                    .bold()
-                Button {
-                    dismiss()
-                } label: {
-                    VStack(spacing: 2) {
-                        Text("Done")
-                        Text("end of workout").font(.footnote)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .foregroundColor(.white)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-
-                Button("View logged exercise only", role: .cancel) {
-                    showAllLoggedAlert = false
-                }
-
-                Button("Overwrite logged exercise") {
-                    loggedIndices.remove(currentIndex)
-                    showAllLoggedAlert = false
-                }
-            }
-            .padding()
+            allLoggedSheet
         }
+    }
+
+    // MARK: - Handover helpers
+
+    private func currentSnapshot() -> SessionSnapshot {
+        SessionSnapshot(workoutId: workout.id.uuidString,
+                        currentIndex: currentIndex,
+                        weights: weights,
+                        reps: reps,
+                        loggedIndices: Array(loggedIndices),
+                        startedAt: startedAt.timeIntervalSince1970)
+    }
+
+    private func adopt(_ snap: SessionSnapshot) {
+        weights       = snap.weights
+        reps          = snap.reps
+        loggedIndices = Set(snap.loggedIndices)
+        startedAt     = Date(timeIntervalSince1970: snap.startedAt)
+        ensureBufferShape()
+        // Clamp: a stale snapshot may point past the current exercise list.
+        currentIndex  = min(max(0, snap.currentIndex),
+                            max(0, exerciseIds.count - 1))
+    }
+
+    private func startOrAdoptSession() {
+        if let snap = handoff.takeAdoptSnapshot(for: workout.id.uuidString) {
+            // Opened via handover (the app came forward into an active session).
+            adopt(snap)
+            handoff.updateLiveSnapshot(currentSnapshot())
+        } else {
+            // Opened by tapping the workout — become the driver, adopting the
+            // other device's state if it was already in this same workout.
+            startedAt = Date()
+            handoff.enterSession(workoutId: workout.id.uuidString,
+                                 current: currentSnapshot()) { snap in adopt(snap) }
+        }
+    }
+
+    private func pageContent(exercise: ExerciseDef?) -> some View {
+        VStack(spacing: 4) {
+            buttonRow
+            Text(exercise?.name ?? "").font(.title2).bold()
+            if let exercise {
+                Text("weight used").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
+                weightPickers(for: exercise)
+                Text("repetitions").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
+                repsPickers(for: exercise)
+            }
+        }
+    }
+
+    private var allLoggedSheet: some View {
+        VStack(spacing: 20) {
+            Text("All exercises logged")
+                .font(.title2)
+                .bold()
+            Button {
+                showAllLoggedAlert = false
+                let endedAt = Date()
+                onEndSession()
+                handoff.leaveSession()
+                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt)
+            } label: {
+                VStack(spacing: 2) {
+                    Text("Done")
+                    Text("end of workout").font(.footnote)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .foregroundColor(.white)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+
+            Button("View logged exercise only", role: .cancel) {
+                showAllLoggedAlert = false
+            }
+
+            Button("Overwrite logged exercise") {
+                loggedIndices.remove(currentIndex)
+                showAllLoggedAlert = false
+            }
+        }
+        .padding()
     }
 
     private var buttonRow: some View {
@@ -533,12 +591,19 @@ struct LogExerciseView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
 
-            Button("quit") { dismiss() }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+            // Quitting early still ends the workout, so it is recorded too
+            // (finishWorkoutHere skips it when no set was logged).
+            Button("quit") {
+                let endedAt = Date()
+                onEndSession()
+                handoff.leaveSession()
+                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
 
             Menu("list") {
-                ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
+                ForEach(exerciseIds.indices, id: \.self) { idx in
                     let exercise = exerciseAt(idx)
                     Button(exercise?.name ?? "") { currentIndex = idx }
                 }
@@ -552,46 +617,38 @@ struct LogExerciseView: View {
 
     private func weightPickers(for exercise: ExerciseDef) -> some View {
         let weightOptions = Array(stride(from: exercise.lowestWeight, through: exercise.highestWeight, by: exercise.weightIncrement))
-        return VStack(spacing: 0) {
-            Divider()
-            GeometryReader { proxy in
-                let count = max(1, exercise.numberOfSeries)
-                HStack(spacing: 0) {
-                    ForEach(0..<count, id: \.self) { series in
-                        Picker("", selection: weightBinding(series: series, defaultValue: exercise.lowestWeight)) {
-                            ForEach(weightOptions, id: \.self) { weight in
-                                Text("\(weight)").tag(weight)
-                            }
-                        }
-                        .pickerStyle(.wheel)
-                        .frame(width: proxy.size.width / CGFloat(count), height: pickerHeight)
+        let count = max(1, exercise.numberOfSeries)
+        return HStack(spacing: wheelSpacing) {
+            ForEach(0..<count, id: \.self) { series in
+                Picker("", selection: weightBinding(series: series, defaultValue: exercise.lowestWeight)) {
+                    ForEach(weightOptions, id: \.self) { weight in
+                        Text("\(weight)").tag(weight)
                     }
                 }
+                .pickerStyle(.wheel)
+                .frame(maxWidth: .infinity)
+                .wheelOutline()
             }
-            .frame(height: pickerHeight)
-            Divider()
         }
+        .frame(height: pickerHeight)
     }
 
     private func repsPickers(for exercise: ExerciseDef) -> some View {
-        VStack(spacing: 0) {
-            Divider()
-            GeometryReader { proxy in
-                let count = max(1, exercise.numberOfSeries)
-                HStack(spacing: 0) {
-                    ForEach(0..<count, id: \.self) { series in
-                        Picker("", selection: repsBinding(series: series)) {
-                            ForEach(0...200, id: \.self) { reps in Text("\(reps)").tag(reps) }
-                        }
-                        .pickerStyle(.wheel)
-                        .frame(width: proxy.size.width / CGFloat(count), height: pickerHeight)
-                    }
+        let count = max(1, exercise.numberOfSeries)
+        return HStack(spacing: wheelSpacing) {
+            ForEach(0..<count, id: \.self) { series in
+                Picker("", selection: repsBinding(series: series)) {
+                    ForEach(0...200, id: \.self) { reps in Text("\(reps)").tag(reps) }
                 }
+                .pickerStyle(.wheel)
+                .frame(maxWidth: .infinity)
+                .wheelOutline()
             }
-            .frame(height: pickerHeight)
-            Divider()
         }
+        .frame(height: pickerHeight)
     }
+
+    private var wheelSpacing: CGFloat { 8 }
 
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 10, coordinateSpace: .local)
@@ -640,15 +697,27 @@ struct LogExerciseView: View {
     }
 
     private func exerciseAt(_ index: Int) -> ExerciseDef? {
-        guard index >= 0 && index < workout.exerciseOrder.count else { return nil }
-        let id = workout.exerciseOrder[index]
+        let ids = exerciseIds
+        guard index >= 0 && index < ids.count else { return nil }
+        let id = ids[index]
         return allExercises.first(where: { $0.id == id })
     }
 
     private func prepareBuffers() {
         let last = store.lastEntries(for: workout)
-        weights = workout.exerciseOrder.map { exId in last[exId]?.weights ?? [] }
-        reps = workout.exerciseOrder.map { exId in last[exId]?.reps ?? [] }
+        weights = exerciseIds.map { exId in last[exId]?.weights ?? [] }
+        reps = exerciseIds.map { exId in last[exId]?.reps ?? [] }
+    }
+
+    /// Guarantee one weights/reps row per exercise. An adopted snapshot can be
+    /// stale (e.g. taken before the workout gained exercises), and indexing a
+    /// short buffer by `currentIndex` would trap.
+    private func ensureBufferShape() {
+        let n = exerciseIds.count
+        if weights.count < n { weights += Array(repeating: [], count: n - weights.count) }
+        if weights.count > n { weights = Array(weights.prefix(n)) }
+        if reps.count < n { reps += Array(repeating: [], count: n - reps.count) }
+        if reps.count > n { reps = Array(reps.prefix(n)) }
     }
 
     private func setWeight(_ value: Int, series: Int) {
@@ -686,50 +755,36 @@ struct LogExerciseView: View {
         })
     }
 
-    // MARK: - Watch connectivity helpers
-
-    /// Push the exercise context to the Apple Watch so its rep counter
-    /// shows the right exercise name, set number and target.
-    private func sendWatchContext(for exercise: ExerciseDef, setNumber: Int) {
-        let previous = store.lastEntries(for: workout)[exercise.id]
-        let targetReps      = previous?.reps.first    ?? 10
-        let suggestedWeight = previous?.weights.first ?? exercise.lowestWeight
-        PhoneSessionManager.shared.sendSetContext(
-            exerciseName:    exercise.name,
-            movementType:    exercise.movementType,
-            setNumber:       setNumber,
-            targetReps:      targetReps,
-            suggestedWeight: suggestedWeight
-        )
-    }
-
-    /// When the Watch sends a completed-set rep count, fill the first
-    /// zero-reps series slot for the current exercise.
-    private func applyWatchRepCount(_ count: Int) {
-        guard count > 0 else { return }
-        let numSeries = exerciseAt(currentIndex)?.numberOfSeries ?? 1
-        for series in 0..<numSeries {
-            if safeValue(reps, currentIndex, series, default: 0) == 0 {
-                setRep(count, series: series)
-                return
-            }
-        }
-        // All slots already filled — overwrite the last one so there is
-        // always some way for the Watch to update the reps value.
-        setRep(count, series: numSeries - 1)
-    }
-
     private func logAndNext() {
-        guard let ex = exerciseAt(currentIndex) else { return }
+        guard let ex = exerciseAt(currentIndex) else {
+            // The exercise was deleted but the workout still references it, so
+            // there is nothing to log. Never dead-end the button: treat it as
+            // handled and either move on or end the workout.
+            loggedIndices.insert(currentIndex)
+            if loggedIndices.count >= exerciseIds.count {
+                let endedAt = Date()
+                onEndSession()
+                handoff.leaveSession()
+                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt)
+            } else {
+                goToNextUnlogged()
+            }
+            return
+        }
         // If this is the last unlogged exercise, log and dismiss immediately
-        if loggedIndices.count + 1 >= workout.exerciseOrder.count {
+        if loggedIndices.count + 1 >= exerciseIds.count {
             loggedIndices.insert(currentIndex)
             let log = WorkoutLog(workoutId: workout.id,
                                  exerciseId: ex.id,
                                  weights: weights[currentIndex],
                                  reps: reps[currentIndex])
             context.insert(log)
-            dismiss()
+            handoff.noteActivity()
+            // Pop first, then end the session and record to Health.
+            let endedAt = Date()
+            onEndSession()
+            handoff.leaveSession()
+            handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt)
             return
         }
         loggedIndices.insert(currentIndex)
@@ -738,8 +793,9 @@ struct LogExerciseView: View {
                              weights: weights[currentIndex],
                              reps: reps[currentIndex])
         context.insert(log)
+        handoff.noteActivity()
 
-        guard loggedIndices.count < workout.exerciseOrder.count else {
+        guard loggedIndices.count < exerciseIds.count else {
             // All logged, present an alert
             showAllLoggedAlert = true
             return
@@ -749,7 +805,7 @@ struct LogExerciseView: View {
     }
 
     private func goToNextUnlogged() {
-        let count = max(1, workout.exerciseOrder.count)
+        let count = max(1, exerciseIds.count)
         var next = (currentIndex + 1) % count
         while loggedIndices.contains(next) && loggedIndices.count < count {
             next = (next + 1) % count
@@ -758,12 +814,64 @@ struct LogExerciseView: View {
     }
 
     private func goToPrevUnlogged() {
-        let count = max(1, workout.exerciseOrder.count)
+        let count = max(1, exerciseIds.count)
         var prev = (currentIndex - 1 + count) % count
         while loggedIndices.contains(prev) && loggedIndices.count < count {
             prev = (prev - 1 + count) % count
         }
         currentIndex = prev
+    }
+}
+
+// MARK: - Wheel outline
+//
+// Rounded border around a picker wheel, matching the Watch's look so each
+// series column reads as its own control.
+extension View {
+    func wheelOutline(cornerRadius: CGFloat = 12) -> some View {
+        overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(Color.secondary.opacity(0.45), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Handover Paused overlay
+//
+// Shown over the log screen when the workout has been taken over on the other
+// device. Tapping "Continue here" pulls the session back to this device.
+struct HandoverPausedView: View {
+    let otherDeviceName: String
+    let onContinue: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+            VStack(spacing: 20) {
+                Image(systemName: "arrow.left.arrow.right.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue)
+                Text("Workout active on \(otherDeviceName)")
+                    .font(.title3).bold()
+                    .multilineTextAlignment(.center)
+                Text("You're logging this workout on your \(otherDeviceName). Continue it here to move it back.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button(action: onContinue) {
+                    Text("Continue here")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button("Not now", action: onDismiss)
+                    .buttonStyle(.bordered)
+            }
+            .padding(32)
+        }
     }
 }
 
@@ -1539,7 +1647,9 @@ struct RecoveryView: View {
 // MARK: - Settings Screen
 struct SettingsView: View {
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
+    @AppStorage("healthSharingEnabled") private var healthSharingEnabled = false
     @EnvironmentObject private var setup: AppSetup
+    @EnvironmentObject private var store: AppStore
     @State private var showDeleteConfirm = false
 
     var body: some View {
@@ -1550,6 +1660,19 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("Syncs your workouts, exercises, and logs across all your iPhones and iPads signed into the same iCloud account and that have this option turned on. Changes take effect immediately.")
+            }
+
+            Section {
+                Toggle(isOn: $healthSharingEnabled) {
+                    Label("Save workouts to Apple Health", systemImage: "heart.fill")
+                }
+                .onChange(of: healthSharingEnabled) { _, enabled in
+                    if enabled { HealthWorkoutLogger.shared.requestAuthorization() }
+                    // Let the Watch know whether to record to Health too.
+                    store.reloadAll()
+                }
+            } footer: {
+                Text("When on, a finished workout is saved to Apple Health as a Traditional Strength Training session, with its total duration — including time handed over between iPhone and Apple Watch. Only the workout duration is shared; nothing is read from Health.")
             }
 
             Section {
