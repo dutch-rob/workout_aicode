@@ -13,6 +13,7 @@
 # Usage:  tools/make-screenshots.sh            # everything
 #         DEVICES=phone tools/make-screenshots.sh
 #         DEVICES="phone watch" tools/make-screenshots.sh
+#         SCREENS=info tools/make-screenshots.sh   # re-shoot one screen only
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -26,6 +27,9 @@ OUT="fastlane/screenshots/en-US"
 SETTLE="${SETTLE:-15}"          # seconds to let a screen finish rendering
 WARMUP="${WARMUP:-15}"          # first launch after install is much slower
 WHICH="${DEVICES:-phone ipad watch}"
+# Optional space-separated filter of screen names (the part before ":" in the
+# *_SCREENS lists), for re-shooting a single screen after a UI tweak.
+ONLY="${SCREENS:-}"
 mkdir -p "$OUT"
 
 DERIVED=~/Library/Developer/Xcode/DerivedData
@@ -97,6 +101,7 @@ run_device() {   # devicename  bundle  app  settle  minkb  screens...
   xcrun simctl launch "$udid" "$bundle" -SRWDemo >/dev/null 2>&1
   sleep "$WARMUP"
   for pair in "$@"; do
+    if [ -n "$ONLY" ] && ! grep -qw -- "${pair%%:*}" <<<"$ONLY"; then continue; fi
     shoot "$udid" "$name" "$bundle" "${pair%%:*}" "${pair##*:}" "$settle" "$minkb"
   done
 }
