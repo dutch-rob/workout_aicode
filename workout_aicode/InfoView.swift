@@ -8,8 +8,8 @@ struct InfoView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                 Group {
-                    Text("SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so a normal set is one or two flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part way through. Everything stays on your devices unless you turn something on yourself.")
-                    Text("I made this app for myself because I wanted logging to be quicker than in the apps I tried. It is deliberately bare-bones. I hope you find it useful too, though it is probably not the best workout app for everybody.")
+                    Text("SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so tracking an exercise is just some flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part-way through. Everything stays on your devices unless you turn something on yourself.")
+                    Text("I made this app for myself because I wanted logging to be quicker than in the apps I tried. It is deliberately bare-bones. I hope you find it useful too (though it is probably not the best workout app for everybody).")
                 }
 
                 Group {
@@ -25,7 +25,7 @@ struct InfoView: View {
                         Button { withAnimation { proxy.scrollTo("your-logs-and-export", anchor: .top) } } label: { Text("Your logs and export — reading, exporting, importing").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("settings", anchor: .top) } } label: { Text("Settings — sharing between devices, Health, deleting data").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("your-data-and-privacy", anchor: .top) } } label: { Text("Your data and privacy — what leaves your device").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
-                        Button { withAnimation { proxy.scrollTo("feedback", anchor: .top) } } label: { Text("Feedback — and the open source").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
+                        Button { withAnimation { proxy.scrollTo("notes-and-feedback", anchor: .top) } } label: { Text("Notes and Feedback — and the open source").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                     }
                 }
 
@@ -120,7 +120,7 @@ struct InfoView: View {
                 }
 
                 Group {
-                    Text("Feedback").font(.headline).id("feedback")
+                    Text("Notes and Feedback").font(.headline).id("notes-and-feedback")
                     VStack(alignment: .leading, spacing: 8) {
                         Text("1. This app is free and open source. The source is on GitHub:")
                         Link("https://github.com/dutch-rob/workout_aicode", destination: URL(string: "https://github.com/dutch-rob/workout_aicode")!)

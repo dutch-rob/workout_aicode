@@ -7,9 +7,9 @@ Source: https://github.com/dutch-rob/workout_aicode
 ---
 
 <!-- INFO_SCREEN_START -->
-SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so a normal set is one or two flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part way through. Everything stays on your devices unless you turn something on yourself.
+SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so tracking an exercise is just some flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part-way through. Everything stays on your devices unless you turn something on yourself.
 
-I made this app for myself because I wanted logging to be quicker than in the apps I tried. It is deliberately bare-bones. I hope you find it useful too, though it is probably not the best workout app for everybody.
+I made this app for myself because I wanted logging to be quicker than in the apps I tried. It is deliberately bare-bones. I hope you find it useful too (though it is probably not the best workout app for everybody).
 
 ## Contents
 - [Getting started](#getting-started) — defining your first workout and exercises
@@ -22,7 +22,7 @@ I made this app for myself because I wanted logging to be quicker than in the ap
 - [Your logs and export](#your-logs-and-export) — reading, exporting, importing
 - [Settings](#settings) — sharing between devices, Health, deleting data
 - [Your data and privacy](#your-data-and-privacy) — what leaves your device
-- [Feedback](#feedback) — and the open source
+- [Notes and Feedback](#notes-and-feedback) — and the open source
 
 ## Getting started
 When you open the app for the first time there are no workouts or exercises yet: you define them yourself.
@@ -99,7 +99,7 @@ Your workouts, exercises and logs are stored on your device. There is no account
 
 Two things leave the app, and both are your choice and off until you switch them on: iCloud sharing keeps your data in step across *your own* devices through your private iCloud account, and Apple Health receives the start and end time of a finished workout if you turn that on. Data sent to Health stays on your device under your control in the Health app, where you can review or withdraw it at any time. Exports go wherever you send them.
 
-## Feedback
+## Notes and Feedback
 1. This app is free and open source. The source is on GitHub:
    https://github.com/dutch-rob/workout_aicode
 2. Feedback is very welcome, in an App Store review or on GitHub — pull requests too. For example:
