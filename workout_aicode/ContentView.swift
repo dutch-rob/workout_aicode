@@ -174,6 +174,7 @@ struct ContentView: View {
             case "logs":     NavigationStack { LogsStatsView() }
             case "graphs":   NavigationStack { StrengthGraphsView() }
             case "progress": NavigationStack { StrengthProgressView() }
+            case "library":  NavigationStack { LibraryDemoHost() }
             case "info":     NavigationStack { InfoView() }
             case "settings": NavigationStack { SettingsView() }
             default:         EmptyView()

@@ -3,6 +3,22 @@ import SwiftData
 
 // MARK: - Adding an exercise from the library
 
+/// How the muscle-group filter is presented.
+enum MusclePickerStyle: String, CaseIterable, Identifiable {
+    /// Two body diagrams with a labelled button beside each muscle.
+    case body
+    /// Plain chips wrapped over as many rows as they need.
+    case chips
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .body:  return "body diagram"
+        case .chips: return "list of buttons"
+        }
+    }
+}
+
 /// Browse the built-in catalog and copy one into your own exercises.
 /// Filtering is by primary muscle group, which is the whole point of the
 /// filter: it turns a 30-item list into a handful.
@@ -12,13 +28,22 @@ struct AddFromLibraryView: View {
     @Query private var existing: [ExerciseDef]
 
     @State private var filter: MuscleGroup? = nil
+    /// Which of the two muscle-group pickers to show. Both are built; this
+    /// keeps the choice a one-line change (or a setting) rather than a rewrite.
+    @AppStorage("musclePickerStyle") private var pickerStyle = MusclePickerStyle.body.rawValue
     /// Exercise created here, so the caller can open it for editing.
     var onAdd: (ExerciseDef) -> Void
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                MuscleGroupFilterBar(selection: $filter)
+                if MusclePickerStyle(rawValue: pickerStyle) == .body {
+                    MuscleBodyPicker(selection: $filter)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 4)
+                } else {
+                    MuscleGroupFilterBar(selection: $filter)
+                }
                 List {
                     ForEach(ExerciseLibrary.forPrimary(filter)) { entry in
                         Button {
@@ -36,6 +61,17 @@ struct AddFromLibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Picker("Muscle picker", selection: $pickerStyle) {
+                            ForEach(MusclePickerStyle.allCases) { style in
+                                Text(style.label).tag(style.rawValue)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
                 }
             }
         }
@@ -98,24 +134,26 @@ private struct LibraryRow: View {
 
 // MARK: - Filter bar
 
-/// Horizontal muscle-group chips, with "all" first. Scrolls because fifteen
-/// groups never fit across a phone.
+/// Muscle-group chips wrapped over as many rows as they need.
+///
+/// These used to scroll sideways, which hid most of the fifteen groups behind a
+/// gesture: you cannot pick what you cannot see, and the whole point of the
+/// filter is to find a group quickly. Wrapping costs a little height and shows
+/// every group at once.
 struct MuscleGroupFilterBar: View {
     @Binding var selection: MuscleGroup?
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                chip(title: "all", isSelected: selection == nil) { selection = nil }
-                ForEach(MuscleGroup.displayOrder) { group in
-                    chip(title: group.shortLabel, isSelected: selection == group) {
-                        selection = (selection == group) ? nil : group
-                    }
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            chip(title: "all", isSelected: selection == nil) { selection = nil }
+            ForEach(MuscleGroup.displayOrder) { group in
+                chip(title: group.shortLabel, isSelected: selection == group) {
+                    selection = (selection == group) ? nil : group
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
         }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
 
     private func chip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -294,3 +332,15 @@ struct DuplicateExerciseView: View {
         dismiss()
     }
 }
+
+#if DEBUG
+/// Screenshot host: the library is normally a sheet, and a sheet-shaped view
+/// does not render when dropped into the demo-mode overlay.
+struct LibraryDemoHost: View {
+    @State private var show = true
+    var body: some View {
+        Color(.systemBackground)
+            .sheet(isPresented: $show) { AddFromLibraryView { _ in } }
+    }
+}
+#endif
