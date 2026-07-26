@@ -259,8 +259,11 @@ final class AppSetup: ObservableObject {
         let v1Container: ModelContainer
         do {
             let v1Config = ModelConfiguration(url: tmpURL, cloudKitDatabase: .none)
+            // The frozen V1 ExerciseDef, not the live one: the store being
+            // opened here predates the muscle-group columns, and asking for a
+            // model that declares them would not match what is on disk.
             v1Container  = try ModelContainer(
-                for: WorkoutDef.self, ExerciseDef.self,
+                for: WorkoutDef.self, WorkoutLogSchemaV1.ExerciseDef.self,
                     WorkoutLogSchemaV1.WorkoutLog.self,
                 configurations: v1Config
             )
@@ -271,7 +274,7 @@ final class AppSetup: ObservableObject {
 
         // ── Step 3: read all records ──────────────────────────────────────
         let v1Ctx  = v1Container.mainContext
-        let exs    = (try? v1Ctx.fetch(FetchDescriptor<ExerciseDef>())) ?? []
+        let exs    = (try? v1Ctx.fetch(FetchDescriptor<WorkoutLogSchemaV1.ExerciseDef>())) ?? []
         let wos    = (try? v1Ctx.fetch(FetchDescriptor<WorkoutDef>())) ?? []
         let v1Logs = (try? v1Ctx.fetch(
             FetchDescriptor<WorkoutLogSchemaV1.WorkoutLog>())) ?? []
@@ -310,7 +313,13 @@ final class AppSetup: ObservableObject {
                                    lowestWeight: e.lowestWeight,
                                    highestWeight: e.highestWeight,
                                    weightIncrement: e.weightIncrement,
-                                   movementType: .none))
+                                   movementType: .none,
+                                   // Same reasoning for the muscle-group
+                                   // columns: absent from a V1 store, so they
+                                   // start unset and the user can fill them in.
+                                   primaryMuscle: nil,
+                                   secondaryMuscles: [],
+                                   libraryKey: nil))
         }
         for w in wos {
             ctx.insert(WorkoutDef(id: w.id, name: w.name,

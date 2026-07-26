@@ -30,13 +30,40 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     var weightIncrement: Int = 5
     var movementType: MovementType = MovementType.none
 
+    // MARK: Muscle groups
+    //
+    // Stored as raw strings rather than enums: SwiftData migrates String
+    // attributes without ceremony, and an unrecognised value from a future
+    // version (or a hand-edited export) degrades to "unset" instead of failing
+    // to decode the whole exercise. Use `primaryMuscle` / `secondaryMuscles`.
+    var primaryMuscleRaw: String? = nil
+    var secondaryMuscleRaw: [String] = []
+
+    /// Which library movement this exercise came from, if any. Survives
+    /// renaming, and is what makes one movement comparable across users in
+    /// shared data. Nil for exercises the user invented.
+    var libraryKey: String? = nil
+
+    var primaryMuscle: MuscleGroup? {
+        get { primaryMuscleRaw.flatMap(MuscleGroup.init(rawValue:)) }
+        set { primaryMuscleRaw = newValue?.rawValue }
+    }
+
+    var secondaryMuscles: [MuscleGroup] {
+        get { secondaryMuscleRaw.compactMap(MuscleGroup.init(rawValue:)) }
+        set { secondaryMuscleRaw = Array(newValue.prefix(MuscleGroup.maximumSecondary)).map(\.rawValue) }
+    }
+
     init(id: UUID = UUID(),
          name: String,
          numberOfSeries: Int = 3,
          lowestWeight: Int = 0,
          highestWeight: Int = 200,
          weightIncrement: Int = 5,
-         movementType: MovementType = .none) {
+         movementType: MovementType = .none,
+         primaryMuscle: MuscleGroup? = nil,
+         secondaryMuscles: [MuscleGroup] = [],
+         libraryKey: String? = nil) {
         let clampedNumberOfSeries = max(0, numberOfSeries)
         let clampedLowest = max(0, lowestWeight)
         let clampedHighest = max(clampedLowest, highestWeight)
@@ -49,10 +76,14 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         self.highestWeight = clampedHighest
         self.weightIncrement = clampedIncrement
         self.movementType = movementType
+        self.primaryMuscleRaw = primaryMuscle?.rawValue
+        self.secondaryMuscleRaw = Array(secondaryMuscles.prefix(MuscleGroup.maximumSecondary)).map(\.rawValue)
+        self.libraryKey = libraryKey
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement, movementType
+        case primaryMuscle, secondaryMuscles, libraryKey
     }
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -64,12 +95,22 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         let weightIncrement = try c.decode(Int.self, forKey: .weightIncrement)
         // movementType is a new field — accept old exports without it.
         let movementType = try c.decodeIfPresent(MovementType.self, forKey: .movementType) ?? .none
+        // Muscle groups and libraryKey likewise post-date the first exports.
+        // Unknown group names are dropped rather than failing the import.
+        let primary = try c.decodeIfPresent(String.self, forKey: .primaryMuscle)
+            .flatMap(MuscleGroup.init(rawValue:))
+        let secondary = (try c.decodeIfPresent([String].self, forKey: .secondaryMuscles) ?? [])
+            .compactMap(MuscleGroup.init(rawValue:))
+        let libraryKey = try c.decodeIfPresent(String.self, forKey: .libraryKey)
         self.init(id: id, name: name,
                   numberOfSeries: numberOfSeries,
                   lowestWeight: lowestWeight,
                   highestWeight: highestWeight,
                   weightIncrement: weightIncrement,
-                  movementType: movementType)
+                  movementType: movementType,
+                  primaryMuscle: primary,
+                  secondaryMuscles: secondary,
+                  libraryKey: libraryKey)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -80,6 +121,9 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         try c.encode(highestWeight, forKey: .highestWeight)
         try c.encode(weightIncrement, forKey: .weightIncrement)
         try c.encode(movementType, forKey: .movementType)
+        try c.encodeIfPresent(primaryMuscle?.rawValue, forKey: .primaryMuscle)
+        try c.encode(secondaryMuscles.map(\.rawValue), forKey: .secondaryMuscles)
+        try c.encodeIfPresent(libraryKey, forKey: .libraryKey)
     }
 }
 
@@ -129,6 +173,41 @@ enum WorkoutLogSchemaV1: VersionedSchema {
         [ExerciseDef.self, WorkoutDef.self, WorkoutLog.self]
     }
 
+    /// ExerciseDef as it was before muscle groups — frozen, never edited again.
+    ///
+    /// A VersionedSchema is only meaningful if its model shapes stay fixed. The
+    /// live `ExerciseDef` is listed by V3 alone; if V1 and V2 kept pointing at
+    /// it, every field added to it would silently change what V1 and V2 claim
+    /// to be, all three versions would describe the same shape, and SwiftData
+    /// could no longer tell which stage an existing store is at — it aborts
+    /// with a staged-migration failure rather than guessing.
+    ///
+    /// Shape must match the shipped 1.2 class exactly, including `movementType`
+    /// and every default, or the checksum changes and stores written by 1.2
+    /// stop matching this stage.
+    @Model
+    final class ExerciseDef {
+        var id: UUID = UUID()
+        var name: String = ""
+        var numberOfSeries: Int = 3
+        var lowestWeight: Int = 0
+        var highestWeight: Int = 200
+        var weightIncrement: Int = 5
+        var movementType: MovementType = MovementType.none
+
+        init(id: UUID = UUID(), name: String, numberOfSeries: Int = 3,
+             lowestWeight: Int = 0, highestWeight: Int = 200,
+             weightIncrement: Int = 5, movementType: MovementType = .none) {
+            self.id = id
+            self.name = name
+            self.numberOfSeries = numberOfSeries
+            self.lowestWeight = lowestWeight
+            self.highestWeight = highestWeight
+            self.weightIncrement = weightIncrement
+            self.movementType = movementType
+        }
+    }
+
     struct Entry: Codable, Hashable {
         var exerciseId: UUID
         var weights: [Int]
@@ -156,8 +235,10 @@ enum WorkoutLogSchemaV1: VersionedSchema {
 
 enum WorkoutLogSchemaV2: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
+    /// ExerciseDef did not change between V1 and V2, so V2 reuses V1's frozen
+    /// copy. WorkoutDef never changes at all and stays a single shared class.
     static var models: [any PersistentModel.Type] {
-        [ExerciseDef.self, WorkoutDef.self, WorkoutLog.self]
+        [WorkoutLogSchemaV1.ExerciseDef.self, WorkoutDef.self, WorkoutLog.self]
     }
 
     @Model
@@ -207,6 +288,20 @@ enum WorkoutLogSchemaV2: VersionedSchema {
     }
 }
 
+// V3 adds the muscle-group and library-key attributes to ExerciseDef — and is
+// the only version that lists the *live* class, so future edits to it change V3
+// alone. The WorkoutLog shape is unchanged, so V3 reuses V2's model.
+//
+// Every new attribute is optional or defaulted, which is exactly what SwiftData
+// can migrate by itself, so the stage is lightweight rather than the
+// hand-written kind V2 needed.
+enum WorkoutLogSchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
+    static var models: [any PersistentModel.Type] {
+        [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self]
+    }
+}
+
 /// Module-level alias so the rest of the app can keep saying `WorkoutLog`.
 typealias WorkoutLog = WorkoutLogSchemaV2.WorkoutLog
 
@@ -220,9 +315,15 @@ typealias WorkoutLog = WorkoutLogSchemaV2.WorkoutLog
 
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self]
+        [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self, WorkoutLogSchemaV3.self]
     }
-    static var stages: [MigrationStage] { [v1toV2] }
+    static var stages: [MigrationStage] { [v1toV2, v2toV3] }
+
+    /// Additive only — see WorkoutLogSchemaV3.
+    static let v2toV3 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV2.self,
+        toVersion:   WorkoutLogSchemaV3.self
+    )
 
     private struct V1Snapshot: Codable {
         let id: UUID
