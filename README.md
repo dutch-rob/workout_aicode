@@ -7,7 +7,7 @@ Source: https://github.com/dutch-rob/workout_aicode
 ---
 
 <!-- INFO_SCREEN_START -->
-SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so tracking an exercise is just some flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part-way through. Everything stays on your devices unless you turn something on yourself.
+SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so tracking an exercise is just some flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part-way through. Once you have some history it estimates how your strength is trending per exercise, and shows you which exercises are moving and which are stuck. Everything stays on your devices unless you turn something on yourself.
 
 I made this app for myself because I wanted logging to be quicker than in the apps I tried. It is deliberately bare-bones. I hope you find it useful too (though it is probably not the best workout app for everybody).
 
@@ -19,8 +19,10 @@ I made this app for myself because I wanted logging to be quicker than in the ap
 - [Apple Health](#apple-health) — optional, off by default
 - [Editing workouts](#editing-workouts) — order, adding and removing exercises
 - [Editing exercises](#editing-exercises) — sets, weight range, increments
-- [Your logs and export](#your-logs-and-export) — reading, exporting, importing
-- [Settings](#settings) — sharing between devices, Health, deleting data
+- [Your logs and statistics](#your-logs-and-statistics) — the four tabs
+- [How the strength numbers work](#how-the-strength-numbers-work) — one-rep max, hard sets, trend
+- [Exercise library and muscle groups](#exercise-library-and-muscle-groups) — picking exercises, filtering, duplicating
+- [Settings](#settings) — sharing between devices, Health, statistics, deleting data
 - [Your data and privacy](#your-data-and-privacy) — what leaves your device
 - [Notes and Feedback](#notes-and-feedback) — and the open source
 
@@ -67,14 +69,22 @@ Once you have at least one workout and one exercise, the start screen changes: *
 Back in *edit workouts* you can likewise reorder your workouts, and remove one with the red icon.
 
 ## Editing exercises
-**edit exercises** lists every exercise you have made, whether you created it here or while building a workout. Tap one to change its name, its number of sets, and the lowest weight, highest weight and increment that determine the numbers on its wheel.
+**edit exercises** lists every exercise you have made, whether you created it here, took it from the library, or created it while building a workout. Tap one to change its name, its number of sets, the lowest weight, highest weight and increment that determine the numbers on its wheel, and the muscle groups it works.
+
+**from library** adds one of the ready-made exercises, and once your exercises have muscle groups you can filter the list by muscle group to find one quickly. Swiping an exercise to the left offers **Duplicate**, for a variant that keeps the original's settings. See [Exercise library and muscle groups](#exercise-library-and-muscle-groups).
 
 You can also delete an exercise here. Deleting it removes it from your list *and* from any workouts that used it.
 
-## Your logs and export
-The **logs** button shows your logged sets, most recent first. A weight is green when it is higher than the last time you did that set of that exercise, and red when it is lower. A repetition count is green when it is higher than last time and the weight has not dropped, and red when it is lower and the weight has not risen.
+## Your logs and statistics
+The **logs/stats** button opens four tabs.
 
-The log screen has these buttons:
+**logs** shows your logged sets, most recent first. A weight is green when it is higher than the last time you did that set of that exercise, and red when it is lower. A repetition count is green when it is higher than last time and the weight has not dropped, and red when it is lower and the weight has not risen.
+
+**graphs** draws one chart per exercise: a dot for each workout, and a straight trendline through them. A graph appears once you have logged that exercise in at least 8 workouts, so the tab fills in gradually; below the graphs you will see which exercises are still short and by how much.
+
+**progress** lists those same exercises ordered from least to most progress, so whatever is falling behind is at the top. Each line shows the trend per week, the best estimate from your last workout, and how many hard sets that exercise usually takes.
+
+**import/export** holds the file tools:
    - export TSV — your log as a tab separated file, easy to open in a spreadsheet
    - export JSON — your log together with your workout and exercise definitions
    - import JSON — read back a file in the same format (easiest starting from one you exported)
@@ -88,16 +98,56 @@ After importing a JSON file you can:
    - replace data — replace what is in the app with the imported data
    - merge data — add only the items that are not in the app yet
 
+## How the strength numbers work
+Everything on the graphs and progress tabs comes from one idea: from a set of several repetitions you can estimate what you could have lifted just once. That estimate is your **one-rep max**, and tracking it lets a heavy set of 5 and a lighter set of 12 be compared on the same scale.
+
+You choose the formula in settings. All three are in common use and none is exactly right; they mostly agree, and what matters is that you keep to one:
+   - **Epley** — w × (1 + r/30), the default
+   - **Brzycki** — w / (1.0278 − 0.0278 × r)
+   - **Lombardi** — w × r^0.1
+
+For each exercise in a workout, the app takes the best estimate among its sets. That best number is what the graphs plot and what the trend is measured on.
+
+A set counts as **hard** if it was your best set that day, or if four more repetitions at that weight would have matched it. The rest count as warm-ups or back-off sets. This is the app's measure of how much real work an exercise took.
+
+The **trend** is a straight line fitted through your best estimates over your most recent workouts (16 by default, at least 8), divided by their average so that exercises of very different weights can be compared. It is shown as a percentage per week. Steady progress is a small number: around half a percent to one percent per week is real progress, and a long run at zero means a plateau, not a mistake.
+
+The dots on a graph can be averaged over several workouts to make the pattern easier to see — 3 by default. Averaging only affects the dots; the trendline always follows your actual numbers.
+
+Two cautions. These are estimates from your own logged numbers, not measurements: a bad night's sleep shows up as lost strength. And a trend needs a run of workouts before it means much — with 8 workouts a single unusual day still moves it.
+
+## Exercise library and muscle groups
+An exercise can record which muscles it works: one **primary muscle group** and up to four **secondary** ones, from a fixed list of fifteen. This is what lets the app group your training by muscle group rather than by exercise name, and it is what the individual advice being considered would be built on.
+
+The app comes with a **library** of common exercises, each already filled in with its muscle groups and sensible starting values (3 sets, 0–200, steps of 5). In *edit exercises*, **from library** opens it; filter by muscle group to narrow the list, and tap one to copy it into your own exercises, where you can rename it and change anything you like. Nothing is added to your list until you pick it.
+
+You can also **duplicate** one of your own exercises — swipe left on it in *edit exercises*. A copy takes the original's sets, weight range and muscle groups, and you must give it a name you are not already using, so the two never become impossible to tell apart in your logs.
+
 ## Settings
 The settings screen has:
    - **Share data among your iPhones/iPads** — keeps your workouts, exercises and logs in step across your devices through your own iCloud account. Off by default.
    - **Save workouts to Apple Health** — see [Apple Health](#apple-health) above. Off by default.
+   - **One-rep max formula** — which of the three formulas the statistics use. Epley by default.
+   - **Workouts in the trend** — how many recent workouts the trend line uses, 16 by default and never fewer than 8.
+   - **Averaging in graphs** — smooths the dots over this many workouts, 3 by default; set it to off to see every workout as logged.
+   - **Share anonymous data with the developer** — off by default, see below.
    - **Delete all my data** — removes everything this app has stored. With iCloud sharing on, this also removes it from your other devices.
 
 ## Your data and privacy
-Your workouts, exercises and logs are stored on your device. There is no account, no server of mine, and no analytics or tracking of any kind.
+Your workouts, exercises and logs are stored on your device. There is no account and no tracking: nothing about you is collected automatically, and nothing is sold or shared with anyone else, ever.
 
-Two things leave the app, and both are your choice and off until you switch them on: iCloud sharing keeps your data in step across *your own* devices through your private iCloud account, and Apple Health receives the start and end time of a finished workout if you turn that on. Data sent to Health stays on your device under your control in the Health app, where you can review or withdraw it at any time. Exports go wherever you send them.
+Four things can leave the app, and every one of them is off until you switch it on:
+
+   - **iCloud sharing** keeps your data in step across *your own* devices through your private iCloud account.
+   - **Apple Health** receives the start and end time of a finished workout. Data sent to Health stays on your device under your control in the Health app, where you can review or withdraw it at any time.
+   - **Exports** go wherever you send them.
+   - **Sharing anonymous data with the developer** sends your logged sets so the app can be improved with real training data — in particular the individual advice described below. This is the one thing that goes to me rather than to you, so it is worth being precise about.
+
+What that last option sends, when you turn it on: the weights, repetitions and dates you logged, which muscle groups an exercise works, and your answers if you fill in the questionnaire. What it never sends: your name, your Apple ID, your device, your location, or the names you gave your workouts and exercises. An exercise you named yourself travels as an unreadable code, unique to your installation, so your own sets can be recognised as belonging together without the name being recoverable. Exercises taken from the library also carry the library's own name for the movement, which is what allows a bench press to be compared across people.
+
+Your data is identified only by a random code created on your device the first time you turn the option on. It is not linked to your Apple ID or to anything else about you, and I have no way to work out who any of it belongs to. Turning the option off deletes what your device has shared.
+
+Once you have been using the app for a while you may see a short questionnaire, asking which parts of logs/stats you find useful and whether you would want more individual statistics. Answering is voluntary, "Not now" is a complete answer, and it will not keep asking.
 
 ## Notes and Feedback
 1. This app is free and open source. The source is on GitHub:
