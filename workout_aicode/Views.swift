@@ -195,9 +195,7 @@ struct EditWorkoutView: View {
                             DeleteCircleButton { workout.exerciseOrder.remove(at: idx) }
 
                             Menu {
-                                ForEach(allExercises) { choice in
-                                    Button(choice.name) { workout.exerciseOrder[idx] = choice.id }
-                                }
+                                exerciseChoices { chosen in workout.exerciseOrder[idx] = chosen.id }
                             } label: {
                                 HStack {
                                     Text(current?.name ?? "Select exercise")
@@ -209,11 +207,7 @@ struct EditWorkoutView: View {
 
                     if !allExercises.isEmpty {
                         Menu {
-                            ForEach(allExercises) { choice in
-                                Button(choice.name) {
-                                    workout.exerciseOrder.append(choice.id)
-                                }
-                            }
+                            exerciseChoices { chosen in workout.exerciseOrder.append(chosen.id) }
                         } label: {
                             HStack {
                                 Image(systemName: "plus.circle")
@@ -232,7 +226,40 @@ struct EditWorkoutView: View {
         .toolbar { }
     }
 
-    @Query private var allExercises: [ExerciseDef]
+    /// Exercise choices for the picker menus. Once muscle groups are in use the
+    /// list is grouped into submenus by primary muscle, which is how "filter by
+    /// primary muscle group" reads inside a menu — the alternative, one flat
+    /// list of everything the user owns, is what gets unwieldy.
+    @ViewBuilder
+    private func exerciseChoices(_ select: @escaping (ExerciseDef) -> Void) -> some View {
+        let grouped = Dictionary(grouping: allExercises.filter { $0.primaryMuscle != nil }) {
+            $0.primaryMuscle!
+        }
+        let ungrouped = allExercises.filter { $0.primaryMuscle == nil }
+
+        if grouped.isEmpty {
+            ForEach(allExercises) { choice in
+                Button(choice.name) { select(choice) }
+            }
+        } else {
+            ForEach(MuscleGroup.displayOrder.filter { grouped[$0] != nil }) { group in
+                Menu(group.label) {
+                    ForEach(grouped[group] ?? []) { choice in
+                        Button(choice.name) { select(choice) }
+                    }
+                }
+            }
+            if !ungrouped.isEmpty {
+                Menu("No muscle group set") {
+                    ForEach(ungrouped) { choice in
+                        Button(choice.name) { select(choice) }
+                    }
+                }
+            }
+        }
+    }
+
+    @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var allExercises: [ExerciseDef]
 }
 
 // MARK: - Reorder Exercises Screen
@@ -274,6 +301,17 @@ struct EditExercisesView: View {
     @State private var exercisePendingDelete: ExerciseDef?
     @State private var editMode: EditMode = .inactive
     @State private var pendingNewExercise: ExerciseDef? = nil
+    @State private var showLibrary = false
+    @State private var exerciseToDuplicate: ExerciseDef? = nil
+    @State private var filter: MuscleGroup? = nil
+
+    /// Exercises after the muscle-group filter. Reordering is only offered on
+    /// the unfiltered list: dragging row 2 onto row 5 of a filtered list has no
+    /// well-defined meaning for the full order.
+    private var visibleExercises: [ExerciseDef] {
+        guard let filter else { return store.exercises }
+        return store.exercises.filter { $0.primaryMuscle == filter }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -286,14 +324,29 @@ struct EditExercisesView: View {
                     Text("new exercise").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+
+                Button {
+                    showLibrary = true
+                } label: {
+                    Text("from library").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
             }
 
             if store.exercises.isEmpty {
                 ContentUnavailableView("No exercises to edit", systemImage: "list.bullet")
             } else {
+                if store.exercises.contains(where: { $0.primaryMuscle != nil }) {
+                    MuscleGroupFilterBar(selection: $filter)
+                }
+                if visibleExercises.isEmpty {
+                    ContentUnavailableView("Nothing for that muscle group",
+                                           systemImage: "line.3.horizontal.decrease.circle",
+                                           description: Text("No exercise of yours has this as its primary muscle group."))
+                }
                 List {
                     Section {
-                        ForEach(store.exercises) { exercise in
+                        ForEach(visibleExercises) { exercise in
                             HStack(spacing: 12) {
                                 if editMode == .active {
                                     // Reorder mode: show title; system shows drag handles
@@ -310,9 +363,16 @@ struct EditExercisesView: View {
                                                 showDeleteConfirm = true
                                             }
 
-                                            Text(exercise.name)
-                                                .lineLimit(1)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(exercise.name)
+                                                    .lineLimit(1)
+                                                if let primary = exercise.primaryMuscle {
+                                                    Text(primary.shortLabel)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            .frame(maxWidth: .infinity, alignment: .leading)
                                         }
                                     }
                                 }
@@ -322,12 +382,20 @@ struct EditExercisesView: View {
                                     exercisePendingDelete = exercise
                                     showDeleteConfirm = true
                                 } label: { Label("Delete", systemImage: "trash") }
+
+                                Button {
+                                    exerciseToDuplicate = exercise
+                                } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+                                    .tint(.blue)
                             }
                         }
                         .onDelete { indexSet in
+                            // Index into the rows actually shown: with a muscle
+                            // filter active these are not the same list, and
+                            // using store.exercises here would delete whatever
+                            // happened to sit at that position unfiltered.
                             for idx in indexSet {
-                                let exercise = store.exercises[idx]
-                                exercisePendingDelete = exercise
+                                exercisePendingDelete = visibleExercises[idx]
                                 showDeleteConfirm = true
                             }
                         }
@@ -342,6 +410,14 @@ struct EditExercisesView: View {
             EditExerciseView(exercise: exercise)
         }
         .onAppear { store.reloadAll() }
+        .sheet(isPresented: $showLibrary) {
+            AddFromLibraryView { added in pendingNewExercise = added }
+                .environmentObject(store)
+        }
+        .sheet(item: $exerciseToDuplicate) { source in
+            DuplicateExerciseView(source: source) { copy in pendingNewExercise = copy }
+                .environmentObject(store)
+        }
         .confirmationDialog("Delete Exercise?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 if let exercise = exercisePendingDelete {
@@ -392,6 +468,8 @@ struct EditExerciseView: View {
             // Watch's motion-based rep counter, which no longer exists, so the
             // control did nothing while promising a feature. `movementType` stays
             // on the model so existing data and JSON exports keep working.
+
+            MuscleGroupSection(exercise: exercise)
         }
         .onChange(of: exercise.lowestWeight) { _, newValue in
             if newValue < 1 { exercise.lowestWeight = 1 }
@@ -876,20 +954,174 @@ struct HandoverPausedView: View {
 }
 
 // MARK: - Logs Screen
-struct LogsView: View {
+// MARK: - logs tab
+//
+// The log list. Import/export lives in ImportExportView; both are tabs of
+// LogsStatsView now.
+
+struct LogsListView: View {
+    @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
+    @Query private var workouts: [WorkoutDef]
+    @Query private var exercises: [ExerciseDef]
+
+    var body: some View {
+        if logs.isEmpty {
+            ContentUnavailableView("No logs yet", systemImage: "doc.text", description: Text("Start logging your workouts to see them here."))
+        } else {
+            List(compactRows()) { row in
+                VStack(spacing: 2) {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(1.0))
+                        .frame(height: row.isWorkout ? 3 : 1)
+                    HStack(alignment: .center, spacing: 8) {
+                        Group {
+                            if row.isWorkout {
+                                Text(row.left).font(.headline).foregroundStyle(.blue).italic()
+                            } else {
+                                Text(row.left).font(.headline)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Group {
+                            if row.isWorkout {
+                                Text(row.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.headline).foregroundStyle(.blue)
+                            } else if let log = row.log {
+                                weightsRepsGrid(for: log, at: row.date)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .listRowSeparator(.hidden)
+            }
+        }
+    }
+
+    private struct CompactRow: Identifiable {
+        let id: String
+        let isWorkout: Bool
+        let left: String
+        let date: Date
+        let log: WorkoutLog?
+        let workoutId: UUID?
+        let exerciseId: UUID?
+    }
+
+    private func compactRows() -> [CompactRow] {
+        let maxWorkoutPauze: TimeInterval = 3600 // seconds
+        var rows: [CompactRow] = []
+        var lastExerciseDate: Date? = nil
+        var lastWorkoutId: UUID? = nil
+        for log in logs {
+            let workoutName = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
+            // Insert a workout-header row when more than maxWorkoutPauze has
+            // elapsed since the previous logged exercise OR the workout id
+            // changed (so adjacent same-workout exercises group together).
+            let shouldInsertHeader: Bool = {
+                guard let last = lastExerciseDate else { return true }
+                if last.timeIntervalSince(log.date) >= maxWorkoutPauze { return true }
+                if lastWorkoutId != log.workoutId { return true }
+                return false
+            }()
+            if shouldInsertHeader {
+                rows.append(CompactRow(
+                    id: "w-\(log.id.uuidString)",
+                    isWorkout: true,
+                    left: workoutName,
+                    date: log.date,
+                    log: nil,
+                    workoutId: log.workoutId,
+                    exerciseId: nil
+                ))
+            }
+            let exerciseName = exercises.first(where: { $0.id == log.exerciseId })?.name ?? "Exercise"
+            rows.append(CompactRow(
+                id: "e-\(log.id.uuidString)",
+                isWorkout: false,
+                left: exerciseName,
+                date: log.date,
+                log: log,
+                workoutId: log.workoutId,
+                exerciseId: log.exerciseId
+            ))
+            lastExerciseDate = log.date
+            lastWorkoutId = log.workoutId
+        }
+        return rows
+    }
+
+    private func weightsRepsGrid(for log: WorkoutLog, at date: Date) -> some View {
+        let previous = previousEntry(for: log.exerciseId, before: date)
+        let maxCount = max(log.weights.count, log.reps.count)
+        return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
+            GridRow {
+                Text("w").font(.headline)
+                ForEach(0..<maxCount, id: \.self) { i in
+                    let current = i < log.weights.count ? log.weights[i] : 0
+                    let prev = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
+                    Text("\(current)")
+                        .foregroundStyle(colorForWeight(current: current, previous: prev))
+                        .font(.headline)
+                }
+            }
+            GridRow {
+                Text("r").font(.headline)
+                ForEach(0..<maxCount, id: \.self) { i in
+                    let current = i < log.reps.count ? log.reps[i] : 0
+                    let prevRep = previous?.reps.indices.contains(i) == true ? previous!.reps[i] : nil
+                    let currentW = i < log.weights.count ? log.weights[i] : 0
+                    let prevW = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
+                    Text("\(current)")
+                        .foregroundStyle(colorForReps(current: current, previous: prevRep, currentWeight: currentW, previousWeight: prevW))
+                        .font(.headline)
+                }
+            }
+        }
+    }
+
+    private func previousEntry(for exerciseId: UUID, before date: Date) -> WorkoutLog? {
+        // Search older logs (since logs are reverse sorted)
+        for log in logs.dropFirst() {
+            if log.date < date && log.exerciseId == exerciseId {
+                return log
+            }
+        }
+        return nil
+    }
+
+    private func colorForWeight(current: Int, previous: Int?) -> Color {
+        guard let previous else { return .primary }
+        if current > previous { return .green }
+        if current < previous { return .red }
+        return .primary
+    }
+
+    private func colorForReps(current: Int, previous: Int?, currentWeight: Int, previousWeight: Int?) -> Color {
+        guard let previous else { return .primary }
+        let prevWeight = previousWeight ?? currentWeight
+        if current > previous && currentWeight >= prevWeight { return .green }
+        if current < previous && currentWeight <= prevWeight { return .red }
+        return .primary
+    }
+}
+
+// MARK: - import/export tab
+
+struct ImportExportView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.modelContext) private var context
 
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
     @Query private var workouts: [WorkoutDef]
     @Query private var exercises: [ExerciseDef]
-    
+
     @State private var exportURL: URL?
-    
+
     @State private var showImportPicker = false
     @State private var pendingImportURL: URL?
     @State private var showImportActions = false
-    
+
     // New states for alerts and undo backup
     @State private var showResultAlert: Bool = false
     @State private var resultTitle: String = ""
@@ -897,87 +1129,63 @@ struct LogsView: View {
     @State private var lastBackupURL: URL? = nil
 
     var body: some View {
-        Group {
-            VStack {
-                HStack(spacing: 8) {
-                    Button {
-                        exportLogs()
-                    } label: {
-                        Text("export\nTSV")
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(logs.isEmpty)
-
-                    Button {
-                        exportJSON()
-                    } label: {
-                        Text("export\nJSON")
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(logs.isEmpty)
-
-                    Button {
-                        showImportPicker = true
-                    } label: {
-                        Text("import\nJSON")
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        if let backupURL = lastBackupURL {
-                            replaceData(with: backupURL)
-                            lastBackupURL = nil
-                        }
-                    } label: {
-                        Text("undo\nimport")
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(lastBackupURL == nil)
+        VStack {
+            HStack(spacing: 8) {
+                Button {
+                    exportLogs()
+                } label: {
+                    Text("export\nTSV")
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                 }
-                .padding(.bottom, 8)
+                .buttonStyle(.bordered)
+                .disabled(logs.isEmpty)
 
-                if logs.isEmpty {
-                    ContentUnavailableView("No logs yet", systemImage: "doc.text", description: Text("Start logging your workouts to see them here."))
-                } else {
-                    List(compactRows()) { row in
-                        VStack(spacing: 2) {
-                            Rectangle()
-                                .fill(Color.secondary.opacity(1.0))
-                                .frame(height: row.isWorkout ? 3 : 1)
-                            HStack(alignment: .center, spacing: 8) {
-                                Group {
-                                    if row.isWorkout {
-                                        Text(row.left).font(.headline).foregroundStyle(.blue).italic()
-                                    } else {
-                                        Text(row.left).font(.headline)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                Group {
-                                    if row.isWorkout {
-                                        Text(row.date.formatted(date: .abbreviated, time: .shortened))
-                                            .font(.headline).foregroundStyle(.blue)
-                                    } else if let log = row.log {
-                                        weightsRepsGrid(for: log, at: row.date)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        .listRowSeparator(.hidden)
-                    }
+                Button {
+                    exportJSON()
+                } label: {
+                    Text("export\nJSON")
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.bordered)
+                .disabled(logs.isEmpty)
+
+                Button {
+                    showImportPicker = true
+                } label: {
+                    Text("import\nJSON")
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    if let backupURL = lastBackupURL {
+                        replaceData(with: backupURL)
+                        lastBackupURL = nil
+                    }
+                } label: {
+                    Text("undo\nimport")
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(lastBackupURL == nil)
+            }
+            .padding(.horizontal)
+
+            List {
+                Section {
+                    Text("**export TSV** writes a tab-separated table of every logged set, for a spreadsheet.")
+                    Text("**export JSON** writes everything — workouts, exercises and logs — in the app's own format, which is what **import JSON** reads back.")
+                    Text("Importing offers to validate the file, count what is in it, replace everything, or merge it with what you have. **undo import** restores the automatic backup taken just before the last replace or merge.")
+                } header: {
+                    Text("What these do")
+                }
+                .font(.footnote)
             }
         }
-        .navigationTitle("logs")
         .sheet(item: $exportURL, onDismiss: { cleanupExport() }) { url in
             ShareSheet(activityItems: [url])
         }
@@ -1411,112 +1619,6 @@ struct LogsView: View {
         return s
     }
 
-    struct CompactRow: Identifiable {
-        let id: String
-        let isWorkout: Bool
-        let left: String
-        let date: Date
-        let log: WorkoutLog?
-        let workoutId: UUID?
-        let exerciseId: UUID?
-    }
-
-    private func compactRows() -> [CompactRow] {
-        let maxWorkoutPauze: TimeInterval = 3600 // seconds
-        var rows: [CompactRow] = []
-        var lastExerciseDate: Date? = nil
-        var lastWorkoutId: UUID? = nil
-        for log in logs {
-            let workoutName = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
-            // Insert a workout-header row when more than maxWorkoutPauze has
-            // elapsed since the previous logged exercise OR the workout id
-            // changed (so adjacent same-workout exercises group together).
-            let shouldInsertHeader: Bool = {
-                guard let last = lastExerciseDate else { return true }
-                if last.timeIntervalSince(log.date) >= maxWorkoutPauze { return true }
-                if lastWorkoutId != log.workoutId { return true }
-                return false
-            }()
-            if shouldInsertHeader {
-                rows.append(CompactRow(
-                    id: "w-\(log.id.uuidString)",
-                    isWorkout: true,
-                    left: workoutName,
-                    date: log.date,
-                    log: nil,
-                    workoutId: log.workoutId,
-                    exerciseId: nil
-                ))
-            }
-            let exerciseName = exercises.first(where: { $0.id == log.exerciseId })?.name ?? "Exercise"
-            rows.append(CompactRow(
-                id: "e-\(log.id.uuidString)",
-                isWorkout: false,
-                left: exerciseName,
-                date: log.date,
-                log: log,
-                workoutId: log.workoutId,
-                exerciseId: log.exerciseId
-            ))
-            lastExerciseDate = log.date
-            lastWorkoutId = log.workoutId
-        }
-        return rows
-    }
-
-    private func weightsRepsGrid(for log: WorkoutLog, at date: Date) -> some View {
-        let previous = previousEntry(for: log.exerciseId, before: date)
-        let maxCount = max(log.weights.count, log.reps.count)
-        return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
-            GridRow {
-                Text("w").font(.headline)
-                ForEach(0..<maxCount, id: \.self) { i in
-                    let current = i < log.weights.count ? log.weights[i] : 0
-                    let prev = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
-                    Text("\(current)")
-                        .foregroundStyle(colorForWeight(current: current, previous: prev))
-                        .font(.headline)
-                }
-            }
-            GridRow {
-                Text("r").font(.headline)
-                ForEach(0..<maxCount, id: \.self) { i in
-                    let current = i < log.reps.count ? log.reps[i] : 0
-                    let prevRep = previous?.reps.indices.contains(i) == true ? previous!.reps[i] : nil
-                    let currentW = i < log.weights.count ? log.weights[i] : 0
-                    let prevW = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
-                    Text("\(current)")
-                        .foregroundStyle(colorForReps(current: current, previous: prevRep, currentWeight: currentW, previousWeight: prevW))
-                        .font(.headline)
-                }
-            }
-        }
-    }
-
-    private func previousEntry(for exerciseId: UUID, before date: Date) -> WorkoutLog? {
-        // Search older logs (since logs are reverse sorted)
-        for log in logs.dropFirst() {
-            if log.date < date && log.exerciseId == exerciseId {
-                return log
-            }
-        }
-        return nil
-    }
-
-    private func colorForWeight(current: Int, previous: Int?) -> Color {
-        guard let previous else { return .primary }
-        if current > previous { return .green }
-        if current < previous { return .red }
-        return .primary
-    }
-
-    private func colorForReps(current: Int, previous: Int?, currentWeight: Int, previousWeight: Int?) -> Color {
-        guard let previous else { return .primary }
-        let prevWeight = previousWeight ?? currentWeight
-        if current > previous && currentWeight >= prevWeight { return .green }
-        if current < previous && currentWeight <= prevWeight { return .red }
-        return .primary
-    }
 }
 
 // MARK: - Recovery Screen
@@ -1648,8 +1750,14 @@ struct RecoveryView: View {
 struct SettingsView: View {
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("healthSharingEnabled") private var healthSharingEnabled = false
+    @AppStorage(StatsSettingsKey.formula) private var formulaRaw = OneRMFormula.epley.rawValue
+    @AppStorage(StatsSettingsKey.window) private var trendWindow = StatsEngine.defaultWindow
+    @AppStorage(StatsSettingsKey.smoothing) private var smoothing = StatsEngine.defaultSmoothing
+    @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
     @EnvironmentObject private var setup: AppSetup
     @EnvironmentObject private var store: AppStore
+    @Query private var logs: [WorkoutLog]
+    @Query private var exercises: [ExerciseDef]
     @State private var showDeleteConfirm = false
 
     var body: some View {
@@ -1673,6 +1781,48 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("When on, a finished workout is saved to Apple Health as a Traditional Strength Training session, with its total duration — including time handed over between iPhone and Apple Watch. Only the workout duration is shared; nothing is read from Health.")
+            }
+
+            Section {
+                Picker(selection: $formulaRaw) {
+                    ForEach(OneRMFormula.allCases) { f in
+                        Text(f.label).tag(f.rawValue)
+                    }
+                } label: {
+                    Label("One-rep max formula", systemImage: "function")
+                }
+            } header: {
+                Text("Statistics")
+            } footer: {
+                let f = OneRMFormula(rawValue: formulaRaw) ?? .epley
+                Text("Estimates what you could lift once from a set of several. \(f.label): \(f.formulaText), where w is the weight and r the repetitions. The graphs and the progress order all follow this choice.")
+            }
+
+            Section {
+                Stepper(value: $trendWindow, in: ExerciseStats.minimumSessions...50) {
+                    LabeledContent("Workouts in the trend", value: "\(trendWindow)")
+                }
+                Picker(selection: $smoothing) {
+                    ForEach(StatsEngine.smoothingChoices, id: \.self) { n in
+                        Text(n == 1 ? "off" : "\(n)").tag(n)
+                    }
+                } label: {
+                    Text("Averaging in graphs")
+                }
+            } footer: {
+                Text("The trend uses at most this many of your most recent workouts per exercise, and needs at least \(ExerciseStats.minimumSessions). Averaging smooths the dots on the graph over that many workouts; the trendline itself always follows your actual numbers.")
+            }
+
+            Section {
+                Toggle(isOn: $shareWithDevelopers) {
+                    Label("Share anonymous data with the developer", systemImage: "chart.bar.doc.horizontal")
+                }
+                .onChange(of: shareWithDevelopers) { _, enabled in
+                    DeveloperDataSync.sync(consent: enabled, logs: logs, exercises: exercises,
+                                           formula: OneRMFormula(rawValue: formulaRaw) ?? .epley)
+                }
+            } footer: {
+                Text("Off unless you turn it on. When on, it sends the weights, repetitions and dates you log, and which muscle groups an exercise works, so the app can be improved with real training data — in particular the individual advice being considered. It never sends your name or your exercise names: an exercise you named yourself travels as an unreadable code. Turning this off deletes what this device has shared.")
             }
 
             Section {
@@ -1786,7 +1936,7 @@ struct SettingsView: View {
     try? context.save()
     store.reloadAll()
 
-    return NavigationStack { LogsView() }
+    return NavigationStack { LogsStatsView() }
         .environmentObject(store)
         .modelContainer(container)
 }

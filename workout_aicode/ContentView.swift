@@ -14,6 +14,16 @@ struct ContentView: View {
     @State private var pendingNewWorkout: WorkoutDef? = nil
     @State private var pendingNewExercise: ExerciseDef? = nil
     @State private var path: [WorkoutDef] = []
+    @ObservedObject private var survey = SurveyScheduler.shared
+    @Query(sort: [SortDescriptor(\WorkoutLog.date)]) private var allLogs: [WorkoutLog]
+    @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
+    @AppStorage(StatsSettingsKey.formula) private var formulaRaw = OneRMFormula.epley.rawValue
+
+    private func uploadSharedDataIfConsented() {
+        guard shareWithDevelopers else { return }
+        DeveloperDataSync.sync(consent: true, logs: allLogs, exercises: exercises,
+                               formula: OneRMFormula(rawValue: formulaRaw) ?? .epley)
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -39,8 +49,8 @@ struct ContentView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    NavigationLink(destination: LogsView()) {
-                        Text("logs").frame(maxWidth: .infinity)
+                    NavigationLink(destination: LogsStatsView()) {
+                        Text("logs/stats").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
 
@@ -130,6 +140,18 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { handoff.onForeground() }
         }
+        // Presented here rather than by logs/stats itself — see that view.
+        .sheet(isPresented: $survey.pending) { SurveyView() }
+        .task {
+            survey.noteLaunch(earliestLogDate: allLogs.first?.date)
+            uploadSharedDataIfConsented()
+        }
+        // Workouts logged since the last launch go up on the next one. Uploading
+        // as each set is logged would put the network in the middle of a
+        // workout; only what is new is sent, so this stays cheap.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { uploadSharedDataIfConsented() }
+        }
         // When the workout session ends (finished or quit), pop back to the list.
         // Driven from here (not the log view's dismiss()) so it's reliable with
         // the path-bound NavigationStack.
@@ -149,7 +171,9 @@ struct ContentView: View {
         // Screenshot demo mode — open the requested screen. See DemoMode.swift.
         .overlay {
             switch DemoMode.screen {
-            case "logs":     NavigationStack { LogsView() }
+            case "logs":     NavigationStack { LogsStatsView() }
+            case "graphs":   NavigationStack { StrengthGraphsView() }
+            case "progress": NavigationStack { StrengthProgressView() }
             case "info":     NavigationStack { InfoView() }
             case "settings": NavigationStack { SettingsView() }
             default:         EmptyView()
