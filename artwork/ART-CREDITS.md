@@ -9,22 +9,29 @@
 (CC BY-SA 4.0) — https://creativecommons.org/licenses/by-sa/4.0/
 
 ### Changes made
-The original single SVG shows both figures side by side on a white page. For
-this app it was:
+Starting from the original single SVG showing both figures on a white page:
 
-1. rendered to a bitmap, with the viewBox padded to a square first (the only
-   SVG renderer to hand always emits a square image, so a square source keeps
-   the proportions honest);
-2. split into two images, one per figure, cropped to the drawing with a small
-   margin;
-3. given a transparent background in place of the white page, so the figures
-   sit correctly on both light and dark backgrounds;
-4. resized to 1x/2x/3x assets.
+1. the drawing was opened in Inkscape and each of the app's fifteen muscle
+   groups was labelled — as a single path where the group is one muscle, or as
+   a named group where it is several;
+2. the `<use>` elements were removed and each figure was halved left/right,
+   since a half body carries the same information in half the screen width;
+3. some small paths that added nothing at this size were deleted, while others
+   were kept because they carry the body outline;
+4. the deltoid and back sheets were split so that side delts and lower back
+   exist as separate shapes, which the original does not distinguish;
+5. the annotated result (`muscles-annotated.svg`) is converted by
+   `tools/svg-to-bodydiagram.py` into `workout_aicode/BodyDiagram.json`: plain
+   path geometry in normalised coordinates, tagged per muscle group.
 
-Nothing was redrawn: the anatomy is the original artists' work.
+The app draws that geometry itself and colours it — muscle groups warm,
+everything else grey — so the original's gradients, clip paths and `<use>`
+elements are never read. Nothing was redrawn: the anatomy is the original
+artists' work.
 
 The unmodified original is kept beside this file as
-`muscles-front-and-back-original.svg`.
+`muscles-front-and-back-original.svg`, and the annotated working copy as
+`muscles-annotated.svg`.
 
 ### What this means for reuse
 CC BY-SA 4.0 is *share-alike*: these two derived images remain under
