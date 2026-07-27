@@ -175,6 +175,7 @@ struct ContentView: View {
             case "graphs":   NavigationStack { StrengthGraphsView() }
             case "progress": NavigationStack { StrengthProgressView() }
             case "library":  NavigationStack { LibraryDemoHost() }
+            case "art":      NavigationStack { BodyArtProbe() }
             case "info":     NavigationStack { InfoView() }
             case "settings": NavigationStack { SettingsView() }
             default:         EmptyView()

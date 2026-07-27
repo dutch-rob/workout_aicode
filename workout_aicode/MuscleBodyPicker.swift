@@ -11,8 +11,13 @@ import SwiftUI
 // the left and back-side labels on the right, so no connector has to cross the
 // body or another connector.
 //
-// The drawing is deliberately schematic — a neutral arrangement of limbs, not
-// an anatomical illustration or a particular body.
+// The figures are the "Muscles front and back" illustration from Wikimedia
+// Commons by OpenStax, Tomáš Kebert and umimeto.org, CC BY-SA 4.0, cropped
+// into two images and given a transparent background. See ART-CREDITS.md.
+//
+// They are pictures, not shapes: the anchors below say where each muscle sits
+// on them, as fractions of the image box, so the artwork can be replaced by
+// re-tuning fifteen numbers rather than rewriting the view.
 
 struct MuscleBodyPicker: View {
     @Binding var selection: MuscleGroup?
@@ -22,28 +27,32 @@ struct MuscleBodyPicker: View {
     private struct Anchor {
         let group: MuscleGroup
         let point: CGPoint
+        let radius: CGFloat
         let onBack: Bool
     }
 
+    /// Positions on the artwork. `radius` is the highlight blob's size, also as
+    /// a fraction of image width, so a broad sheet like the back can be marked
+    /// more generously than a small one like the biceps.
     private static let anchors: [Anchor] = [
         // Front figure — labels to its left.
-        .init(group: .frontDelts, point: CGPoint(x: 0.30, y: 0.205), onBack: false),
-        .init(group: .chest,      point: CGPoint(x: 0.50, y: 0.245), onBack: false),
-        .init(group: .sideDelts,  point: CGPoint(x: 0.245, y: 0.225), onBack: false),
-        .init(group: .biceps,     point: CGPoint(x: 0.215, y: 0.315), onBack: false),
-        .init(group: .forearms,   point: CGPoint(x: 0.165, y: 0.415), onBack: false),
-        .init(group: .absCore,    point: CGPoint(x: 0.50, y: 0.355), onBack: false),
-        .init(group: .quads,      point: CGPoint(x: 0.395, y: 0.605), onBack: false),
+        .init(group: .frontDelts, point: CGPoint(x: 0.285, y: 0.200), radius: 0.070, onBack: false),
+        .init(group: .chest,      point: CGPoint(x: 0.410, y: 0.240), radius: 0.100, onBack: false),
+        .init(group: .sideDelts,  point: CGPoint(x: 0.235, y: 0.215), radius: 0.060, onBack: false),
+        .init(group: .biceps,     point: CGPoint(x: 0.230, y: 0.290), radius: 0.060, onBack: false),
+        .init(group: .forearms,   point: CGPoint(x: 0.155, y: 0.390), radius: 0.070, onBack: false),
+        .init(group: .absCore,    point: CGPoint(x: 0.500, y: 0.370), radius: 0.085, onBack: false),
+        .init(group: .quads,      point: CGPoint(x: 0.395, y: 0.560), radius: 0.090, onBack: false),
 
         // Back figure — labels to its right.
-        .init(group: .traps,      point: CGPoint(x: 0.50, y: 0.175), onBack: true),
-        .init(group: .rearDelts,  point: CGPoint(x: 0.735, y: 0.215), onBack: true),
-        .init(group: .back,       point: CGPoint(x: 0.50, y: 0.275), onBack: true),
-        .init(group: .triceps,    point: CGPoint(x: 0.785, y: 0.315), onBack: true),
-        .init(group: .lowerBack,  point: CGPoint(x: 0.50, y: 0.375), onBack: true),
-        .init(group: .glutes,     point: CGPoint(x: 0.50, y: 0.455), onBack: true),
-        .init(group: .hamstrings, point: CGPoint(x: 0.605, y: 0.605), onBack: true),
-        .init(group: .calves,     point: CGPoint(x: 0.615, y: 0.795), onBack: true),
+        .init(group: .traps,      point: CGPoint(x: 0.500, y: 0.185), radius: 0.080, onBack: true),
+        .init(group: .rearDelts,  point: CGPoint(x: 0.735, y: 0.215), radius: 0.065, onBack: true),
+        .init(group: .back,       point: CGPoint(x: 0.500, y: 0.285), radius: 0.100, onBack: true),
+        .init(group: .triceps,    point: CGPoint(x: 0.775, y: 0.295), radius: 0.060, onBack: true),
+        .init(group: .lowerBack,  point: CGPoint(x: 0.500, y: 0.380), radius: 0.075, onBack: true),
+        .init(group: .glutes,     point: CGPoint(x: 0.500, y: 0.455), radius: 0.100, onBack: true),
+        .init(group: .hamstrings, point: CGPoint(x: 0.400, y: 0.570), radius: 0.085, onBack: true),
+        .init(group: .calves,     point: CGPoint(x: 0.400, y: 0.720), radius: 0.070, onBack: true),
     ]
 
     private var frontAnchors: [Anchor] { Self.anchors.filter { !$0.onBack } }
@@ -90,20 +99,55 @@ struct MuscleBodyPicker: View {
         }
     }
 
+    /// Width ÷ height of the two artwork files. Needed because the anchors are
+    /// fractions of the *image*, and an aspect-fitted image almost never fills
+    /// its frame — position against the frame instead and every marker drifts
+    /// (which put "chest" on the forehead the first time).
+    private static let frontAspect: CGFloat = 919.0 / 1656.0
+    private static let backAspect: CGFloat = 818.0 / 1636.0
+
+    /// An anchor's position inside the drawn image.
+    private static func place(_ p: CGPoint, in art: CGRect) -> CGPoint {
+        CGPoint(x: art.minX + p.x * art.width, y: art.minY + p.y * art.height)
+    }
+
+    /// The rectangle the image actually occupies inside `size`, mirroring what
+    /// `scaledToFit` does.
+    private static func drawnRect(in size: CGSize, aspect: CGFloat) -> CGRect {
+        let height = min(size.height, size.width / aspect)
+        let width = height * aspect
+        return CGRect(x: (size.width - width) / 2,
+                      y: (size.height - height) / 2,
+                      width: width, height: height)
+    }
+
     private func figure(_ anchors: [Anchor], isBack: Bool, labelsOnLeft: Bool) -> some View {
         GeometryReader { geo in
             let size = geo.size
+            let aspect = isBack ? Self.backAspect : Self.frontAspect
+            let art = Self.drawnRect(in: size, aspect: aspect)
             ZStack {
-                // Fill only. The subpaths overlap at the joints (see the
-                // shape), so stroking the same path would trace every internal
-                // seam and draw limb outlines straight across the body.
-                BodySilhouette(isBack: isBack)
-                    .fill(Color.secondary.opacity(0.22))
+                Image(isBack ? "body-back" : "body-front")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size.width, height: size.height)
+
+                // Highlight sits over the artwork, under the markers: a soft
+                // blob rather than the muscle's outline, because the drawing is
+                // a picture here and its shapes are not addressable.
+                if let anchor = anchors.first(where: { $0.group == selection }) {
+                    Circle()
+                        .fill(Color.blue.opacity(0.30))
+                        .frame(width: anchor.radius * 2 * art.width,
+                               height: anchor.radius * 2 * art.width)
+                        .blur(radius: 6)
+                        .position(Self.place(anchor.point, in: art))
+                        .allowsHitTesting(false)
+                }
 
                 // Connector from the label's edge to the muscle.
                 ForEach(Array(anchors.enumerated()), id: \.offset) { index, anchor in
-                    let target = CGPoint(x: anchor.point.x * size.width,
-                                         y: anchor.point.y * size.height)
+                    let target = Self.place(anchor.point, in: art)
                     let edgeX = labelsOnLeft ? 0 : size.width
                     let edgeY = rowCentre(index: index, count: anchors.count, height: size.height)
                     Path { path in
@@ -163,7 +207,10 @@ struct MuscleBodyPicker: View {
                 .position(x: geo.size.width / 2, y: y)
             }
         }
-        .frame(width: 92)
+        // Narrow on purpose: whatever the labels take, the two figures divide
+        // between them, and the artwork is width-limited here — every point
+        // given back to the columns makes both bodies smaller.
+        .frame(width: 76)
     }
 
     /// Labels are spread evenly down the column rather than placed at their
@@ -174,100 +221,5 @@ struct MuscleBodyPicker: View {
         guard count > 1 else { return height / 2 }
         let usable = height - inset * 2
         return inset + usable * CGFloat(index) / CGFloat(count - 1)
-    }
-}
-
-// MARK: - The figure
-
-/// A schematic human outline in the given rect. Front and back differ only
-/// slightly — enough to tell them apart at a glance.
-struct BodySilhouette: Shape {
-    var isBack: Bool
-
-    func path(in rect: CGRect) -> Path {
-        let w = rect.width, h = rect.height
-        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: rect.minX + x * w, y: rect.minY + y * h)
-        }
-        var path = Path()
-
-        // Subpaths deliberately OVERLAP where limbs meet the trunk. Filled as
-        // one path they merge into a single silhouette; drawn as separate
-        // shapes that merely touch, hairline gaps open up at the joints and the
-        // figure falls apart into sticks.
-
-        // Head. The radius has to be set in the same axis as the position, or
-        // the two disagree: sized from the width on a box twice as tall as it
-        // is wide, the head ends up far too small and floats clear of the neck.
-        // Capped against the width so it cannot outgrow the shoulders.
-        let headRadius = min(h * 0.055, w * 0.17)
-        let headCentre = pt(0.5, 0.075)
-        path.addEllipse(in: CGRect(x: headCentre.x - headRadius,
-                                   y: headCentre.y - headRadius,
-                                   width: headRadius * 2, height: headRadius * 2))
-
-        // Neck — spans from inside the head down into the chest.
-        path.addRect(CGRect(x: pt(0.45, 0).x, y: pt(0.5, 0.10).y,
-                            width: w * 0.10, height: h * 0.10))
-
-        // Trunk: shoulders → waist → hips, with the shoulders rounded off so
-        // the deltoids read as part of the body.
-        path.move(to: pt(0.335, 0.175))
-        path.addQuadCurve(to: pt(0.665, 0.175), control: pt(0.5, 0.155))
-        path.addQuadCurve(to: pt(0.715, 0.235), control: pt(0.715, 0.19))
-        path.addQuadCurve(to: pt(0.625, 0.40), control: pt(0.665, 0.33))
-        // Flat across the hips. Bulging this edge downwards left the thigh
-        // tops sitting proud of it, which read as white notches at the hips.
-        path.addLine(to: pt(0.655, 0.505))
-        path.addLine(to: pt(0.345, 0.505))
-        path.addLine(to: pt(0.375, 0.40))
-        path.addQuadCurve(to: pt(0.285, 0.235), control: pt(0.335, 0.33))
-        path.addQuadCurve(to: pt(0.335, 0.175), control: pt(0.285, 0.19))
-        path.closeSubpath()
-
-        // Arms: shoulder → elbow → wrist, tapering, starting inside the trunk.
-        for side in [CGFloat(-1), CGFloat(1)] {
-            // Well inside the trunk: an arm that meets the shoulder exactly at
-            // its edge leaves a wedge of background at the armpit, because the
-            // trunk narrows towards the waist while the arm hangs straight.
-            let shoulderInner = 0.5 + side * 0.145
-            let shoulderOuter = 0.5 + side * 0.275
-            let elbowInner = 0.5 + side * 0.245
-            let elbowOuter = 0.5 + side * 0.325
-            let wristInner = 0.5 + side * 0.295
-            let wristOuter = 0.5 + side * 0.355
-
-            path.move(to: pt(shoulderInner, 0.185))
-            path.addQuadCurve(to: pt(shoulderOuter, 0.235), control: pt(shoulderOuter, 0.19))
-            path.addLine(to: pt(elbowOuter, 0.335))
-            path.addLine(to: pt(wristOuter, 0.475))
-            path.addQuadCurve(to: pt(wristInner, 0.475), control: pt((wristInner + wristOuter) / 2, 0.50))
-            path.addLine(to: pt(elbowInner, 0.335))
-            path.addLine(to: pt(shoulderInner, 0.225))
-            path.closeSubpath()
-        }
-
-        // Legs: hip → knee → ankle. They start above the hip line so they are
-        // already inside the trunk where the two meet.
-        for side in [CGFloat(-1), CGFloat(1)] {
-            let hipInner = 0.5 + side * 0.015
-            let hipOuter = 0.5 + side * 0.155
-            let kneeInner = 0.5 + side * 0.04
-            let kneeOuter = 0.5 + side * 0.145
-            let ankleInner = 0.5 + side * 0.055
-            let ankleOuter = 0.5 + side * 0.125
-
-            path.move(to: pt(hipInner, 0.44))
-            path.addLine(to: pt(hipOuter, 0.44))
-            path.addQuadCurve(to: pt(kneeOuter, 0.70), control: pt(hipOuter, 0.60))
-            path.addLine(to: pt(ankleOuter, 0.955))
-            path.addQuadCurve(to: pt(ankleInner, 0.955),
-                              control: pt((ankleInner + ankleOuter) / 2, 0.98))
-            path.addLine(to: pt(kneeInner, 0.70))
-            path.addLine(to: pt(hipInner, 0.44))
-            path.closeSubpath()
-        }
-
-        return path
     }
 }

@@ -159,4 +159,5 @@ Once you have been using the app for a while you may see a short questionnaire, 
    - Changes to the log screen or the exports?
    - Would you like to edit logged data in the app, and how would you expect that to work?
    - Statistics or trends?
+3. The muscle diagram is "Muscles front and back" by OpenStax, Tomáš Kebert and umimeto.org, from Wikimedia Commons, used under the Creative Commons Attribution-ShareAlike 4.0 licence (https://creativecommons.org/licenses/by-sa/4.0/). It was cropped into two figures and given a transparent background; the anatomy itself is unchanged. Those two images stay under CC BY-SA 4.0.
 <!-- INFO_SCREEN_END -->
