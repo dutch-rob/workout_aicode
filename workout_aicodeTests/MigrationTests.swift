@@ -55,7 +55,7 @@ private func removeStore(at url: URL) {
 
     // ── Reopen through the migration plan, as the updated app does ────────
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV3.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV4.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -110,7 +110,7 @@ private func removeStore(at url: URL) {
     }
 
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV3.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV4.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -173,4 +173,64 @@ private func removeStore(at url: URL) {
     #expect(restored.name == "Future exercise")
     #expect(restored.primaryMuscle == nil)
     #expect(restored.secondaryMuscles == [.chest])
+}
+
+@Test func favouriteFlagSurvivesTheUpgradeAndDefaultsToOff() throws {
+    // The store is written at V2 (no muscle groups, no favourite flag) and
+    // reopened through both later stages, as a user updating from the shipped
+    // version does.
+    let url = temporaryStoreURL()
+    defer { removeStore(at: url) }
+
+    let exerciseId = UUID()
+    do {
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        context.insert(WorkoutLogSchemaV1.ExerciseDef(id: exerciseId, name: "Deadlift"))
+        try context.save()
+    }
+
+    let container = try ModelContainer(
+        for: Schema(versionedSchema: WorkoutLogSchemaV4.self),
+        migrationPlan: WorkoutMigrationPlan.self,
+        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+    )
+    let context = ModelContext(container)
+    let exercise = try #require(try context.fetch(FetchDescriptor<ExerciseDef>()).first)
+    #expect(exercise.name == "Deadlift")
+    #expect(exercise.isFavourite == false)
+
+    exercise.isFavourite = true
+    try context.save()
+    let reread = try #require(try ModelContext(container)
+        .fetch(FetchDescriptor<ExerciseDef>()).first)
+    #expect(reread.isFavourite)
+}
+
+@Test func newExerciseUsesTheChosenDefaults() {
+    let d = UserDefaults.standard
+    d.set(4, forKey: ExerciseDefaultsKey.sets)
+    d.set(10, forKey: ExerciseDefaultsKey.lowest)
+    d.set(80, forKey: ExerciseDefaultsKey.highest)
+    d.set(2, forKey: ExerciseDefaultsKey.increment)
+    defer {
+        for key in [ExerciseDefaultsKey.sets, ExerciseDefaultsKey.lowest,
+                    ExerciseDefaultsKey.highest, ExerciseDefaultsKey.increment] {
+            d.removeObject(forKey: key)
+        }
+    }
+    let e = ExerciseDefaults.makeExercise(name: "Curl")
+    #expect(e.numberOfSeries == 4)
+    #expect(e.lowestWeight == 10)
+    #expect(e.highestWeight == 80)
+    #expect(e.weightIncrement == 2)
+}
+
+@Test func defaultsAreNotAskedOfSomeoneWhoAlreadyHasExercises() {
+    UserDefaults.standard.removeObject(forKey: ExerciseDefaultsKey.asked)
+    #expect(ExerciseDefaults.shouldAsk(existingExercises: 0))
+    #expect(!ExerciseDefaults.shouldAsk(existingExercises: 7))
 }

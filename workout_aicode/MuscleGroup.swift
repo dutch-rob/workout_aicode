@@ -27,6 +27,11 @@ enum MuscleGroup: String, Codable, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
+    /// Shown wherever a group is named. Quads and calves carry "/ul" and "/ll"
+    /// — upper leg, lower leg — because on the diagram those groups cover the
+    /// whole limb, and someone tapping their shin should not be told they
+    /// picked "Calves". Abbreviated rather than spelled out: these labels sit
+    /// in narrow buttons beside the figures.
     var label: String {
         switch self {
         case .chest:      return "Chest"
@@ -38,10 +43,10 @@ enum MuscleGroup: String, Codable, CaseIterable, Identifiable, Hashable {
         case .biceps:     return "Biceps"
         case .triceps:    return "Triceps"
         case .forearms:   return "Forearms"
-        case .quads:      return "Quads"
+        case .quads:      return "Quads/ul"
         case .hamstrings: return "Hamstrings"
         case .glutes:     return "Glutes"
-        case .calves:     return "Calves"
+        case .calves:     return "Calves/ll"
         case .absCore:    return "Abs/Core"
         case .lowerBack:  return "Lower Back"
         }

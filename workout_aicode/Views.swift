@@ -164,13 +164,13 @@ struct EditWorkoutView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Buttons row under title
             HStack(spacing: 12) {
-                Button {
-                    let exercise = ExerciseDef(name: "")
-                    store.saveExercise(exercise)
-                    workout.exerciseOrder.append(exercise.id)
-                    pendingNewExercise = exercise
+                // Was "new exercise". The library now starts with plenty to
+                // choose from, so picking comes first and creating from scratch
+                // lives inside the library for the rarer case.
+                NavigationLink {
+                    ExerciseLibraryView(context_: .selecting(workout))
                 } label: {
-                    Text("new exercise").frame(maxWidth: .infinity)
+                    Text("select exercise").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
 
@@ -205,17 +205,6 @@ struct EditWorkoutView: View {
                         }
                     }
 
-                    if !allExercises.isEmpty {
-                        Menu {
-                            exerciseChoices { chosen in workout.exerciseOrder.append(chosen.id) }
-                        } label: {
-                            HStack {
-                                Image(systemName: "plus.circle")
-                                Text("Add exercise")
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                    }
                 }
             }
         }
@@ -292,146 +281,6 @@ struct ReorderExercisesView: View {
 
 
 // MARK: - Edit Exercises Screen
-struct EditExercisesView: View {
-    @EnvironmentObject private var store: AppStore
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var context
-    
-    @State private var showDeleteConfirm = false
-    @State private var exercisePendingDelete: ExerciseDef?
-    @State private var editMode: EditMode = .inactive
-    @State private var pendingNewExercise: ExerciseDef? = nil
-    @State private var showLibrary = false
-    @State private var exerciseToDuplicate: ExerciseDef? = nil
-    @State private var filter: MuscleGroup? = nil
-
-    /// Exercises after the muscle-group filter. Reordering is only offered on
-    /// the unfiltered list: dragging row 2 onto row 5 of a filtered list has no
-    /// well-defined meaning for the full order.
-    private var visibleExercises: [ExerciseDef] {
-        guard let filter else { return store.exercises }
-        return store.exercises.filter { $0.primaryMuscle == filter }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Button {
-                    let exercise = ExerciseDef(name: "")
-                    store.saveExercise(exercise)
-                    pendingNewExercise = exercise
-                } label: {
-                    Text("new exercise").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    showLibrary = true
-                } label: {
-                    Text("from library").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
-
-            if store.exercises.isEmpty {
-                ContentUnavailableView("No exercises to edit", systemImage: "list.bullet")
-            } else {
-                if store.exercises.contains(where: { $0.primaryMuscle != nil }) {
-                    MuscleGroupFilterBar(selection: $filter)
-                }
-                if visibleExercises.isEmpty {
-                    ContentUnavailableView("Nothing for that muscle group",
-                                           systemImage: "line.3.horizontal.decrease.circle",
-                                           description: Text("No exercise of yours has this as its primary muscle group."))
-                }
-                List {
-                    Section {
-                        ForEach(visibleExercises) { exercise in
-                            HStack(spacing: 12) {
-                                if editMode == .active {
-                                    // Reorder mode: show title; system shows drag handles
-                                    Text(exercise.name)
-                                        .lineLimit(1)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                } else {
-                                    // Normal mode: make the whole row a NavigationLink to edit
-                                    NavigationLink(destination: EditExerciseView(exercise: exercise)) {
-                                        HStack(spacing: 12) {
-                                            // Place a red delete button on the left to mimic reorder screen placement
-                                            DeleteCircleButton {
-                                                exercisePendingDelete = exercise
-                                                showDeleteConfirm = true
-                                            }
-
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(exercise.name)
-                                                    .lineLimit(1)
-                                                if let primary = exercise.primaryMuscle {
-                                                    Text(primary.shortLabel)
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                            }
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                        }
-                                    }
-                                }
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    exercisePendingDelete = exercise
-                                    showDeleteConfirm = true
-                                } label: { Label("Delete", systemImage: "trash") }
-
-                                Button {
-                                    exerciseToDuplicate = exercise
-                                } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
-                                    .tint(.blue)
-                            }
-                        }
-                        .onDelete { indexSet in
-                            // Index into the rows actually shown: with a muscle
-                            // filter active these are not the same list, and
-                            // using store.exercises here would delete whatever
-                            // happened to sit at that position unfiltered.
-                            for idx in indexSet {
-                                exercisePendingDelete = visibleExercises[idx]
-                                showDeleteConfirm = true
-                            }
-                        }
-                    }
-                }
-                .environment(\.editMode, $editMode)
-            }
-        }
-        .padding()
-        .navigationTitle("edit exercises")
-        .navigationDestination(item: $pendingNewExercise) { exercise in
-            EditExerciseView(exercise: exercise)
-        }
-        .onAppear { store.reloadAll() }
-        .sheet(isPresented: $showLibrary) {
-            AddFromLibraryView { added in pendingNewExercise = added }
-                .environmentObject(store)
-        }
-        .sheet(item: $exerciseToDuplicate) { source in
-            DuplicateExerciseView(source: source) { copy in pendingNewExercise = copy }
-                .environmentObject(store)
-        }
-        .confirmationDialog("Delete Exercise?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-            Button("Delete", role: .destructive) {
-                if let exercise = exercisePendingDelete {
-                    store.deleteExercise(exercise)
-                }
-                exercisePendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) { exercisePendingDelete = nil }
-        } message: {
-            Text("Are you sure you want to delete this exercise?")
-        }
-    }
-}
-
 // MARK: - Edit Exercise Screen
 struct EditExerciseView: View {
     @Bindable var exercise: ExerciseDef
@@ -444,7 +293,9 @@ struct EditExerciseView: View {
                 Stepper(value: $exercise.numberOfSeries, in: 1...10) {
                     Text("\(exercise.numberOfSeries)")
                 }
-            } label: { Text("Number of series") }
+                // The stored property is still numberOfSeries — renaming it
+                // would break existing databases and exports for a word.
+            } label: { Text("Number of sets") }
 
             LabeledContent {
                 TextField("", value: $exercise.lowestWeight, format: .number)
@@ -470,6 +321,8 @@ struct EditExerciseView: View {
             // on the model so existing data and JSON exports keep working.
 
             MuscleGroupSection(exercise: exercise)
+
+            WorkoutMembershipSection(exercise: exercise)
         }
         .onChange(of: exercise.lowestWeight) { _, newValue in
             if newValue < 1 { exercise.lowestWeight = 1 }
@@ -1892,7 +1745,7 @@ struct SettingsView: View {
     context.insert(e2)
     try? context.save()
     store.reloadAll()
-    return NavigationStack { EditExercisesView() }
+    return NavigationStack { ExerciseLibraryView() }
         .environmentObject(store)
         .modelContainer(container)
 }

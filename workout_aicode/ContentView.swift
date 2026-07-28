@@ -14,6 +14,14 @@ struct ContentView: View {
     @State private var pendingNewWorkout: WorkoutDef? = nil
     @State private var pendingNewExercise: ExerciseDef? = nil
     @State private var path: [WorkoutDef] = []
+    @State private var askDefaults = false
+
+    /// Workouts that have been given a name. A half-created one (the row exists
+    /// the moment "new workout" is tapped) should not show on the start screen.
+    /// Also kept out of the view body: inline, the type-checker gave up on it.
+    private var namedWorkouts: [WorkoutDef] {
+        workouts.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
     @ObservedObject private var survey = SurveyScheduler.shared
     @Query(sort: [SortDescriptor(\WorkoutLog.date)]) private var allLogs: [WorkoutLog]
     @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
@@ -80,21 +88,10 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                     }
 
-                    if exercises.isEmpty {
-                        Button {
-                            let exercise = ExerciseDef(name: "")
-                            modelContext.insert(exercise)
-                            pendingNewExercise = exercise
-                        } label: {
-                            Text("new exercise").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                    } else {
-                        NavigationLink(destination: EditExercisesView()) {
-                            Text("edit exercises").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
+                    NavigationLink(destination: ExerciseLibraryView()) {
+                        Text("exercise library").frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.bordered)
                 }
 
                 if workouts.isEmpty {
@@ -103,7 +100,7 @@ struct ContentView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 8) {
-                            ForEach(workouts.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, id: \.self) { workout in
+                            ForEach(namedWorkouts, id: \.self) { workout in
                                 NavigationLink(value: workout) {
                                     Text(workout.name)
                                         .font(.headline)
@@ -142,7 +139,10 @@ struct ContentView: View {
         }
         // Presented here rather than by logs/stats itself — see that view.
         .sheet(isPresented: $survey.pending) { SurveyView() }
+        // Asked once, on a fresh install, before there is anything to set up.
+        .sheet(isPresented: $askDefaults) { ExerciseDefaultsView() }
         .task {
+            askDefaults = ExerciseDefaults.shouldAsk(existingExercises: exercises.count)
             survey.noteLaunch(earliestLogDate: allLogs.first?.date)
             uploadSharedDataIfConsented()
         }
@@ -174,7 +174,7 @@ struct ContentView: View {
             case "logs":     NavigationStack { LogsStatsView() }
             case "graphs":   NavigationStack { StrengthGraphsView() }
             case "progress": NavigationStack { StrengthProgressView() }
-            case "library":  NavigationStack { LibraryDemoHost() }
+            case "library":  NavigationStack { ExerciseLibraryView() }
             case "art":      NavigationStack { BodyArtProbe() }
             case "info":     NavigationStack { InfoView() }
             case "settings": NavigationStack { SettingsView() }

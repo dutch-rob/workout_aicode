@@ -145,6 +145,11 @@ struct MuscleBodyPicker: View {
     private static let frontLabels = split().front
     private static let backLabels = split().back
 
+    /// The same order the diagram uses, so the buttons-only layout reads the
+    /// same way: down the front, then down the back.
+    static var frontOrder: [MuscleGroup] { frontLabels }
+    static var backOrder: [MuscleGroup] { backLabels }
+
     // MARK: Figure
 
     /// "front ◀ / ▶ back", in the gap between the two halves.
@@ -165,16 +170,25 @@ struct MuscleBodyPicker: View {
     }
 
     private func caption(_ text: String, pointsLeft: Bool) -> some View {
-        VStack(spacing: 1) {
+        // Turned on its side so the word fits a narrow gap without widening it,
+        // at the same size as the group buttons.
+        HStack(spacing: 2) {
+            if pointsLeft { arrow(pointsLeft: true) }
             Text(text)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize()
-            Image(systemName: pointsLeft ? "arrowtriangle.left.fill"
-                                         : "arrowtriangle.right.fill")
-                .font(.system(size: 11, weight: .black))
-                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(-90))
+                .frame(width: 16, height: 44)
+            if !pointsLeft { arrow(pointsLeft: false) }
         }
+    }
+
+    private func arrow(pointsLeft: Bool) -> some View {
+        Image(systemName: pointsLeft ? "arrowtriangle.left.fill"
+                                     : "arrowtriangle.right.fill")
+            .font(.system(size: 12, weight: .black))
+            .foregroundStyle(.secondary)
     }
 
     private func figure(isBack: Bool, labels: [MuscleGroup]) -> some View {
@@ -193,8 +207,8 @@ struct MuscleBodyPicker: View {
                             .offsetBy(dx: art.minX, dy: art.minY)
                         context.fill(path, with: .color(Self.fill(for: entry.muscle,
                                                                   selected: selection)))
-                        context.stroke(path, with: .color(.primary.opacity(0.25)),
-                                       lineWidth: 0.4)
+                        context.stroke(path, with: .color(.primary.opacity(0.55)),
+                                       lineWidth: 0.6)
                     }
                 }
 
@@ -223,8 +237,8 @@ struct MuscleBodyPicker: View {
                             path.move(to: CGPoint(x: edgeX, y: edgeY))
                             path.addLine(to: target)
                         }
-                        .stroke(selection == group ? Color.blue : Color.secondary.opacity(0.35),
-                                lineWidth: selection == group ? 1.4 : 0.7)
+                        .stroke(selection == group ? Color.blue : Color.secondary.opacity(0.45),
+                                lineWidth: selection == group ? 2.2 : 0.8)
                     }
                 }
             }
@@ -235,7 +249,10 @@ struct MuscleBodyPicker: View {
     /// everything else — bone, tendon, outline, and the muscles outside our
     /// fifteen — goes grey, so what can be tapped is what stands out.
     private static func fill(for muscle: MuscleGroup?, selected: MuscleGroup?) -> Color {
-        guard let muscle else { return Color.secondary.opacity(0.22) }
+        // Bright enough to sit at the same weight as the muscles: the drawing
+        // should read as one body, with colour — not lightness — saying what is
+        // selectable.
+        guard let muscle else { return Color.secondary.opacity(0.42) }
         return muscle == selected
             ? Color.blue.opacity(0.80)
             : Color(red: 0.94, green: 0.56, blue: 0.47)

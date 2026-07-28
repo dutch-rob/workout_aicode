@@ -44,6 +44,10 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     /// shared data. Nil for exercises the user invented.
     var libraryKey: String? = nil
 
+    /// Starred by the user, to pull the handful they actually train to the top
+    /// of a long list.
+    var isFavourite: Bool = false
+
     var primaryMuscle: MuscleGroup? {
         get { primaryMuscleRaw.flatMap(MuscleGroup.init(rawValue:)) }
         set { primaryMuscleRaw = newValue?.rawValue }
@@ -63,7 +67,8 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
          movementType: MovementType = .none,
          primaryMuscle: MuscleGroup? = nil,
          secondaryMuscles: [MuscleGroup] = [],
-         libraryKey: String? = nil) {
+         libraryKey: String? = nil,
+         isFavourite: Bool = false) {
         let clampedNumberOfSeries = max(0, numberOfSeries)
         let clampedLowest = max(0, lowestWeight)
         let clampedHighest = max(clampedLowest, highestWeight)
@@ -79,11 +84,12 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         self.primaryMuscleRaw = primaryMuscle?.rawValue
         self.secondaryMuscleRaw = Array(secondaryMuscles.prefix(MuscleGroup.maximumSecondary)).map(\.rawValue)
         self.libraryKey = libraryKey
+        self.isFavourite = isFavourite
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement, movementType
-        case primaryMuscle, secondaryMuscles, libraryKey
+        case primaryMuscle, secondaryMuscles, libraryKey, isFavourite
     }
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -102,6 +108,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         let secondary = (try c.decodeIfPresent([String].self, forKey: .secondaryMuscles) ?? [])
             .compactMap(MuscleGroup.init(rawValue:))
         let libraryKey = try c.decodeIfPresent(String.self, forKey: .libraryKey)
+        let favourite = try c.decodeIfPresent(Bool.self, forKey: .isFavourite) ?? false
         self.init(id: id, name: name,
                   numberOfSeries: numberOfSeries,
                   lowestWeight: lowestWeight,
@@ -110,7 +117,8 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
                   movementType: movementType,
                   primaryMuscle: primary,
                   secondaryMuscles: secondary,
-                  libraryKey: libraryKey)
+                  libraryKey: libraryKey,
+                  isFavourite: favourite)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -124,6 +132,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         try c.encodeIfPresent(primaryMuscle?.rawValue, forKey: .primaryMuscle)
         try c.encode(secondaryMuscles.map(\.rawValue), forKey: .secondaryMuscles)
         try c.encodeIfPresent(libraryKey, forKey: .libraryKey)
+        try c.encode(isFavourite, forKey: .isFavourite)
     }
 }
 
@@ -298,6 +307,43 @@ enum WorkoutLogSchemaV2: VersionedSchema {
 enum WorkoutLogSchemaV3: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
     static var models: [any PersistentModel.Type] {
+        [WorkoutLogSchemaV3.ExerciseDef.self, WorkoutDef.self,
+         WorkoutLogSchemaV2.WorkoutLog.self]
+    }
+
+    /// ExerciseDef as of V3 — muscle groups, but no favourite flag. Frozen.
+    ///
+    /// The same rule as V1's copy, and worth restating because it caught me
+    /// twice: only the NEWEST schema may list the live class. When V3 and V4
+    /// both pointed at it, adding one field changed both of them at once, the
+    /// two versions described the same shape, and staged migration aborted with
+    /// no way to tell which one a store was at.
+    @Model
+    final class ExerciseDef {
+        var id: UUID = UUID()
+        var name: String = ""
+        var numberOfSeries: Int = 3
+        var lowestWeight: Int = 0
+        var highestWeight: Int = 200
+        var weightIncrement: Int = 5
+        var movementType: MovementType = MovementType.none
+        var primaryMuscleRaw: String? = nil
+        var secondaryMuscleRaw: [String] = []
+        var libraryKey: String? = nil
+
+        init(id: UUID = UUID(), name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+}
+
+// V4 adds the favourite flag to ExerciseDef. Additive and defaulted, like V3,
+// so the stage is lightweight — but it still has to exist, or the store stays
+// declared at V3 while the classes describe V4 and opening it fails.
+enum WorkoutLogSchemaV4: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(4, 0, 0) }
+    static var models: [any PersistentModel.Type] {
         [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self]
     }
 }
@@ -315,9 +361,16 @@ typealias WorkoutLog = WorkoutLogSchemaV2.WorkoutLog
 
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self, WorkoutLogSchemaV3.self]
+        [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self,
+         WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self]
     }
-    static var stages: [MigrationStage] { [v1toV2, v2toV3] }
+    static var stages: [MigrationStage] { [v1toV2, v2toV3, v3toV4] }
+
+    /// Additive only — see WorkoutLogSchemaV4.
+    static let v3toV4 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV3.self,
+        toVersion:   WorkoutLogSchemaV4.self
+    )
 
     /// Additive only — see WorkoutLogSchemaV3.
     static let v2toV3 = MigrationStage.lightweight(
