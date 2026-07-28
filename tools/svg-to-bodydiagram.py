@@ -51,10 +51,18 @@ GROUP_MAP = {
     "Biceps": "biceps",
     "Triceps": "triceps",
     "Forearms": "forearms",
+    "Forearms_front": "forearms",
+    "Forearms_back": "forearms",
     "Quads": "quads",
+    # The drawing covers the whole upper/lower leg so any part of the limb is
+    # clickable; the app's names for the groups are unchanged.
+    "Quads/ul": "quads",
     "Hamstrings": "hamstrings",
     "Glutes": "glutes",
     "Calves": "calves",
+    "Calves/ll": "calves",
+    "Calves/ll_front": "calves",
+    "Calves/ll_back": "calves",
     "Abs/Core": "absCore",
     "Lower Back": "lowerBack",
 }

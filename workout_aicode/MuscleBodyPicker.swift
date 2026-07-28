@@ -20,11 +20,15 @@ struct MuscleBodyPicker: View {
         VStack(spacing: 8) {
             HStack(alignment: .top, spacing: 0) {
                 labelColumn(Self.frontLabels, trailing: true)
-                captionedFigure(isBack: false, labels: Self.frontLabels)
-                captionedFigure(isBack: true, labels: Self.backLabels)
+                figure(isBack: false, labels: Self.frontLabels)
+                viewCaptions
+                figure(isBack: true, labels: Self.backLabels)
                 labelColumn(Self.backLabels, trailing: false)
             }
-            .frame(height: 318)
+            // Taller than it was: each half is narrow (about 0.28 as wide as it
+            // is high), so height — not width — is what limits how big the
+            // bodies can be drawn, and bigger bodies are easier to hit.
+            .frame(height: 360)
 
             Button {
                 selection = nil
@@ -66,9 +70,68 @@ struct MuscleBodyPicker: View {
             guard f > 0 || b > 0 else { continue }
             if f >= b { front.append(group) } else { back.append(group) }
         }
-        // Top to bottom, so connectors run roughly parallel rather than crossing.
-        return (front.sorted { (centre($0, .front)?.y ?? 0) < (centre($1, .front)?.y ?? 0) },
-                back.sorted { (centre($0, .back)?.y ?? 0) < (centre($1, .back)?.y ?? 0) })
+        return (ordered(front, .front, labelsOnLeft: true),
+                ordered(back, .back, labelsOnLeft: false))
+    }
+
+    /// Put the labels in the row order that leaves the fewest crossed
+    /// connectors.
+    ///
+    /// Sorting by the muscle's height gets close but not all the way: the
+    /// labels sit at evenly spaced rows while the muscles bunch up (three
+    /// shoulder groups within a few percent of each other), and two connectors
+    /// reaching across that bunch can still cross. So start from the height
+    /// order and then swap neighbouring labels for as long as swapping removes
+    /// a crossing — with at most eight labels a side this settles immediately.
+    private static func ordered(_ groups: [MuscleGroup], _ fig: FigureGeometry,
+                                labelsOnLeft: Bool) -> [MuscleGroup] {
+        var order = groups.sorted { (centre($0, fig)?.y ?? 0) < (centre($1, fig)?.y ?? 0) }
+        guard order.count > 2 else { return order }
+        let edgeX: CGFloat = labelsOnLeft ? -0.6 : 1.6
+
+        func target(_ g: MuscleGroup) -> CGPoint { centre(g, fig) ?? .zero }
+        func rowY(_ index: Int) -> CGFloat { CGFloat(index) / CGFloat(order.count - 1) }
+        func crosses(_ i: Int, _ j: Int, _ order: [MuscleGroup]) -> Bool {
+            segmentsCross(CGPoint(x: edgeX, y: rowY(i)), target(order[i]),
+                          CGPoint(x: edgeX, y: rowY(j)), target(order[j]))
+        }
+        func crossings(_ order: [MuscleGroup]) -> Int {
+            var n = 0
+            for i in 0..<order.count {
+                for j in (i + 1)..<order.count where crosses(i, j, order) { n += 1 }
+            }
+            return n
+        }
+
+        var best = crossings(order)
+        var improved = true
+        while improved && best > 0 {
+            improved = false
+            for i in 0..<(order.count - 1) {
+                var candidate = order
+                candidate.swapAt(i, i + 1)
+                let score = crossings(candidate)
+                if score < best {
+                    order = candidate
+                    best = score
+                    improved = true
+                }
+            }
+        }
+        return order
+    }
+
+    /// Standard orientation test for two line segments.
+    private static func segmentsCross(_ p1: CGPoint, _ p2: CGPoint,
+                                      _ p3: CGPoint, _ p4: CGPoint) -> Bool {
+        func side(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> Int {
+            let v = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+            if v > 1e-9 { return 1 }
+            if v < -1e-9 { return -1 }
+            return 0
+        }
+        return side(p1, p2, p3) != side(p1, p2, p4)
+            && side(p3, p4, p1) != side(p3, p4, p2)
     }
 
     /// Centre of a group on a figure, in 0…1 of that figure — where its
@@ -84,11 +147,32 @@ struct MuscleBodyPicker: View {
 
     // MARK: Figure
 
-    private func captionedFigure(isBack: Bool, labels: [MuscleGroup]) -> some View {
-        VStack(spacing: 2) {
-            figure(isBack: isBack, labels: labels)
-            Text(isBack ? "back" : "front")
+    /// "front ◀ / ▶ back", in the gap between the two halves.
+    ///
+    /// The captions used to sit under each figure, which cost height — the very
+    /// thing the bodies are short of — and left it ambiguous whether the two
+    /// halves were one body or two. In the gap, with an arrow into each half,
+    /// they say which is which and cost nothing: the halves are narrow enough
+    /// that there is width to spare.
+    private var viewCaptions: some View {
+        VStack(spacing: 10) {
+            Spacer(minLength: 0)
+            caption("front", pointsLeft: true)
+            caption("back", pointsLeft: false)
+            Spacer(minLength: 0)
+        }
+        .frame(width: 30)
+    }
+
+    private func caption(_ text: String, pointsLeft: Bool) -> some View {
+        VStack(spacing: 1) {
+            Text(text)
                 .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize()
+            Image(systemName: pointsLeft ? "arrowtriangle.left.fill"
+                                         : "arrowtriangle.right.fill")
+                .font(.system(size: 11, weight: .black))
                 .foregroundStyle(.secondary)
         }
     }
