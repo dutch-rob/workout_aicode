@@ -1637,6 +1637,16 @@ struct SettingsView: View {
             }
 
             Section {
+                NavigationLink {
+                    ExerciseDefaultsSettings()
+                } label: {
+                    Label("Numbers for a new exercise", systemImage: "slider.horizontal.3")
+                }
+            } footer: {
+                Text("The sets, weight range and increment each new exercise starts with. Exercises you already have are not changed.")
+            }
+
+            Section {
                 Picker(selection: $formulaRaw) {
                     ForEach(OneRMFormula.allCases) { f in
                         Text(f.label).tag(f.rawValue)

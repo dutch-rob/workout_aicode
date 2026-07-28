@@ -122,3 +122,47 @@ struct ExerciseDefaultsView: View {
         }
     }
 }
+
+/// The same numbers, reachable from settings afterwards — the first-run
+/// question promises as much, and a promise the settings screen does not keep
+/// is worse than not making it.
+struct ExerciseDefaultsSettings: View {
+    @AppStorage(ExerciseDefaultsKey.sets) private var sets = ExerciseDefaults.sets
+    @AppStorage(ExerciseDefaultsKey.lowest) private var lowest = ExerciseDefaults.lowest
+    @AppStorage(ExerciseDefaultsKey.highest) private var highest = ExerciseDefaults.highest
+    @AppStorage(ExerciseDefaultsKey.increment) private var increment = ExerciseDefaults.increment
+
+    var body: some View {
+        Form {
+            Section("Sets") {
+                Stepper(value: $sets, in: 1...10) {
+                    LabeledContent("Number of sets", value: "\(sets)")
+                }
+            }
+            Section {
+                LabeledContent("Lowest weight") {
+                    TextField("", value: $lowest, format: .number)
+                        .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                }
+                LabeledContent("Highest weight") {
+                    TextField("", value: $highest, format: .number)
+                        .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                }
+                LabeledContent("Weight increment") {
+                    TextField("", value: $increment, format: .number)
+                        .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                }
+            } header: {
+                Text("Weights")
+            } footer: {
+                Text("Only affects exercises you add from now on.")
+            }
+        }
+        .navigationTitle("new exercise numbers")
+        .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            if highest < lowest { highest = lowest }
+            if increment < 1 { increment = 1 }
+        }
+    }
+}
