@@ -17,33 +17,18 @@ struct MuscleBodyPicker: View {
     @Binding var selection: MuscleGroup?
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(alignment: .top, spacing: 0) {
-                labelColumn(Self.frontLabels, trailing: true)
-                figure(isBack: false, labels: Self.frontLabels)
-                viewCaptions
-                figure(isBack: true, labels: Self.backLabels)
-                labelColumn(Self.backLabels, trailing: false)
-            }
-            // Taller than it was: each half is narrow (about 0.28 as wide as it
-            // is high), so height — not width — is what limits how big the
-            // bodies can be drawn, and bigger bodies are easier to hit.
-            .frame(height: 360)
-
-            Button {
-                selection = nil
-            } label: {
-                Text("all muscle groups")
-                    .font(.subheadline)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(selection == nil
-                                               ? Color.blue
-                                               : Color.secondary.opacity(0.15)))
-                    .foregroundStyle(selection == nil ? Color.white : Color.primary)
-            }
-            .buttonStyle(.plain)
+        HStack(alignment: .top, spacing: 0) {
+            labelColumn(Self.frontLabels, trailing: true)
+            figure(isBack: false, labels: Self.frontLabels)
+            viewCaptions
+            figure(isBack: true, labels: Self.backLabels)
+            labelColumn(Self.backLabels, trailing: false)
         }
+        // Height is what limits these: each half is only about 0.28 as wide as
+        // it is high, so the taller the frame the bigger the bodies. The row of
+        // controls that used to sit above the picture now sits below it beside
+        // "all muscle groups", which paid for some of this.
+        .frame(height: 400)
     }
 
     // MARK: Which label goes on which side
@@ -152,36 +137,36 @@ struct MuscleBodyPicker: View {
 
     // MARK: Figure
 
-    /// "front ◀ / ▶ back", in the gap between the two halves.
+    /// Which half is which, in the gap between them.
     ///
-    /// The captions used to sit under each figure, which cost height — the very
-    /// thing the bodies are short of — and left it ambiguous whether the two
-    /// halves were one body or two. In the gap, with an arrow into each half,
-    /// they say which is which and cost nothing: the halves are narrow enough
-    /// that there is width to spare.
+    /// The arrow sits above "front" and below "back" rather than beside the
+    /// word: stacked, the pair is only as wide as the rotated text, which lets
+    /// the two halves sit closer together and the bodies grow.
     private var viewCaptions: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 14) {
             Spacer(minLength: 0)
-            caption("front", pointsLeft: true)
-            caption("back", pointsLeft: false)
+            VStack(spacing: 1) {
+                arrow(pointsLeft: true)
+                rotatedLabel("front")
+            }
+            VStack(spacing: 1) {
+                rotatedLabel("back")
+                arrow(pointsLeft: false)
+            }
             Spacer(minLength: 0)
         }
-        .frame(width: 30)
+        .frame(width: 18)
     }
 
-    private func caption(_ text: String, pointsLeft: Bool) -> some View {
-        // Turned on its side so the word fits a narrow gap without widening it,
-        // at the same size as the group buttons.
-        HStack(spacing: 2) {
-            if pointsLeft { arrow(pointsLeft: true) }
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize()
-                .rotationEffect(.degrees(-90))
-                .frame(width: 16, height: 44)
-            if !pointsLeft { arrow(pointsLeft: false) }
-        }
+    private func rotatedLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            // Same weight as the group buttons: these are part of the diagram's
+            // labelling, not a footnote about it.
+            .foregroundStyle(.primary)
+            .fixedSize()
+            .rotationEffect(.degrees(-90))
+            .frame(width: 16, height: 40)
     }
 
     private func arrow(pointsLeft: Bool) -> some View {
@@ -249,10 +234,11 @@ struct MuscleBodyPicker: View {
     /// everything else — bone, tendon, outline, and the muscles outside our
     /// fifteen — goes grey, so what can be tapped is what stands out.
     private static func fill(for muscle: MuscleGroup?, selected: MuscleGroup?) -> Color {
-        // Bright enough to sit at the same weight as the muscles: the drawing
-        // should read as one body, with colour — not lightness — saying what is
-        // selectable.
-        guard let muscle else { return Color.secondary.opacity(0.42) }
+        // A fixed mid grey rather than a semantic colour. `secondary` resolves
+        // dark on a dark background, which left these parts of the body far
+        // heavier than the muscles beside them; the drawing should read as one
+        // body, with colour — not lightness — saying what is selectable.
+        guard let muscle else { return Color(white: 0.72) }
         return muscle == selected
             ? Color.blue.opacity(0.80)
             : Color(red: 0.94, green: 0.56, blue: 0.47)

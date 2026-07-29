@@ -63,36 +63,13 @@ struct ExerciseLibraryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Button {
-                    let exercise = ExerciseDefaults.makeExercise(primary: filter)
-                    store.saveExercise(exercise)
-                    if let workout = context_.workout {
-                        workout.exerciseOrder.append(exercise.id)
-                    }
-                    pendingExercise = exercise
-                } label: {
-                    Text("new exercise").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    favouritesOnly.toggle()
-                } label: {
-                    Label(favouritesOnly ? "favourites" : "all",
-                          systemImage: favouritesOnly ? "star.fill" : "star")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 6)
-
             if style == .body {
                 MuscleBodyPicker(selection: $filter)
             } else {
                 MuscleButtonGrid(selection: $filter)
             }
+
+            controls
 
             List {
                 if !ownExercises.isEmpty {
@@ -121,19 +98,6 @@ struct ExerciseLibraryView: View {
         }
         .navigationTitle(context_.workout == nil ? "exercise library" : "select exercise")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                // A plain toggle, not a menu: there are two states, so one tap
-                // should switch them.
-                Button {
-                    pickerStyle = (style == .body ? MusclePickerStyle.buttons : .body).rawValue
-                } label: {
-                    Image(systemName: style.icon)
-                }
-                .accessibilityLabel(style == .body ? "Show buttons instead of the body"
-                                                   : "Show the body diagram")
-            }
-        }
         .navigationDestination(item: $pendingExercise) { exercise in
             EditExerciseView(exercise: exercise)
         }
@@ -152,6 +116,63 @@ struct ExerciseLibraryView: View {
             Text("This removes it from your list and from any workout that uses it. Logged sets are kept.")
         }
         .onAppear { store.reloadAll() }
+    }
+
+    /// One row of controls under the picker, with "all muscle groups" kept
+    /// near the middle so it stays where the eye last left it when the two
+    /// sides change width.
+    private var controls: some View {
+        HStack(spacing: 8) {
+            Button {
+                let exercise = ExerciseDefaults.makeExercise(primary: filter)
+                store.saveExercise(exercise)
+                if let workout = context_.workout {
+                    workout.exerciseOrder.append(exercise.id)
+                }
+                pendingExercise = exercise
+            } label: {
+                Text("new exercise").font(.subheadline).lineLimit(1)
+            }
+            .buttonStyle(.bordered)
+
+            Spacer(minLength: 0)
+
+            Button {
+                filter = nil
+            } label: {
+                // "all muscle groups" does not fit beside the other three
+                // controls on a phone — it came out as "all muscle gro…".
+                Text("all groups")
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Capsule().fill(filter == nil
+                                               ? Color.blue : Color.secondary.opacity(0.15)))
+                    .foregroundStyle(filter == nil ? Color.white : Color.primary)
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            Button { favouritesOnly.toggle() } label: {
+                Image(systemName: favouritesOnly ? "star.fill" : "star")
+                    .foregroundStyle(favouritesOnly ? .yellow : .secondary)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel(favouritesOnly ? "Showing favourites only" : "Show favourites only")
+
+            Button {
+                pickerStyle = (style == .body ? MusclePickerStyle.buttons : .body).rawValue
+            } label: {
+                Image(systemName: style.icon)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel(style == .body ? "Show buttons instead of the body"
+                                              : "Show the body diagram")
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
     }
 
     // MARK: Rows
@@ -312,38 +333,35 @@ struct MuscleButtonGrid: View {
     @Binding var selection: MuscleGroup?
 
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .top, spacing: 6) {
-                column(MuscleBodyPicker.frontOrder, caption: "front")
-                column(MuscleBodyPicker.backOrder, caption: "back")
-            }
-            Button {
-                selection = nil
-            } label: {
-                Text("all muscle groups")
-                    .font(.subheadline)
-                    .padding(.horizontal, 14).padding(.vertical, 6)
-                    .background(Capsule().fill(selection == nil
-                                               ? Color.blue : Color.secondary.opacity(0.15)))
-                    .foregroundStyle(selection == nil ? Color.white : Color.primary)
-            }
-            .buttonStyle(.plain)
+        HStack(alignment: .top, spacing: 6) {
+            column(MuscleBodyPicker.frontOrder, caption: "front")
+            column(MuscleBodyPicker.backOrder, caption: "back")
         }
         .padding(.horizontal)
-        .padding(.bottom, 8)
+        .padding(.vertical, 6)
     }
 
     /// One figure's groups across two columns, filled top-to-bottom then
     /// left-to-right so the order still reads like the body.
+    ///
+    /// The split is chosen so that side delts — which show on both figures —
+    /// starts the SECOND column, putting it beside the dividing line and next
+    /// to the other shoulder groups. For the front's seven that gives three
+    /// then four.
     private func column(_ groups: [MuscleGroup], caption: String) -> some View {
-        let half = (groups.count + 1) / 2
+        let split = splitIndex(groups)
         return VStack(spacing: 4) {
             Text(caption).font(.caption2).foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 4) {
-                subColumn(Array(groups.prefix(half)))
-                subColumn(Array(groups.dropFirst(half)))
+                subColumn(Array(groups.prefix(split)))
+                subColumn(Array(groups.dropFirst(split)))
             }
         }
+    }
+
+    private func splitIndex(_ groups: [MuscleGroup]) -> Int {
+        if let i = groups.firstIndex(of: .sideDelts), i > 0, i < groups.count { return i }
+        return (groups.count + 1) / 2
     }
 
     private func subColumn(_ groups: [MuscleGroup]) -> some View {
@@ -569,7 +587,7 @@ struct WorkoutMembershipSection: View {
         } header: {
             Text("In these workouts")
         } footer: {
-            Text("Tap to add this exercise to a workout or take it out. It is added at the end; use *reorder exercises* in the workout to move it.")
+            Text("Tap to add this exercise to a workout or take it out. It goes on the end; drag it by its handle in the workout to move it.")
         }
     }
 

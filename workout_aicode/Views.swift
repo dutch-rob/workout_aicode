@@ -155,139 +155,194 @@ struct EditWorkoutView: View {
     @Bindable var workout: WorkoutDef
     @State private var hasInserted = false
     @State private var pendingNewExercise: ExerciseDef? = nil
+    /// Name and exercise order on arrival, so "quit" can put them back.
+    @State private var original: (name: String, order: [UUID], isNew: Bool)? = nil
+    @State private var showLibrary = false
 
     private var isWorkoutValid: Bool {
         !workout.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Buttons row under title
-            HStack(spacing: 12) {
-                // Was "new exercise". The library now starts with plenty to
-                // choose from, so picking comes first and creating from scratch
-                // lives inside the library for the rarer case.
-                NavigationLink {
-                    ExerciseLibraryView(context_: .selecting(workout))
-                } label: {
-                    Text("select exercise").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-
-                if workout.exerciseOrder.count >= 2 {
-                    NavigationLink {
-                        ReorderExercisesView(workout: workout)
-                    } label: {
-                        Text("reorder exercises").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
+        Form {
+            Section(header: Text("Workout name")) {
+                TextField("Workout name", text: $workout.name)
+                if let clash = duplicateName {
+                    Text("You already have a workout called “\(clash)”. Two workouts with one name are impossible to tell apart in your logs.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
                 }
             }
 
-            Form {
-                Section(header: Text("Workout name")) {
-                    TextField("Workout name", text: $workout.name)
-                }
-                Section(header: Text("Exercises")) {
-                    ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
-                        let current = allExercises.first(where: { $0.id == workout.exerciseOrder[idx] })
-                        HStack(spacing: 12) {
-                            DeleteCircleButton { workout.exerciseOrder.remove(at: idx) }
-
-                            Menu {
-                                exerciseChoices { chosen in workout.exerciseOrder[idx] = chosen.id }
-                            } label: {
-                                HStack {
-                                    Text(current?.name ?? "Select exercise")
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+            Section {
+                ForEach(exercisesInWorkout, id: \.slot) { entry in
+                    HStack(spacing: 12) {
+                        // Tapping an exercise opens it. It used to open a menu
+                        // of every exercise grouped by muscle, which read as
+                        // neither "edit this" nor "swap this" — to replace one
+                        // now, remove it and add another.
+                        // A raw tap gesture, not a NavigationLink: the list is
+                        // in edit mode so the handles show, and edit mode
+                        // disables controls — a gesture still fires.
+                        Text(entry.exercise?.name ?? "(missing exercise)")
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let exercise = entry.exercise {
+                                    pendingNewExercise = exercise
                                 }
                             }
-                        }
                     }
-
                 }
+                .onMove { from, to in
+                    workout.exerciseOrder.move(fromOffsets: from, toOffset: to)
+                }
+                .onDelete { offsets in
+                    workout.exerciseOrder.remove(atOffsets: offsets)
+                }
+            } header: {
+                HStack {
+                    Text("Exercises")
+                    Spacer()
+                    // A tap gesture rather than a Button: edit mode is on for
+                    // the handles, and it disables controls — including one in
+                    // a section header — but a gesture still fires.
+                    Label("add exercise", systemImage: "plus")
+                        .font(.footnote)
+                        .foregroundStyle(Color.accentColor)
+                        .textCase(nil)
+                        .contentShape(Rectangle())
+                        .onTapGesture { showLibrary = true }
+                }
+            } footer: {
+                Text("Tap an exercise to edit it, drag the handle on the right to reorder, and use the red button to take it out of this workout.")
             }
         }
+        // Edit mode keeps every row's drag handle on screen, which is what
+        // replaced the separate reorder screen.
+        .environment(\.editMode, .constant(.active))
         .navigationTitle("edit workout")
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            // Same pair as the exercise screen, and for the same reason: a
+            // workout row exists from the moment "new workout" is tapped, so
+            // leaving without a name used to strand an invisible one in the
+            // database.
+            ToolbarItem(placement: .topBarLeading) {
+                Button("quit", role: .cancel) { revertAndLeave() }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("save") { dismiss() }
+                    .disabled(!canSave)
+                    .bold()
+            }
+        }
         .navigationDestination(item: $pendingNewExercise) { exercise in
             EditExerciseView(exercise: exercise)
         }
-        .toolbar { }
+        .navigationDestination(isPresented: $showLibrary) {
+            ExerciseLibraryView(context_: .selecting(workout))
+        }
+        .onAppear {
+            guard original == nil else { return }
+            original = (name: workout.name,
+                        order: workout.exerciseOrder,
+                        isNew: workout.name.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
     }
 
-    /// Exercise choices for the picker menus. Once muscle groups are in use the
-    /// list is grouped into submenus by primary muscle, which is how "filter by
-    /// primary muscle group" reads inside a menu — the alternative, one flat
-    /// list of everything the user owns, is what gets unwieldy.
-    @ViewBuilder
-    private func exerciseChoices(_ select: @escaping (ExerciseDef) -> Void) -> some View {
-        let grouped = Dictionary(grouping: allExercises.filter { $0.primaryMuscle != nil }) {
-            $0.primaryMuscle!
-        }
-        let ungrouped = allExercises.filter { $0.primaryMuscle == nil }
+    private var canSave: Bool {
+        !workout.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && duplicateName == nil
+    }
 
-        if grouped.isEmpty {
-            ForEach(allExercises) { choice in
-                Button(choice.name) { select(choice) }
-            }
-        } else {
-            ForEach(MuscleGroup.displayOrder.filter { grouped[$0] != nil }) { group in
-                Menu(group.label) {
-                    ForEach(grouped[group] ?? []) { choice in
-                        Button(choice.name) { select(choice) }
-                    }
-                }
-            }
-            if !ungrouped.isEmpty {
-                Menu("No muscle group set") {
-                    ForEach(ungrouped) { choice in
-                        Button(choice.name) { select(choice) }
-                    }
-                }
+    private func revertAndLeave() {
+        if let o = original {
+            if o.isNew {
+                store.deleteWorkout(workout)
+            } else {
+                workout.name = o.name
+                workout.exerciseOrder = o.order
+                try? context.save()
             }
         }
+        dismiss()
+    }
+
+    /// One row per slot in the workout. Keyed by position, not by exercise, so
+    /// the same exercise appearing twice still moves independently.
+    private var exercisesInWorkout: [(slot: Int, exercise: ExerciseDef?)] {
+        workout.exerciseOrder.enumerated().map { index, id in
+            (slot: index, exercise: allExercises.first { $0.id == id })
+        }
+    }
+
+    /// Another workout with this name, if any.
+    private var duplicateName: String? {
+        let mine = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !mine.isEmpty else { return nil }
+        return allWorkouts.first {
+            $0.id != workout.id && $0.name.lowercased() == mine.lowercased()
+        }?.name
     }
 
     @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var allExercises: [ExerciseDef]
+    @Query private var allWorkouts: [WorkoutDef]
 }
 
-// MARK: - Reorder Exercises Screen
-struct ReorderExercisesView: View {
-    @EnvironmentObject private var store: AppStore
-    @Bindable var workout: WorkoutDef
-    @State private var editMode: EditMode = .active
-
-    var body: some View {
-        List {
-            ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
-                let name = exerciseName(for: workout.exerciseOrder[idx])
-                Text(name)
-            }
-            .onMove { indices, newOffset in
-                var order = workout.exerciseOrder
-                order.move(fromOffsets: indices, toOffset: newOffset)
-                workout.exerciseOrder = order
-            }
-        }
-        .environment(\.editMode, $editMode)
-        .navigationTitle("reorder")
-    }
-
-    @Query private var allExercises: [ExerciseDef]
-    private func exerciseName(for id: UUID) -> String {
-        return allExercises.name(for: id)
-    }
-}
-
-
-// MARK: - Edit Exercises Screen
 // MARK: - Edit Exercise Screen
 struct EditExerciseView: View {
     @Bindable var exercise: ExerciseDef
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @EnvironmentObject private var store: AppStore
+    @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var allExercises: [ExerciseDef]
+
+    /// Everything as it was on arrival, so "quit" can put it back. SwiftData
+    /// edits the live object as you type — there is no draft copy to throw
+    /// away — so the old values are kept here instead.
+    @State private var original: Snapshot? = nil
+
+    private struct Snapshot {
+        let name: String
+        let sets: Int
+        let lowest: Int
+        let highest: Int
+        let increment: Int
+        let primary: MuscleGroup?
+        let secondary: [MuscleGroup]
+        /// True when the exercise was created just before this screen opened,
+        /// in which case quitting should remove it rather than restore it.
+        let isNew: Bool
+    }
+
+    private var trimmedName: String {
+        exercise.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Another exercise already using this name.
+    private var duplicateName: String? {
+        guard !trimmedName.isEmpty else { return nil }
+        return allExercises.first {
+            $0.id != exercise.id && $0.name.lowercased() == trimmedName.lowercased()
+        }?.name
+    }
+
+    private var canSave: Bool { !trimmedName.isEmpty && duplicateName == nil }
 
     var body: some View {
         Form {
             TextField("Exercise name", text: $exercise.name)
+            if let clash = duplicateName {
+                Text("You already have an exercise called “\(clash)”. Give this one a different name — two exercises with the same name cannot be told apart in your logs or graphs.")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            } else if trimmedName.isEmpty {
+                Text("An exercise needs a name before it can be saved.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             LabeledContent {
                 Stepper(value: $exercise.numberOfSeries, in: 1...10) {
@@ -336,6 +391,51 @@ struct EditExerciseView: View {
             if newValue < 1 { exercise.weightIncrement = 1 }
         }
         .navigationTitle("edit exercise")
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            // Replaces the back chevron. Leaving by the chevron used to save
+            // whatever was on screen, including a nameless exercise that then
+            // sat in the list as "(unnamed)".
+            ToolbarItem(placement: .topBarLeading) {
+                Button("quit", role: .cancel) { revertAndLeave() }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("save") { dismiss() }
+                    .disabled(!canSave)
+                    .bold()
+            }
+        }
+        .onAppear {
+            guard original == nil else { return }
+            original = Snapshot(name: exercise.name,
+                                sets: exercise.numberOfSeries,
+                                lowest: exercise.lowestWeight,
+                                highest: exercise.highestWeight,
+                                increment: exercise.weightIncrement,
+                                primary: exercise.primaryMuscle,
+                                secondary: exercise.secondaryMuscles,
+                                isNew: exercise.name.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+    }
+
+    /// Undo everything done on this screen, then leave.
+    private func revertAndLeave() {
+        if let o = original {
+            if o.isNew {
+                // Created for this screen and never named: it should not linger.
+                store.deleteExercise(exercise)
+            } else {
+                exercise.name = o.name
+                exercise.numberOfSeries = o.sets
+                exercise.lowestWeight = o.lowest
+                exercise.highestWeight = o.highest
+                exercise.weightIncrement = o.increment
+                exercise.primaryMuscle = o.primary
+                exercise.secondaryMuscles = o.secondary
+                try? context.save()
+            }
+        }
+        dismiss()
     }
 }
 
