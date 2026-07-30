@@ -329,7 +329,12 @@ struct EditExerciseView: View {
         }?.name
     }
 
-    private var canSave: Bool { !trimmedName.isEmpty && duplicateName == nil }
+    /// A muscle group is required as well as a name: without one the exercise
+    /// cannot be found by the muscle-group filter, is left out of any grouping
+    /// by muscle, and would be a blank in shared data.
+    private var canSave: Bool {
+        !trimmedName.isEmpty && duplicateName == nil && exercise.primaryMuscle != nil
+    }
 
     var body: some View {
         Form {
@@ -340,6 +345,10 @@ struct EditExerciseView: View {
                     .foregroundStyle(.red)
             } else if trimmedName.isEmpty {
                 Text("An exercise needs a name before it can be saved.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if exercise.primaryMuscle == nil {
+                Text("Choose a primary muscle group below before saving.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

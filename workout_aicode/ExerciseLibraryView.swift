@@ -344,24 +344,31 @@ struct MuscleButtonGrid: View {
     /// One figure's groups across two columns, filled top-to-bottom then
     /// left-to-right so the order still reads like the body.
     ///
-    /// The split is chosen so that side delts — which show on both figures —
-    /// starts the SECOND column, putting it beside the dividing line and next
-    /// to the other shoulder groups. For the front's seven that gives three
-    /// then four.
+    /// Side delts is lifted out and put at the HEAD of the second column: it
+    /// shows on both figures, so sitting beside the dividing line keeps it
+    /// near its neighbours on either side. The front's seven then read three
+    /// and four rather than four and three.
     private func column(_ groups: [MuscleGroup], caption: String) -> some View {
-        let split = splitIndex(groups)
+        let (first, second) = columns(groups)
         return VStack(spacing: 4) {
             Text(caption).font(.caption2).foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 4) {
-                subColumn(Array(groups.prefix(split)))
-                subColumn(Array(groups.dropFirst(split)))
+                subColumn(first)
+                subColumn(second)
             }
         }
     }
 
-    private func splitIndex(_ groups: [MuscleGroup]) -> Int {
-        if let i = groups.firstIndex(of: .sideDelts), i > 0, i < groups.count { return i }
-        return (groups.count + 1) / 2
+    private func columns(_ groups: [MuscleGroup]) -> ([MuscleGroup], [MuscleGroup]) {
+        guard groups.contains(.sideDelts) else {
+            let half = (groups.count + 1) / 2
+            return (Array(groups.prefix(half)), Array(groups.dropFirst(half)))
+        }
+        // An earlier attempt only moved side delts when it was NOT already
+        // first — which is precisely where it always was, so it never moved.
+        let rest = groups.filter { $0 != .sideDelts }
+        let half = rest.count / 2
+        return (Array(rest.prefix(half)), [.sideDelts] + Array(rest.dropFirst(half)))
     }
 
     private func subColumn(_ groups: [MuscleGroup]) -> some View {
