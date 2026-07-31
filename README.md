@@ -17,11 +17,12 @@ I made this app for myself because I wanted logging to be quicker than in the ap
 - [The Apple Watch app](#the-apple-watch-app) — logging at the machine
 - [Handing a workout over](#handing-a-workout-over) — moving between iPhone and Watch
 - [Apple Health](#apple-health) — optional, off by default
-- [Editing workouts](#editing-workouts) — order, adding and removing exercises
-- [Editing exercises](#editing-exercises) — sets, weight range, increments
+- [Editing workouts](#editing-workouts) — adding, ordering and removing exercises
+- [The exercise library](#the-exercise-library) — finding exercises by muscle group
+- [Editing an exercise](#editing-an-exercise) — sets, weight range, muscle groups
 - [Your logs and statistics](#your-logs-and-statistics) — the four tabs
 - [How the strength numbers work](#how-the-strength-numbers-work) — one-rep max, hard sets, trend
-- [Exercise library and muscle groups](#exercise-library-and-muscle-groups) — picking exercises, filtering, duplicating
+- [Muscle groups](#muscle-groups) — the body picture and the fifteen groups
 - [Settings](#settings) — sharing between devices, Health, statistics, deleting data
 - [Your data and privacy](#your-data-and-privacy) — what leaves your device
 - [Notes and Feedback](#notes-and-feedback) — and the open source
@@ -29,7 +30,9 @@ I made this app for myself because I wanted logging to be quicker than in the ap
 ## Getting started
 When you open the app for the first time there are no workouts or exercises yet: you define them yourself.
 
-Start by tapping **new workout**. This opens the *edit workout* screen. Give the workout a name, then — since you have no exercises yet — tap **new exercise**. On the *edit exercise* screen you set the number of sets, the lowest and the highest weight you use for that exercise, and the increment between the weights that appear on the wheel. Use the back button to return to the workout and add more exercises. When you are done, go back to the start screen: your workout is listed there, and tapping it starts logging.
+The first time you open the app it asks for your usual numbers — how many sets you normally do, the lowest and highest weight you use, and the step between weights on the wheel. Every exercise you add starts from those, and you can change any of them later, per exercise or for all new ones in Settings.
+
+Then tap **new workout** and give it a name. Tap **add exercise** to open the exercise library: pick a ready-made exercise, or tap **new exercise** to describe your own. Add as many as you like, then **save**. Back on the start screen your workout is listed, and tapping it starts logging.
 
 ## Logging a workout
 Tap a workout on the start screen. The first exercise appears with a row of wheels for each set: the top row is the weights, the bottom row the repetitions. If you have logged this exercise before, the wheels start at the numbers you logged last time, so you usually only need to adjust what changed.
@@ -62,18 +65,32 @@ Only the workout itself is recorded: when it started, when it ended, and therefo
 A workout is recorded when you end it, either with **log, end** or with **quit**. If you forget to end one, it is closed automatically after an hour without activity and recorded as having ended at your last logged set, so a forgotten workout does not turn into an eight-hour one.
 
 ## Editing workouts
-Once you have at least one workout and one exercise, the start screen changes: **new workout** becomes **edit workouts** and **new exercise** becomes **edit exercises**.
+Once you have a workout, **new workout** on the start screen becomes **edit workouts**. Beside it, **exercise library** is where all your exercises live.
 
-**edit workouts** lists your workouts. Tap one to change the exercises in it. There you can define a new exercise, or add an existing one from the list of all your exercises. **reorder exercises** lets you drag exercises into the order you want them during the workout, using the handle on the right. The red icon to the left of an exercise removes it from this workout — the exercise itself stays in your list of all exercises.
+**edit workouts** lists your workouts. Tap one to change it. On the *edit workout* screen you can rename it, and:
 
-Back in *edit workouts* you can likewise reorder your workouts, and remove one with the red icon.
+   - **add exercise** — opens the library to pick one, or make a new one
+   - tap an exercise — opens it, to change its sets, weights or muscle groups
+   - drag the handle on the right — moves an exercise up or down in the workout
+   - the red button on the left — takes an exercise out of this workout; the exercise itself stays in your library
 
-## Editing exercises
-**edit exercises** lists every exercise you have made, whether you created it here, took it from the library, or created it while building a workout. Tap one to change its name, its number of sets, the lowest weight, highest weight and increment that determine the numbers on its wheel, and the muscle groups it works.
+**quit** leaves without keeping anything you changed on that screen, and **save** keeps it. A workout needs a name before it can be saved, and the name has to be one you are not already using: two workouts with the same name cannot be told apart in your logs.
 
-**from library** adds one of the ready-made exercises, and once your exercises have muscle groups you can filter the list by muscle group to find one quickly. Swiping an exercise to the left offers **Duplicate**, for a variant that keeps the original's settings. See [Exercise library and muscle groups](#exercise-library-and-muscle-groups).
+Back in *edit workouts* you can likewise reorder your workouts and remove one with the red icon.
 
-You can also delete an exercise here. Deleting it removes it from your list *and* from any workouts that used it.
+## The exercise library
+**exercise library** holds every exercise: the ones you have made and the ready-made ones you have not taken yet, together in one list.
+
+At the top is a picture of the front and back of a body. Tap a muscle on it — or one of the labels beside it — to narrow the list to exercises for that muscle group. **all groups** brings everything back. The button on the right of that row swaps the picture for plain buttons if you prefer, and the star beside it narrows the list to your favourites.
+
+In the list, a **star** marks an exercise as a favourite, which also floats it to the top. A tick on the right means the exercise is in one of your workouts. Tapping one of your own exercises opens it; tapping a ready-made one copies it into your exercises, with its muscle groups already filled in. Swiping an exercise to the left offers **Duplicate**, for a variant that keeps the original's settings, and **Delete**.
+
+Deleting an exercise removes it from your list *and* from any workout that used it. Sets you have already logged are kept.
+
+## Editing an exercise
+On the *edit exercise* screen you set the name, the number of sets, the lowest weight, the highest weight and the increment that determine the numbers on its wheel, and the muscle groups it works. Underneath, **In these workouts** shows which workouts contain it, and you can add or remove it from any of them right there — the same relationship, editable from either end.
+
+An exercise needs a name and a primary muscle group before it can be saved, and the name has to be one you are not already using. Without a muscle group an exercise cannot be found on the body picture or grouped with anything else. **quit** leaves without keeping your changes; on an exercise you have only just created, it removes it again rather than leaving a nameless one behind.
 
 ## Your logs and statistics
 The **logs/stats** button opens four tabs.
@@ -116,17 +133,18 @@ The dots on a graph can be averaged over several workouts to make the pattern ea
 
 Two cautions. These are estimates from your own logged numbers, not measurements: a bad night's sleep shows up as lost strength. And a trend needs a run of workouts before it means much — with 8 workouts a single unusual day still moves it.
 
-## Exercise library and muscle groups
-An exercise can record which muscles it works: one **primary muscle group** and up to four **secondary** ones, from a fixed list of fifteen. This is what lets the app group your training by muscle group rather than by exercise name, and it is what the individual advice being considered would be built on.
+## Muscle groups
+An exercise records which muscles it works: one **primary muscle group** and up to four **secondary** ones, from a fixed list of fifteen. The primary group is required, because it is what the body picture and the filters go by, and what lets the app group your training by muscle rather than by exercise name.
 
-The app comes with a **library** of common exercises, each already filled in with its muscle groups and sensible starting values (3 sets, 0–200, steps of 5). In *edit exercises*, **from library** opens it; filter by muscle group to narrow the list, and tap one to copy it into your own exercises, where you can rename it and change anything you like. Nothing is added to your list until you pick it.
+The body picture in the library is an anatomical drawing with each of those fifteen groups marked on it. Tapping a muscle selects it; tapping it again clears the selection. Where two groups overlap — the traps lie over the upper back, the deltoid heads run into one another — the smaller one takes the tap, since the larger has plenty of clear area elsewhere. Muscles that show from both sides, like the traps and the side delts, can be tapped on either figure.
 
-You can also **duplicate** one of your own exercises — swipe left on it in *edit exercises*. A copy takes the original's sets, weight range and muscle groups, and you must give it a name you are not already using, so the two never become impossible to tell apart in your logs.
+The **ready-made exercises** cover every primary muscle group and come already filled in, so most people never need to describe an exercise from scratch. Taking one copies it into your own exercises, where you can rename it and change anything you like.
 
 ## Settings
 The settings screen has:
    - **Share data among your iPhones/iPads** — keeps your workouts, exercises and logs in step across your devices through your own iCloud account. Off by default.
    - **Save workouts to Apple Health** — see [Apple Health](#apple-health) above. Off by default.
+   - **Numbers for a new exercise** — the sets, weight range and increment each new exercise starts with. Exercises you already have are not changed.
    - **One-rep max formula** — which of the three formulas the statistics use. Epley by default.
    - **Workouts in the trend** — how many recent workouts the trend line uses, 16 by default and never fewer than 8.
    - **Averaging in graphs** — smooths the dots over this many workouts, 3 by default; set it to off to see every workout as logged.
