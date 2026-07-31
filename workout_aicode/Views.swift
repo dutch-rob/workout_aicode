@@ -1729,7 +1729,11 @@ struct SettingsView: View {
                     Label("Share data among your iPhones/iPads", systemImage: "icloud")
                 }
             } footer: {
-                Text("Syncs your workouts, exercises, and logs across all your iPhones and iPads signed into the same iCloud account and that have this option turned on. Changes take effect immediately.")
+                if let problem = setup.syncFailureMessage {
+                    Text(problem).foregroundStyle(.red)
+                } else {
+                    Text("Syncs your workouts, exercises, and logs across all your iPhones and iPads signed into the same iCloud account and that have this option turned on. Changes take effect immediately.")
+                }
             }
 
             Section {

@@ -70,17 +70,44 @@ final class AppSetup: ObservableObject {
 
     // MARK: - Toggle sync (migrate data between stores)
 
+    /// Guards against the toggle's onChange firing again while a switch is
+    /// still in progress.
+    private var isReconfiguring = false
+
+    /// Set when iCloud could not be turned on, for Settings to explain.
+    @Published var syncFailureMessage: String?
+
     func reconfigure(syncEnabled: Bool) {
+        guard !isReconfiguring else { return }
+        isReconfiguring = true
+        defer { isReconfiguring = false }
+
         let snap = Self.snapshot(context: container.mainContext)
-        guard let (newContainer, newStore) = Self.tryLoad(syncEnabled: syncEnabled) else {
-            // Failed (e.g. CloudKit unavailable, already retried local).
-            // Keep the current container; the toggle will revert via @AppStorage.
+
+        if let (newContainer, newStore) = Self.tryLoad(syncEnabled: syncEnabled) {
+            Self.mergeSnapshot(snap, into: newContainer.mainContext)
+            container    = newContainer
+            store        = newStore
+            containerKey = UUID()
+            syncFailureMessage = nil
             return
         }
-        Self.mergeSnapshot(snap, into: newContainer.mainContext)
-        container    = newContainer
-        store        = newStore
-        containerKey = UUID()
+
+        // Could not open the requested store. Do NOT simply keep the old
+        // container: a failed load can invalidate the model objects the
+        // current context already handed to the views, and reading one of
+        // those is a hard crash. Rebuild a known-good local container and give
+        // the views a new identity so they let go of the old objects.
+        UserDefaults.standard.set(false, forKey: "iCloudSyncEnabled")
+        if let (fallback, fallbackStore) = Self.tryLoad(syncEnabled: false) {
+            Self.mergeSnapshot(snap, into: fallback.mainContext)
+            container    = fallback
+            store        = fallbackStore
+            containerKey = UUID()
+        }
+        syncFailureMessage = syncEnabled
+            ? "iCloud sharing could not be turned on: this device's iCloud copy was written by a version of the app that cannot be read any more. Your data on this device is unaffected."
+            : nil
     }
 
     // MARK: - Delete all data (local + CloudKit)
@@ -185,13 +212,21 @@ final class AppSetup: ObservableObject {
             .appendingPathComponent("local_only.sqlite")
     }()
 
-    /// Attempt a normal load (with migration plan). Returns nil on any failure.
-    /// If iCloud sync fails it automatically falls back to local-only.
+    /// Open the store for the requested mode. Returns nil if it cannot be
+    /// opened at all.
+    ///
+    /// No side effects: an earlier version wrote `iCloudSyncEnabled` here when
+    /// iCloud failed, and since that key drives the Settings toggle it fired
+    /// the toggle's onChange again — reconfigure ran re-entrantly, swapping
+    /// containers underneath itself, and the objects the views were holding
+    /// were destroyed mid-flight. Deciding what to do about a failure belongs
+    /// to the caller.
     private static func tryLoad(syncEnabled: Bool) -> (ModelContainer, AppStore)? {
+        let config: ModelConfiguration = syncEnabled
+            ? ModelConfiguration(cloudKitDatabase: .automatic)
+            : ModelConfiguration(url: localStoreURL, cloudKitDatabase: .none)
+
         do {
-            let config: ModelConfiguration = syncEnabled
-                ? ModelConfiguration(cloudKitDatabase: .automatic)
-                : ModelConfiguration(url: localStoreURL, cloudKitDatabase: .none)
             let c = try ModelContainer(
                 for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
                 migrationPlan: WorkoutMigrationPlan.self,
@@ -199,11 +234,26 @@ final class AppSetup: ObservableObject {
             )
             return (c, AppStore(context: c.mainContext))
         } catch {
-            if syncEnabled {
-                UserDefaults.standard.set(false, forKey: "iCloudSyncEnabled")
-                return tryLoad(syncEnabled: false)
-            }
-            print("[ModelContainer] normal load failed: \(error)")
+            print("[ModelContainer] staged load failed (sync=\(syncEnabled)): \(error)")
+        }
+
+        // Second chance, without the migration plan.
+        //
+        // Staged migration refuses a store whose recorded version is not one of
+        // the plan's — "Cannot use staged migration with an unknown model
+        // version" — which is what an iCloud store written by an older build
+        // reports. Every change since V2 is additive, so SwiftData's own
+        // inference can open those; this is strictly more forgiving than the
+        // plan, not less.
+        do {
+            let c = try ModelContainer(
+                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+                configurations: config
+            )
+            print("[ModelContainer] opened without the migration plan (sync=\(syncEnabled))")
+            return (c, AppStore(context: c.mainContext))
+        } catch {
+            print("[ModelContainer] inferred load failed too (sync=\(syncEnabled)): \(error)")
             return nil
         }
     }
