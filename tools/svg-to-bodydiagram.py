@@ -28,6 +28,13 @@ import sys
 import xml.etree.ElementTree as ET
 
 SVG = "{http://www.w3.org/2000/svg}"
+# Everything that puts ink on the page, and everything that legitimately does
+# not. Anything in neither list is reported, so a shape can never again be
+# dropped without saying so.
+DRAWABLE = {"path", "ellipse", "circle", "rect", "line", "polyline", "polygon"}
+IGNORED = {"svg", "g", "defs", "metadata", "namedview", "RDF", "Work", "format",
+           "type", "title", "desc", "linearGradient", "radialGradient", "stop",
+           "clipPath", "path-effect", "use", "style", "sodipodi", "grid"}
 INK = "{http://www.inkscape.org/namespaces/inkscape}"
 NUM = re.compile(r'[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?')
 TOKEN = re.compile(r'([MmLlHhVvCcSsQqTtAaZz])|([-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?)')
@@ -100,6 +107,81 @@ def compose(m, n):
 def apply(m, x, y):
     a, b, c, d, e, f = m
     return (a * x + c * y + e, b * x + d * y + f)
+
+
+# --------------------------------------------------------- primitive shapes
+
+# Circles, ellipses and rectangles drawn in Inkscape are NOT <path> elements,
+# and an earlier version of this script quietly ignored them — six ellipses
+# added to fill gaps in the body simply never reached the app. Anything
+# drawable is converted here, and anything still unrecognised is reported
+# rather than dropped.
+
+KAPPA = 0.5522847498307936      # circular arc as a cubic, standard constant
+
+
+def ellipse_segments(cx, cy, rx, ry):
+    kx, ky = KAPPA * rx, KAPPA * ry
+    return [
+        ('M', [cx + rx, cy]),
+        ('C', [cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry]),
+        ('C', [cx - kx, cy + ry, cx - rx, cy + ky, cx - rx, cy]),
+        ('C', [cx - rx, cy - ky, cx - kx, cy - ry, cx, cy - ry]),
+        ('C', [cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy]),
+        ('Z', []),
+    ]
+
+
+def rect_segments(x, y, w, h, rx, ry):
+    if rx <= 0 and ry <= 0:
+        return [('M', [x, y]), ('L', [x + w, y]), ('L', [x + w, y + h]),
+                ('L', [x, y + h]), ('Z', [])]
+    rx = min(rx or ry, w / 2)
+    ry = min(ry or rx, h / 2)
+    kx, ky = KAPPA * rx, KAPPA * ry
+    return [
+        ('M', [x + rx, y]),
+        ('L', [x + w - rx, y]),
+        ('C', [x + w - rx + kx, y, x + w, y + ry - ky, x + w, y + ry]),
+        ('L', [x + w, y + h - ry]),
+        ('C', [x + w, y + h - ry + ky, x + w - rx + kx, y + h, x + w - rx, y + h]),
+        ('L', [x + rx, y + h]),
+        ('C', [x + rx - kx, y + h, x, y + h - ry + ky, x, y + h - ry]),
+        ('L', [x, y + ry]),
+        ('C', [x, y + ry - ky, x + rx - kx, y, x + rx, y]),
+        ('Z', []),
+    ]
+
+
+def shape_segments(el):
+    """Absolute segments for any drawable element, or None if it is not one."""
+    def f(name, default=0.0):
+        try:
+            return float(el.get(name, default))
+        except (TypeError, ValueError):
+            return default
+
+    tag = el.tag.replace(SVG, "")
+    if tag == "path":
+        return to_absolute(el.get("d")) if el.get("d") else None
+    if tag == "ellipse":
+        return ellipse_segments(f("cx"), f("cy"), f("rx"), f("ry"))
+    if tag == "circle":
+        r = f("r")
+        return ellipse_segments(f("cx"), f("cy"), r, r)
+    if tag == "rect":
+        return rect_segments(f("x"), f("y"), f("width"), f("height"), f("rx"), f("ry"))
+    if tag in ("line", "polyline", "polygon"):
+        pts = [float(v) for v in NUM.findall(el.get("points", "") or "")]
+        if tag == "line":
+            return [('M', [f("x1"), f("y1")]), ('L', [f("x2"), f("y2")])]
+        if len(pts) < 4:
+            return None
+        segs = [('M', pts[0:2])] + [('L', pts[i:i + 2]) for i in range(2, len(pts) - 1, 2)]
+        if tag == "polygon":
+            segs.append(('Z', []))
+        return segs
+    return None
 
 
 # ------------------------------------------------------------------- arcs
@@ -283,12 +365,22 @@ def collect(el, matrix, group, out):
     if label in GROUP_MAP:
         group = GROUP_MAP[label]
 
-    if el.tag == SVG + "path" and el.get("d"):
-        segs = to_absolute(el.get("d"))
-        segs = [(c, [v for j in range(0, len(vals), 2)
-                     for v in apply(matrix, vals[j], vals[j + 1])])
-                for c, vals in segs]
-        out.append({"group": group, "segments": segs})
+    # Local name: metadata elements come from other namespaces, and comparing
+    # the full "{uri}name" would report every one of them as a mystery.
+    tag = el.tag.rsplit("}", 1)[-1]
+    if tag in DRAWABLE:
+        segs = shape_segments(el)
+        if segs is None:
+            print(f"  ! skipped a <{tag}> this script cannot read "
+                  f"(id={el.get('id')})", file=sys.stderr)
+        else:
+            segs = [(c, [v for j in range(0, len(vals), 2)
+                         for v in apply(matrix, vals[j], vals[j + 1])])
+                    for c, vals in segs]
+            out.append({"group": group, "segments": segs})
+    elif tag not in IGNORED:
+        print(f"  ! ignoring <{tag}> (id={el.get('id')}) — nothing is drawn for it",
+              file=sys.stderr)
     for child in el:
         collect(child, matrix, group, out)
 
