@@ -29,3 +29,8 @@ The options in the settings screen that affect data leaving your device:
    - **Save workouts to Apple Health** — see [Apple Health](#apple-health) above. Off by default.
    - **Share anonymous data with the developer** — off by default, see above.
    - **Delete all my data** — removes everything this app has stored, and takes back anything you shared anonymously from the analytics data set. With iCloud sharing on, it also removes it from your other devices.
+
+## Notes and Feedback
+1. This app is free and open source. The source is on GitHub:
+   https://github.com/dutch-rob/workout_aicode
+2. Feedback and questions are welcome in an App Store review or on GitHub
