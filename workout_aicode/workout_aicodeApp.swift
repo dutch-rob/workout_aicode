@@ -77,10 +77,6 @@ final class AppSetup: ObservableObject {
     /// Set when iCloud could not be turned on, for Settings to explain.
     @Published var syncFailureMessage: String?
 
-    /// True while the store is being swapped. The scene shows a plain screen
-    /// during it — see reconfigure.
-    @Published private(set) var isSwitching = false
-
     func reconfigure(syncEnabled: Bool) {
         guard !isReconfiguring else { return }
         isReconfiguring = true
@@ -88,21 +84,16 @@ final class AppSetup: ObservableObject {
         // Read the old store while it is still valid and the views are still up.
         let snap = Self.snapshot(context: container.mainContext)
 
-        // Take the UI down to a plain screen BEFORE swapping.
+        // On the next turn of the runloop, so the update that set the toggle
+        // has finished before the store underneath it changes.
         //
-        // Replacing the container invalidates every model object the old one
-        // handed out, and the live view tree is full of them — @Query results,
-        // the navigation path, the objects each row is drawn from. Swapping
-        // underneath all that crashed on the next read of any one of them, in
-        // both directions. One turn of the runloop showing a view that holds no
-        // model objects lets SwiftUI let go of them first.
-        isSwitching = true
-
+        // Swapping used to crash because SwiftUI hashes whatever identifies a
+        // row or a navigation entry, and those were model objects — destroyed
+        // by the swap. That is fixed at the source (ContentView identifies
+        // everything by UUID), so the tree can stay up and the user stays on
+        // the screen they were on.
         DispatchQueue.main.async { [self] in
-            defer {
-                isSwitching = false
-                isReconfiguring = false
-            }
+            defer { isReconfiguring = false }
 
             if let (newContainer, newStore) = Self.tryLoad(syncEnabled: syncEnabled) {
                 Self.mergeSnapshot(snap, into: newContainer.mainContext)
@@ -430,9 +421,7 @@ struct workout_aicodeApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-            if setup.isSwitching {
-                SwitchingStoreView()
-            } else if setup.isRecoveryNeeded {
+            if setup.isRecoveryNeeded {
                 // Both the normal load and V1 recovery failed.
                 // Show a full-screen explanation with export + fresh-start options.
                 NavigationStack {
@@ -442,8 +431,13 @@ struct workout_aicodeApp: App {
                 .environmentObject(setup.store)
                 .modelContainer(setup.container)
             } else {
+                // Deliberately NOT .id(containerKey): rebuilding the tree on a
+                // store swap threw the user out of Settings and back to the
+                // start screen, which reads as a crash. The container and store
+                // are published, so @Query re-runs against the new one on its
+                // own, and nothing in this tree is identified by a model object
+                // any more.
                 ContentView()
-                    .id(setup.containerKey)
                     .environmentObject(setup.store)
                     .environmentObject(setup)
                     .modelContainer(setup.container)
@@ -460,19 +454,5 @@ struct workout_aicodeApp: App {
                 setup.reconfigure(syncEnabled: newValue)
             }
         }
-    }
-}
-
-/// Shown for the moment the store is being swapped. Deliberately holds no
-/// model objects and no model container.
-struct SwitchingStoreView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Moving your data…")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
