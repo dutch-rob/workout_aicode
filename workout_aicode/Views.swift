@@ -1808,7 +1808,7 @@ struct SettingsView: View {
                     Label("Delete all my data", systemImage: "trash")
                 }
             } footer: {
-                Text("Deletes all of this app's records.")
+                Text("Deletes all of this app's records, and takes back anything you have shared anonymously.")
             }
         }
         .navigationTitle("settings")
@@ -1818,7 +1818,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Deletes all of this app's records. This cannot be undone.")
+            Text("Deletes all of this app's records on this device, and takes back anything you shared anonymously. This cannot be undone.")
         }
     }
 }

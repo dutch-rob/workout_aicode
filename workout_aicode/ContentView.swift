@@ -30,7 +30,7 @@ struct ContentView: View {
     private func uploadSharedDataIfConsented() {
         guard shareWithDevelopers else { return }
         DeveloperDataSync.sync(consent: true, logs: allLogs, exercises: exercises,
-                               formula: OneRMFormula(rawValue: formulaRaw) ?? .epley)
+                             	  formula: OneRMFormula(rawValue: formulaRaw) ?? .epley)
     }
 
     var body: some View {

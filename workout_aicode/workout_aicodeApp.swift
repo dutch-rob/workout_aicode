@@ -113,6 +113,10 @@ final class AppSetup: ObservableObject {
     // MARK: - Delete all data (local + CloudKit)
 
     func deleteAllData() {
+        // Anything shared goes too. "Delete all my data" that left rows in the
+        // developer's database would be a promise the app does not keep, and
+        // the one deletion a user is most entitled to expect.
+        DeveloperDataSync.withdrawEverything()
         let ctx = container.mainContext
         try? ctx.delete(model: WorkoutLog.self)
         try? ctx.delete(model: WorkoutDef.self)

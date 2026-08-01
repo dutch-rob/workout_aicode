@@ -175,6 +175,17 @@ enum DeveloperDataSync {
         }
     }
 
+    /// Called by "Delete all my data": take back everything shared, too.
+    ///
+    /// Deleting your data has to mean all of it. The install id and salt are
+    /// deliberately KEPT: if the withdrawal fails because the device is
+    /// offline, they are the only way to find those rows and delete them on a
+    /// later run — throwing them away would strand the records for good.
+    static func withdrawEverything() {
+        Task { await withdraw() }
+        defaults.removeObject(forKey: surveyKey)
+    }
+
     /// Consent withdrawn: remove every record this install created. Best
     /// effort — if the network is down the ids stay on file so a later run
     /// tries again.
