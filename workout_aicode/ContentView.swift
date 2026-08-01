@@ -142,6 +142,9 @@ struct ContentView: View {
         // Asked once, on a fresh install, before there is anything to set up.
         .sheet(isPresented: $askDefaults) { ExerciseDefaultsView() }
         .task {
+            #if DEBUG
+            DeveloperDataSync.sendTestSurveyIfRequested()
+            #endif
             askDefaults = ExerciseDefaults.shouldAsk(existingExercises: exercises.count)
             survey.noteLaunch(earliestLogDate: allLogs.first?.date)
             uploadSharedDataIfConsented()

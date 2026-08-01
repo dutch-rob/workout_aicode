@@ -223,3 +223,38 @@ enum DeveloperDataSync {
         return rec
     }
 }
+
+#if DEBUG
+extension DeveloperDataSync {
+
+    /// One-off: create the `SharedSurvey` record type in CloudKit Development.
+    ///
+    /// The record type only comes into existence when something first writes
+    /// one, and the survey is otherwise only offered after 12 logging days AND
+    /// 8 weeks — so it would be missing from the schema at deploy time, and the
+    /// first real answer months later would fail against production.
+    ///
+    /// Run once with `-SRWSendTestSurvey` in the scheme's launch arguments,
+    /// then untick it. DEBUG-only, so it cannot reach the App Store; there is
+    /// nothing to remove from the code afterwards.
+    ///
+    /// It uploads regardless of the sharing setting — it is a deliberate,
+    /// developer-only action on the developer's own device.
+    static func sendTestSurveyIfRequested() {
+        guard CommandLine.arguments.contains("-SRWSendTestSurvey") else { return }
+
+        var answers = SurveyAnswers()
+        answers.logsHelpful = .very
+        answers.graphsHelpful = .aBit
+        answers.progressHelpful = .very
+        answers.wantsAdvancedStats = .yes
+        answers.wantsToAnswerQuestions = .maybe
+        answers.answeredAt = Date()
+
+        log.notice("Sending a test survey to create the SharedSurvey record type.")
+        recordSurvey(answers, consent: true)
+        print("[DataSync] test survey sent — look for SharedSurvey in the CloudKit Console "
+              + "(Development), then Deploy Schema Changes.")
+    }
+}
+#endif
