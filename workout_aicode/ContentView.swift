@@ -13,14 +13,32 @@ struct ContentView: View {
 
     @State private var pendingNewWorkout: WorkoutDef? = nil
     @State private var pendingNewExercise: ExerciseDef? = nil
-    @State private var path: [WorkoutDef] = []
+    // Identified by UUID, never by the model object.
+    //
+    // SwiftUI hashes whatever identifies a row or a navigation entry — and for
+    // a SwiftData object that means reading a persisted property. When the
+    // store is swapped, those objects are destroyed, and the very next thing
+    // SwiftUI does is hash the outgoing ones to work out what to remove:
+    //   ForEachState.appendRemove -> Set.insert -> WorkoutDef.hash(into:)
+    //   -> WorkoutDef.id.getter -> destroyed backing data -> crash.
+    // Plain values cannot fault, so identity is kept in UUIDs and the objects
+    // are looked up only where they are about to be drawn.
+    @State private var path: [UUID] = []
     @State private var askDefaults = false
+
+    /// A row on the start screen, as plain values — see `path`.
+    private struct WorkoutRow: Identifiable, Hashable {
+        let id: UUID
+        let name: String
+    }
 
     /// Workouts that have been given a name. A half-created one (the row exists
     /// the moment "new workout" is tapped) should not show on the start screen.
     /// Also kept out of the view body: inline, the type-checker gave up on it.
-    private var namedWorkouts: [WorkoutDef] {
-        workouts.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var workoutRows: [WorkoutRow] {
+        workouts
+            .filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { WorkoutRow(id: $0.id, name: $0.name) }
     }
     @ObservedObject private var survey = SurveyScheduler.shared
     @Query(sort: [SortDescriptor(\WorkoutLog.date)]) private var allLogs: [WorkoutLog]
@@ -100,9 +118,9 @@ struct ContentView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 8) {
-                            ForEach(namedWorkouts, id: \.self) { workout in
-                                NavigationLink(value: workout) {
-                                    Text(workout.name)
+                            ForEach(workoutRows) { row in
+                                NavigationLink(value: row.id) {
+                                    Text(row.name)
                                         .font(.headline)
                                         .foregroundStyle(.white)
                                         .bold()
@@ -116,8 +134,12 @@ struct ContentView: View {
                 }
             }
             .padding()
-            .navigationDestination(for: WorkoutDef.self) { workout in
-                LogExerciseView(workout: workout, onEndSession: { path.removeAll() })
+            .navigationDestination(for: UUID.self) { id in
+                // Resolved here, where the object is about to be drawn and is
+                // therefore valid, rather than being carried around in state.
+                if let workout = workouts.first(where: { $0.id == id }) {
+                    LogExerciseView(workout: workout, onEndSession: { path.removeAll() })
+                }
             }
             .navigationDestination(item: $pendingNewWorkout) { workout in
                 EditWorkoutView(workout: workout)
@@ -130,7 +152,7 @@ struct ContentView: View {
         .onChange(of: handoff.routeWorkoutId) { _, id in
             guard let id, let workout = workouts.first(where: { $0.id.uuidString == id })
             else { return }
-            if path.last?.id != workout.id { path = [workout] }
+            if path.last != workout.id { path = [workout.id] }
             handoff.routeWorkoutId = nil
         }
         // Opening / returning to the app checks for an active session elsewhere.
@@ -189,7 +211,7 @@ struct ContentView: View {
                   let w = workouts.first(where: {
                       !$0.name.trimmingCharacters(in: .whitespaces).isEmpty
                   }) else { return }
-            path = [w]
+            path = [w.id]
         }
         #endif
     }
