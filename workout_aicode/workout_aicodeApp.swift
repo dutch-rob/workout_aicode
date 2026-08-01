@@ -77,37 +77,56 @@ final class AppSetup: ObservableObject {
     /// Set when iCloud could not be turned on, for Settings to explain.
     @Published var syncFailureMessage: String?
 
+    /// True while the store is being swapped. The scene shows a plain screen
+    /// during it — see reconfigure.
+    @Published private(set) var isSwitching = false
+
     func reconfigure(syncEnabled: Bool) {
         guard !isReconfiguring else { return }
         isReconfiguring = true
-        defer { isReconfiguring = false }
 
+        // Read the old store while it is still valid and the views are still up.
         let snap = Self.snapshot(context: container.mainContext)
 
-        if let (newContainer, newStore) = Self.tryLoad(syncEnabled: syncEnabled) {
-            Self.mergeSnapshot(snap, into: newContainer.mainContext)
-            container    = newContainer
-            store        = newStore
-            containerKey = UUID()
-            syncFailureMessage = nil
-            return
-        }
+        // Take the UI down to a plain screen BEFORE swapping.
+        //
+        // Replacing the container invalidates every model object the old one
+        // handed out, and the live view tree is full of them — @Query results,
+        // the navigation path, the objects each row is drawn from. Swapping
+        // underneath all that crashed on the next read of any one of them, in
+        // both directions. One turn of the runloop showing a view that holds no
+        // model objects lets SwiftUI let go of them first.
+        isSwitching = true
 
-        // Could not open the requested store. Do NOT simply keep the old
-        // container: a failed load can invalidate the model objects the
-        // current context already handed to the views, and reading one of
-        // those is a hard crash. Rebuild a known-good local container and give
-        // the views a new identity so they let go of the old objects.
-        UserDefaults.standard.set(false, forKey: "iCloudSyncEnabled")
-        if let (fallback, fallbackStore) = Self.tryLoad(syncEnabled: false) {
-            Self.mergeSnapshot(snap, into: fallback.mainContext)
-            container    = fallback
-            store        = fallbackStore
-            containerKey = UUID()
+        DispatchQueue.main.async { [self] in
+            defer {
+                isSwitching = false
+                isReconfiguring = false
+            }
+
+            if let (newContainer, newStore) = Self.tryLoad(syncEnabled: syncEnabled) {
+                Self.mergeSnapshot(snap, into: newContainer.mainContext)
+                container    = newContainer
+                store        = newStore
+                containerKey = UUID()
+                syncFailureMessage = nil
+                return
+            }
+
+            // Could not open the requested store. Rebuild a known-good local
+            // container rather than keep the old one, which may itself have
+            // been invalidated by the failed load.
+            UserDefaults.standard.set(false, forKey: "iCloudSyncEnabled")
+            if let (fallback, fallbackStore) = Self.tryLoad(syncEnabled: false) {
+                Self.mergeSnapshot(snap, into: fallback.mainContext)
+                container    = fallback
+                store        = fallbackStore
+                containerKey = UUID()
+            }
+            syncFailureMessage = syncEnabled
+                ? "iCloud sharing could not be turned on: this device's iCloud copy was written by a version of the app that cannot be read any more. Your data on this device is unaffected."
+                : nil
         }
-        syncFailureMessage = syncEnabled
-            ? "iCloud sharing could not be turned on: this device's iCloud copy was written by a version of the app that cannot be read any more. Your data on this device is unaffected."
-            : nil
     }
 
     // MARK: - Delete all data (local + CloudKit)
@@ -410,7 +429,10 @@ struct workout_aicodeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if setup.isRecoveryNeeded {
+            Group {
+            if setup.isSwitching {
+                SwitchingStoreView()
+            } else if setup.isRecoveryNeeded {
                 // Both the normal load and V1 recovery failed.
                 // Show a full-screen explanation with export + fresh-start options.
                 NavigationStack {
@@ -430,10 +452,27 @@ struct workout_aicodeApp: App {
                         // it can push definitions and insert logs from the Watch.
                         PhoneSessionManager.shared.attach(store: setup.store)
                     }
-                    .onChange(of: iCloudSyncEnabled) { _, newValue in
-                        setup.reconfigure(syncEnabled: newValue)
-                    }
+            }
+            }
+            // Outside the Group on purpose: attached to ContentView it would be
+            // torn down by the very swap it starts.
+            .onChange(of: iCloudSyncEnabled) { _, newValue in
+                setup.reconfigure(syncEnabled: newValue)
             }
         }
+    }
+}
+
+/// Shown for the moment the store is being swapped. Deliberately holds no
+/// model objects and no model container.
+struct SwitchingStoreView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Moving your data…")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
