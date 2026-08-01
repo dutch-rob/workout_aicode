@@ -12,6 +12,7 @@
 		153422632FAD953800895019 /* workout_aicode Watch App-.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 153422622FAD953800895019 /* workout_aicode Watch App-.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		153422962FAD9F5700895019 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 153422952FAD9F5700895019 /* WatchConnectivity.framework */; };
 		153422982FADA04500895019 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 153422972FADA04500895019 /* WatchConnectivity.framework */; };
+		157B219F301E8F7100A4CF7B /* PRIVACY.md in Resources */ = {isa = PBXBuildFile; fileRef = 157B219E301E8F7100A4CF7B /* PRIVACY.md */; };
 		EEEE0002EEEE0002EEEE0002 /* workout_aicode Watch App-.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 153422622FAD953800895019 /* workout_aicode Watch App-.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -94,6 +95,7 @@
 		1534227B2FAD953D00895019 /* workout_aicode Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "workout_aicode Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		153422952FAD9F5700895019 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		153422972FADA04500895019 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.4.sdk/System/Library/Frameworks/WatchConnectivity.framework; sourceTree = DEVELOPER_DIR; };
+		157B219E301E8F7100A4CF7B /* PRIVACY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRIVACY.md; sourceTree = "<group>"; };
 		15DD49352F594E7100D778CD /* workout_aicode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = workout_aicode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD49442F594E7600D778CD /* workout_aicodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD494E2F594E7600D778CD /* workout_aicodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -194,6 +196,7 @@
 			children = (
 				151466262FA3D961001264A4 /* generate_infoview.py */,
 				151466272FA3D961001264A4 /* README.md */,
+				157B219E301E8F7100A4CF7B /* PRIVACY.md */,
 				15DD49372F594E7100D778CD /* workout_aicode */,
 				15DD49472F594E7600D778CD /* workout_aicodeTests */,
 				15DD49512F594E7600D778CD /* workout_aicodeUITests */,
@@ -476,6 +479,7 @@
 			files = (
 				151466282FA3D961001264A4 /* README.md in Resources */,
 				151466292FA3D961001264A4 /* generate_infoview.py in Resources */,
+				157B219F301E8F7100A4CF7B /* PRIVACY.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
