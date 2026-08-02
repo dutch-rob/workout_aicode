@@ -189,7 +189,28 @@ enum DeveloperDataSync {
                 }
             }
             defaults.set(Array(uploaded), forKey: uploadedKey)
-            defaults.set("sent \(saved), failed \(failed)", forKey: uploadStatusKey)
+
+            // Read one back from the server.
+            //
+            // "Saved" only means CloudKit accepted the write. If the records
+            // cannot then be found in the console, the question is whether they
+            // are absent or merely unlistable — the console needs a QUERYABLE
+            // index to browse a record type, and a freshly created type has
+            // none. Fetching by record id needs no index, so this distinguishes
+            // "not there" from "there but not searchable", and names the
+            // container so a mismatch with the console is visible.
+            var proof = "container \(CKContainer.default().containerIdentifier ?? "?")"
+            if let firstSaved = result.saveResults.first(where: {
+                if case .success = $0.value { return true } else { return false }
+            })?.key {
+                do {
+                    _ = try await database.record(for: firstSaved)
+                    proof += ", verified \(firstSaved.recordName) is on the server"
+                } catch {
+                    proof += ", but reading it back failed: \(describe(error))"
+                }
+            }
+            defaults.set("sent \(saved), failed \(failed) — \(proof)", forKey: uploadStatusKey)
             if failed == 0 {
                 defaults.removeObject(forKey: uploadProblemKey)
             } else {
