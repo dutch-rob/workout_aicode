@@ -1716,6 +1716,7 @@ struct SettingsView: View {
     @AppStorage(StatsSettingsKey.window) private var trendWindow = StatsEngine.defaultWindow
     @AppStorage(StatsSettingsKey.smoothing) private var smoothing = StatsEngine.defaultSmoothing
     @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
+    @AppStorage(DeveloperDataSync.withdrawProblemKey) private var withdrawProblem: String?
     @EnvironmentObject private var setup: AppSetup
     @EnvironmentObject private var store: AppStore
     @Query private var logs: [WorkoutLog]
@@ -1798,6 +1799,10 @@ struct SettingsView: View {
                                            formula: OneRMFormula(rawValue: formulaRaw) ?? .epley)
                 }
             } footer: {
+                if let problem = withdrawProblem, !problem.isEmpty {
+                    Text("Some shared data could not be taken back (\(problem)). The app will try again next time it opens.")
+                        .foregroundStyle(.red)
+                }
                 Text("Off unless you turn it on. When on, it sends the weights, repetitions and dates you log, and which muscle groups an exercise works, so the app can be improved with real training data — in particular the individual advice being considered. It never sends your name or your exercise names: an exercise you named yourself travels as an unreadable code. Turning this off deletes what this device has shared.")
             }
 

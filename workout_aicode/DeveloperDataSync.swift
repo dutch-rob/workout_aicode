@@ -33,6 +33,8 @@ enum DeveloperDataSync {
     private static let saltKey      = "developerShareNameSalt"
     private static let uploadedKey  = "developerShareUploadedLogIDs"
     private static let surveyKey    = "developerSharePendingSurvey"
+    /// Set when a withdrawal could not be completed, for Settings to show.
+    static let withdrawProblemKey = "developerShareWithdrawProblem"
 
     private static var database: CKDatabase { CKContainer.default().publicCloudDatabase }
     private static var defaults: UserDefaults { .standard }
@@ -192,17 +194,87 @@ enum DeveloperDataSync {
     private static func withdraw() async {
         let install = installID
         let uploaded = defaults.stringArray(forKey: uploadedKey) ?? []
-        guard !uploaded.isEmpty || defaults.data(forKey: surveyKey) != nil else { return }
+        let hadSurvey = defaults.data(forKey: surveyKey) != nil
+        guard !uploaded.isEmpty || hadSurvey else { return }
 
         var ids = uploaded.map { CKRecord.ID(recordName: "set-\(install)-\($0)") }
         ids.append(CKRecord.ID(recordName: "survey-\(install)"))
+
         do {
-            _ = try await database.modifyRecords(saving: [], deleting: ids, atomically: false)
-            defaults.removeObject(forKey: uploadedKey)
-            log.notice("Withdrew \(ids.count, privacy: .public) records.")
+            let result = try await database.modifyRecords(saving: [], deleting: ids,
+                                                          atomically: false)
+            // Every result must be inspected. With atomically:false a failed
+            // delete does NOT throw — an earlier version discarded this and
+            // cleared the record of what had been uploaded regardless, so a
+            // refused delete looked like success AND destroyed the only list of
+            // what still needed deleting. Nothing could ever remove those rows
+            // afterwards.
+            var gone = Set<String>()
+            var failures: [String] = []
+            for (recordID, res) in result.deleteResults {
+                switch res {
+                case .success:
+                    gone.insert(recordID.recordName)
+                case .failure(let error):
+                    // Already absent is the outcome we wanted anyway.
+                    if let ck = error as? CKError, ck.code == .unknownItem {
+                        gone.insert(recordID.recordName)
+                    } else {
+                        failures.append("\(recordID.recordName): \(describe(error))")
+                    }
+                }
+            }
+
+            // Keep whatever did not go, so the next attempt can try again.
+            let prefix = "set-\(install)-"
+            let remaining = uploaded.filter { !gone.contains(prefix + $0) }
+            if remaining.isEmpty {
+                defaults.removeObject(forKey: uploadedKey)
+            } else {
+                defaults.set(remaining, forKey: uploadedKey)
+            }
+            if gone.contains("survey-\(install)") {
+                defaults.removeObject(forKey: surveyKey)
+            }
+
+            if failures.isEmpty {
+                defaults.removeObject(forKey: withdrawProblemKey)
+                log.notice("Withdrew \(gone.count, privacy: .public) records.")
+            } else {
+                defaults.set("\(failures.count) of \(ids.count) could not be removed",
+                             forKey: withdrawProblemKey)
+                log.error("Withdraw incomplete: \(failures.joined(separator: "; "), privacy: .public)")
+            }
         } catch {
-            log.error("Withdraw failed: \(error.localizedDescription, privacy: .public)")
+            // Operation-level failure: nothing was deleted, so nothing is
+            // forgotten and the next run retries the lot.
+            defaults.set("could not reach iCloud", forKey: withdrawProblemKey)
+            log.error("Withdraw failed: \(describe(error), privacy: .public)")
         }
+    }
+
+    /// Retry a withdrawal that did not finish — called at launch.
+    ///
+    /// Without this, a withdrawal refused while offline (or by a permission
+    /// problem) would never be attempted again, and rows the user asked to have
+    /// removed would stay for good.
+    static func retryWithdrawIfPending() {
+        guard !defaults.bool(forKey: SharingKey.consent) else { return }
+        let pending = defaults.stringArray(forKey: uploadedKey) ?? []
+        guard !pending.isEmpty || defaults.data(forKey: surveyKey) != nil else { return }
+        log.notice("Retrying an unfinished withdrawal of \(pending.count, privacy: .public) records.")
+        Task { await withdraw() }
+    }
+
+    /// Human-readable CloudKit error, including the code and any per-item
+    /// partial errors, so a failure is not just "CAS failed".
+    private static func describe(_ error: Error) -> String {
+        guard let ck = error as? CKError else { return error.localizedDescription }
+        var parts = ["CKError \(ck.errorCode) (\(ck.localizedDescription))"]
+        for (item, e) in (ck.partialErrorsByItemID ?? [:]) {
+            parts.append("[\(item): \(e.localizedDescription)]")
+        }
+        return parts.joined(separator: " ")
     }
 
     // MARK: Survey

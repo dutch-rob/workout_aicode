@@ -170,6 +170,8 @@ struct ContentView: View {
             askDefaults = ExerciseDefaults.shouldAsk(existingExercises: exercises.count)
             survey.noteLaunch(earliestLogDate: allLogs.first?.date)
             uploadSharedDataIfConsented()
+            // Finish any withdrawal that did not complete last time.
+            DeveloperDataSync.retryWithdrawIfPending()
         }
         // Workouts logged since the last launch go up on the next one. Uploading
         // as each set is logged would put the network in the middle of a
