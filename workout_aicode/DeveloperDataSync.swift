@@ -241,7 +241,9 @@ enum DeveloperDataSync {
                 defaults.removeObject(forKey: withdrawProblemKey)
                 log.notice("Withdrew \(gone.count, privacy: .public) records.")
             } else {
-                defaults.set("\(failures.count) of \(ids.count) could not be removed",
+                // Carry the reason, not just a count: this message is the only
+                // way to see why CloudKit refused, on a build with no console.
+                defaults.set("\(failures.count) of \(ids.count) refused — \(failures[0])",
                              forKey: withdrawProblemKey)
                 log.error("Withdraw incomplete: \(failures.joined(separator: "; "), privacy: .public)")
             }
