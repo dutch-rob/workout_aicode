@@ -35,6 +35,11 @@ enum DeveloperDataSync {
     private static let surveyKey    = "developerSharePendingSurvey"
     /// Set when a withdrawal could not be completed, for Settings to show.
     static let withdrawProblemKey = "developerShareWithdrawProblem"
+    /// Same, for uploads — which until now failed entirely silently, leaving
+    /// nothing to look at on a build with no console.
+    static let uploadProblemKey = "developerShareUploadProblem"
+    /// What the last upload attempt did, so "is it working?" has an answer.
+    static let uploadStatusKey = "developerShareUploadStatus"
 
     private static var database: CKDatabase { CKContainer.default().publicCloudDatabase }
     private static var defaults: UserDefaults { .standard }
@@ -145,7 +150,18 @@ enum DeveloperDataSync {
         var records = logs.filter { !uploaded.contains($0.id) }
                           .map { $0.record(install: install, formula: formula) }
         if let survey = pendingSurveyRecord(install: install) { records.append(survey) }
-        guard !records.isEmpty else { return }
+        guard !records.isEmpty else {
+            // Not an error, but worth saying: everything on this device is
+            // already marked as sent. That is also what it looks like when the
+            // rows were deleted straight from the CloudKit console — the app
+            // still believes it sent them. Turning sharing off and on again
+            // clears the record and re-sends.
+            defaults.set("nothing new to send — all \(logs.count) already sent",
+                         forKey: uploadStatusKey)
+            defaults.removeObject(forKey: uploadProblemKey)
+            log.notice("Nothing to upload: all \(logs.count, privacy: .public) already sent.")
+            return
+        }
 
         do {
             // atomically:false does NOT throw on per-record failures, so each
@@ -154,6 +170,7 @@ enum DeveloperDataSync {
             let result = try await database.modifyRecords(saving: records, deleting: [],
                                                           savePolicy: .allKeys, atomically: false)
             var saved = 0, failed = 0
+            var firstFailure: String?
             for (recordID, res) in result.saveResults {
                 switch res {
                 case .success:
@@ -167,13 +184,23 @@ enum DeveloperDataSync {
                     }
                 case .failure(let error):
                     failed += 1
-                    log.error("Save failed \(recordID.recordName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    if firstFailure == nil { firstFailure = describe(error) }
+                    log.error("Save failed \(recordID.recordName, privacy: .public): \(describe(error), privacy: .public)")
                 }
             }
             defaults.set(Array(uploaded), forKey: uploadedKey)
+            defaults.set("sent \(saved), failed \(failed)", forKey: uploadStatusKey)
+            if failed == 0 {
+                defaults.removeObject(forKey: uploadProblemKey)
+            } else {
+                defaults.set("\(failed) of \(records.count) refused — \(firstFailure ?? "")",
+                             forKey: uploadProblemKey)
+            }
             log.notice("Upload finished: \(saved, privacy: .public) saved, \(failed, privacy: .public) failed.")
         } catch {
-            log.error("Upload failed: \(error.localizedDescription, privacy: .public)")
+            defaults.set("could not reach iCloud — \(describe(error))", forKey: uploadProblemKey)
+            defaults.set("last attempt failed", forKey: uploadStatusKey)
+            log.error("Upload failed: \(describe(error), privacy: .public)")
         }
     }
 

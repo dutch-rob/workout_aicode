@@ -1717,6 +1717,8 @@ struct SettingsView: View {
     @AppStorage(StatsSettingsKey.smoothing) private var smoothing = StatsEngine.defaultSmoothing
     @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
     @AppStorage(DeveloperDataSync.withdrawProblemKey) private var withdrawProblem: String?
+    @AppStorage(DeveloperDataSync.uploadProblemKey) private var uploadProblem: String?
+    @AppStorage(DeveloperDataSync.uploadStatusKey) private var uploadStatus: String?
     @EnvironmentObject private var setup: AppSetup
     @EnvironmentObject private var store: AppStore
     @Query private var logs: [WorkoutLog]
@@ -1799,6 +1801,17 @@ struct SettingsView: View {
                                            formula: OneRMFormula(rawValue: formulaRaw) ?? .epley)
                 }
             } footer: {
+                // Sharing is invisible by nature — there is nothing on screen
+                // to show it working. These lines are the only feedback, and
+                // the only diagnosis available on a build with no console.
+                if shareWithDevelopers, let status = uploadStatus, !status.isEmpty {
+                    Text("Last send: \(status).")
+                        .foregroundStyle(.secondary)
+                }
+                if let problem = uploadProblem, !problem.isEmpty {
+                    Text("Some data could not be sent (\(problem)). It will be retried.")
+                        .foregroundStyle(.red)
+                }
                 if let problem = withdrawProblem, !problem.isEmpty {
                     Text("Some shared data could not be taken back (\(problem)). The app will try again next time it opens.")
                         .foregroundStyle(.red)
