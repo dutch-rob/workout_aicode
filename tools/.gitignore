@@ -1,3 +1,4 @@
 # Server-to-server keys are secrets — never commit them.
 *.pem
 *.p8
+export.config
