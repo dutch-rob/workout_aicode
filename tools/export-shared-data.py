@@ -83,7 +83,24 @@ def request(path: str, body: dict, key_id: str, key_path: Path) -> dict:
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")
         # CloudKit explains itself properly in the body; the status alone does not.
-        sys.exit(f"CloudKit returned {e.code}:\n{detail}")
+        message = f"CloudKit returned {e.code}:\n{detail}"
+        if "not marked queryable" in detail:
+            field = ""
+            try:
+                field = json.loads(detail).get("reason", "").split("'")[1]
+            except (ValueError, IndexError):
+                pass
+            message += (
+                f"\n\nAdd a QUERYABLE index on '{field}' for this record type in the\n"
+                "CloudKit Console (Schema -> Indexes), then Deploy Schema Changes.\n"
+                "\n"
+                "'createdBy' is a system field rather than one of ours. It is needed\n"
+                "because the record types only allow _creator to read: to apply that\n"
+                "rule to a query, CloudKit has to filter on the creator, and it cannot\n"
+                "filter on a field that is not indexed. It may be listed as\n"
+                "'createdUserRecordName' or '___createdBy' depending on the console.\n"
+                "Indexing it exposes nothing extra — the read rule still applies.")
+        sys.exit(message)
     except urllib.error.URLError as e:
         sys.exit(f"could not reach CloudKit: {e.reason}")
 
