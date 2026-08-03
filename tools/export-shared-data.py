@@ -112,7 +112,10 @@ def fetch_all(record_type: str, args) -> list:
     path = f"/database/1/{args.container}/{args.environment}/public/records/query"
     records, marker = [], None
     while True:
-        body = {"query": {"recordType": record_type}, "resultsLimit": PAGE}
+        query = {"recordType": record_type}
+        if args.sort:
+            query["sortBy"] = [{"fieldName": args.sort, "ascending": True}]
+        body = {"query": query, "resultsLimit": PAGE}
         if marker:
             body["continuationMarker"] = marker
         page = request(path, body, args.key_id, Path(args.key))
@@ -165,6 +168,11 @@ def main():
     ap.add_argument("--out-dir", default=".")
     ap.add_argument("--long", action="store_true",
                     help="also write one row per set, for analysis")
+    ap.add_argument("--sort", metavar="FIELD",
+                    help="sort by this field instead of letting CloudKit choose. "
+                         "Worth trying when a query is refused for an unqueryable "
+                         "system field: the field needs a SORTABLE index, which the "
+                         "console does offer for our own fields (try 'ts').")
     args = ap.parse_args()
 
     if not Path(args.key).exists():
