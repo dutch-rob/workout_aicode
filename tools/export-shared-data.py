@@ -5,12 +5,14 @@ The CloudKit Console is fine for looking, but not for analysis. This talks to
 CloudKit Web Services with a server-to-server key and pages through every
 SharedSet and SharedSurvey record.
 
-Two shapes come out:
+Each record type is fetched ONCE; every file below is written from that same
+response, so the CSVs can never disagree with each other or with the JSON.
 
+  * .json — the records exactly as CloudKit returned them, nothing dropped
   * wide  — one row per logged exercise, weights and reps as they are stored
-            ("50,55,55"), which mirrors the records exactly;
+            ("50,55,55"), which mirrors the records exactly
   * long  — one row per SET (--long), which is what a regression wants:
-            install, timestamp, exercise, set number, weight, reps.
+            install, timestamp, exercise, set number, weight, reps
 
 Setup, once:
 
@@ -149,6 +151,20 @@ SURVEY_FIELDS = ["install", "ts", "logsHelpful", "graphsHelpful", "progressHelpf
                  "wantsAdvanced", "wantsQuestions"]
 
 
+def write_json(path: Path, records: list):
+    """The records exactly as CloudKit returned them.
+
+    The CSVs carry only the columns named below, so anything else is lost:
+    recordName, the created/modified timestamps, the change tag, and — the one
+    that matters over time — any field the app starts sending that this script
+    does not yet know about. Keeping the raw response means an export is never
+    silently narrower than the data.
+    """
+    with open(path, "w") as f:
+        json.dump(records, f, indent=2, sort_keys=True)
+    print(f"  wrote {path}  ({len(records)} records)")
+
+
 def write_csv(path: Path, header: list, rows: list):
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
@@ -182,10 +198,12 @@ def main():
     print(f"  container {args.container} ({args.environment})")
 
     sets = fetch_all("SharedSet", args)
+    write_json(out / "shared_sets.json", sets)
     write_csv(out / "shared_sets.csv", SET_FIELDS,
               [[value(r, f) for f in SET_FIELDS] for r in sets])
 
     surveys = fetch_all("SharedSurvey", args)
+    write_json(out / "shared_surveys.json", surveys)
     write_csv(out / "shared_surveys.csv", SURVEY_FIELDS,
               [[value(r, f) for f in SURVEY_FIELDS] for r in surveys])
 
