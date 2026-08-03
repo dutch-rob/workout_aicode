@@ -20,3 +20,9 @@ fastlane/Preview.html
 
 # Claude Code local state (worktrees, session settings)
 .claude/
+
+# Exported shared data — real user records, never in the repository.
+shared_sets*.csv
+shared_sets*.json
+shared_surveys*.csv
+shared_surveys*.json
