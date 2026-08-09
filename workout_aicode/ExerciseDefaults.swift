@@ -47,7 +47,8 @@ enum ExerciseDefaults {
                            weightIncrement: d.increment,
                            primaryMuscle: primary,
                            secondaryMuscles: secondary,
-                           libraryKey: libraryKey)
+                           libraryKey: libraryKey,
+                           restSeconds: RestTimerDefaults.newExerciseSeconds)
     }
 
     /// Only for someone who has not been asked yet. An existing user updating
@@ -72,6 +73,8 @@ struct ExerciseDefaultsView: View {
     @AppStorage(ExerciseDefaultsKey.lowest) private var lowest = ExerciseDefaults.lowest
     @AppStorage(ExerciseDefaultsKey.highest) private var highest = ExerciseDefaults.highest
     @AppStorage(ExerciseDefaultsKey.increment) private var increment = ExerciseDefaults.increment
+    @AppStorage(RestTimerKey.enabled) private var restTimerOn = false
+    @AppStorage(RestTimerKey.defaultSeconds) private var restSeconds = RestTimerDefaults.seconds
 
     var body: some View {
         NavigationStack {
@@ -105,6 +108,18 @@ struct ExerciseDefaultsView: View {
                 } footer: {
                     Text("The wheels show weights from the lowest to the highest, in steps of the increment. Match the increment to your gym — often 5, or 2 for dumbbells.")
                 }
+
+                Section {
+                    Toggle("Rest timer", isOn: $restTimerOn)
+                        .onChange(of: restTimerOn) { _, on in
+                            if on { RestTimerDefaults.requestNotificationPermission() }
+                        }
+                    if restTimerOn {
+                        RestSecondsPicker(title: "Rest between sets", seconds: $restSeconds)
+                    }
+                } footer: {
+                    Text("Counts your rest after every set and between exercises. You can put the phone away while it runs — it buzzes when the rest is over. Each exercise can be given its own rest afterwards, and the whole thing can be switched off again in settings.")
+                }
             }
             .navigationTitle("Your usual numbers")
             .navigationBarTitleDisplayMode(.inline)
@@ -131,6 +146,7 @@ struct ExerciseDefaultsSettings: View {
     @AppStorage(ExerciseDefaultsKey.lowest) private var lowest = ExerciseDefaults.lowest
     @AppStorage(ExerciseDefaultsKey.highest) private var highest = ExerciseDefaults.highest
     @AppStorage(ExerciseDefaultsKey.increment) private var increment = ExerciseDefaults.increment
+    @AppStorage(RestTimerKey.defaultSeconds) private var restSeconds = RestTimerDefaults.seconds
 
     var body: some View {
         Form {
@@ -156,6 +172,13 @@ struct ExerciseDefaultsSettings: View {
                 Text("Weights")
             } footer: {
                 Text("Only affects exercises you add from now on.")
+            }
+            Section {
+                RestSecondsPicker(title: "Rest between sets", seconds: $restSeconds)
+            } header: {
+                Text("Rest timer")
+            } footer: {
+                Text("Only affects exercises you add from now on. Change an existing exercise on its own screen.")
             }
         }
         .navigationTitle("new exercise numbers")

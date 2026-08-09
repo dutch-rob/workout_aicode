@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 import Combine
+import UserNotifications
 
 // MARK: - AppSetup
 final class AppSetup: ObservableObject {
@@ -417,6 +418,12 @@ struct workout_aicodeApp: App {
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     // Activating WCSession here keeps it live for the app's full lifetime.
     @StateObject private var watchSession = PhoneSessionManager.shared
+
+    init() {
+        // Must be in place before the app finishes launching, or an end-of-rest
+        // notification arriving with the app in front shows nothing at all.
+        UNUserNotificationCenter.current().delegate = RestTimerNotificationDelegate.shared
+    }
 
     var body: some Scene {
         WindowGroup {

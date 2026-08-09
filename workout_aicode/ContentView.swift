@@ -157,7 +157,11 @@ struct ContentView: View {
         }
         // Opening / returning to the app checks for an active session elsewhere.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { handoff.onForeground() }
+            if phase == .active {
+                handoff.onForeground()
+                // A rest that ran out while the app was away is simply over.
+                RestTimer.shared.onForeground()
+            }
         }
         // Presented here rather than by logs/stats itself — see that view.
         .sheet(isPresented: $survey.pending) { SurveyView() }

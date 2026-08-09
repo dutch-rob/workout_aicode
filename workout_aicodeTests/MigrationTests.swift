@@ -4,7 +4,11 @@ import SwiftData
 @testable import workout_aicode
 
 // Does a database written by the shipped app still open, with all its data, on
-// the version that adds muscle groups?
+// the current version?
+//
+// Reopening is always done at the newest schema, because that is what the app
+// declares. Pinning these to an older version once the plan grew past it made
+// CoreData throw and took the whole test process down with it.
 //
 // This is the one failure mode with no recovery: a user updates and their
 // training history is gone. Adding ExerciseDef fields broke staged migration
@@ -55,7 +59,7 @@ private func removeStore(at url: URL) {
 
     // ── Reopen through the migration plan, as the updated app does ────────
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV4.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV5.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -110,7 +114,7 @@ private func removeStore(at url: URL) {
     }
 
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV4.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV5.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -194,7 +198,7 @@ private func removeStore(at url: URL) {
     }
 
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV4.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV5.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -233,4 +237,101 @@ private func removeStore(at url: URL) {
     UserDefaults.standard.removeObject(forKey: ExerciseDefaultsKey.asked)
     #expect(ExerciseDefaults.shouldAsk(existingExercises: 0))
     #expect(!ExerciseDefaults.shouldAsk(existingExercises: 7))
+}
+
+// MARK: - The rest timer column
+
+@Test func restSecondsArrivesWithADefaultAndThenPersists() throws {
+    // Written at V2 — the shipped shape before muscle groups, favourites or the
+    // rest timer — and reopened at the current version, walking the whole chain
+    // V2 → V3 → V4 → V5. That is the migration a long-untouched install makes.
+    //
+    // Writing the store at V4 instead would be a closer match to the most
+    // recent release, but a store opened without a migration plan records no
+    // version identifier: the real plan then matches it by shape to its
+    // earliest candidate, and a "V4" store written that way came back as V2
+    // with its later columns stripped. Handing the writing container its own
+    // plan fixes the identification and breaks something else — two migration
+    // plans over the same model classes in one process abort inside CoreData.
+    // So the store is written the way every other test here writes one.
+    let url = temporaryStoreURL()
+    defer { removeStore(at: url) }
+
+    let exerciseId = UUID()
+    do {
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        let old = WorkoutLogSchemaV1.ExerciseDef(id: exerciseId, name: "Overhead press")
+        old.numberOfSeries = 4
+        context.insert(old)
+        try context.save()
+    }
+
+    let container = try ModelContainer(
+        for: Schema(versionedSchema: WorkoutLogSchemaV5.self),
+        migrationPlan: WorkoutMigrationPlan.self,
+        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+    )
+    let context = ModelContext(container)
+    let exercise = try #require(try context.fetch(FetchDescriptor<ExerciseDef>()).first)
+
+    #expect(exercise.name == "Overhead press")
+    #expect(exercise.numberOfSeries == 4)
+    // An exercise that predates the timer must not arrive with a zero rest.
+    // Zero means "no rest", and the timer would never run for that exercise —
+    // a silent, per-exercise version of the feature not working.
+    #expect(exercise.restSeconds == RestTimerDefaults.seconds)
+
+    exercise.restSeconds = 120
+    try context.save()
+    let reread = try #require(try ModelContext(container)
+        .fetch(FetchDescriptor<ExerciseDef>()).first)
+    #expect(reread.restSeconds == 120)
+}
+
+@Test func restSecondsSurvivesAnExportRoundTrip() throws {
+    let original = ExerciseDef(name: "Front squat", restSeconds: 180)
+    let restored = try JSONDecoder().decode(
+        ExerciseDef.self, from: try JSONEncoder().encode(original))
+    #expect(restored.restSeconds == 180)
+}
+
+@Test func exportsFromBeforeTheRestTimerStillImport() throws {
+    let json = """
+    {"id":"\(UUID().uuidString)","name":"Old exercise","numberOfSeries":3,
+     "lowestWeight":0,"highestWeight":200,"weightIncrement":5}
+    """
+    let restored = try JSONDecoder().decode(ExerciseDef.self, from: Data(json.utf8))
+    #expect(restored.restSeconds == RestTimerDefaults.seconds)
+}
+
+// MARK: - Rest lengths offered
+
+@Test func restChoicesRunFromFifteenSecondsToFiveMinutes() {
+    #expect(RestTimerDefaults.choices.first == 15)
+    #expect(RestTimerDefaults.choices.last == 300)
+    #expect(RestTimerDefaults.choices.count == 20)
+    // The default must be one of the options, or the picker would show blank.
+    #expect(RestTimerDefaults.choices.contains(RestTimerDefaults.seconds))
+}
+
+@Test func restIsLabelledAsMinutesAndSeconds() {
+    #expect(RestTimerDefaults.label(90) == "1:30")
+    #expect(RestTimerDefaults.label(45) == "0:45")
+    #expect(RestTimerDefaults.label(300) == "5:00")
+}
+
+@Test func aNewExerciseGetsTheChosenRest() {
+    let d = UserDefaults.standard
+    d.set(120, forKey: RestTimerKey.defaultSeconds)
+    defer { d.removeObject(forKey: RestTimerKey.defaultSeconds) }
+    #expect(ExerciseDefaults.makeExercise(name: "Dip").restSeconds == 120)
+}
+
+@Test func theRestTimerIsOffUntilItIsTurnedOn() {
+    UserDefaults.standard.removeObject(forKey: RestTimerKey.enabled)
+    #expect(!RestTimerDefaults.isEnabled)
 }

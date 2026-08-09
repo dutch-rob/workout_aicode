@@ -48,6 +48,11 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     /// of a long list.
     var isFavourite: Bool = false
 
+    /// Seconds of rest after a set of this exercise. Per exercise, because a
+    /// heavy compound needs longer than a light isolation movement. Only used
+    /// when the rest timer is switched on in Settings.
+    var restSeconds: Int = RestTimerDefaults.seconds
+
     var primaryMuscle: MuscleGroup? {
         get { primaryMuscleRaw.flatMap(MuscleGroup.init(rawValue:)) }
         set { primaryMuscleRaw = newValue?.rawValue }
@@ -68,7 +73,8 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
          primaryMuscle: MuscleGroup? = nil,
          secondaryMuscles: [MuscleGroup] = [],
          libraryKey: String? = nil,
-         isFavourite: Bool = false) {
+         isFavourite: Bool = false,
+         restSeconds: Int = RestTimerDefaults.seconds) {
         let clampedNumberOfSeries = max(0, numberOfSeries)
         let clampedLowest = max(0, lowestWeight)
         let clampedHighest = max(clampedLowest, highestWeight)
@@ -85,11 +91,12 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         self.secondaryMuscleRaw = Array(secondaryMuscles.prefix(MuscleGroup.maximumSecondary)).map(\.rawValue)
         self.libraryKey = libraryKey
         self.isFavourite = isFavourite
+        self.restSeconds = restSeconds
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement, movementType
-        case primaryMuscle, secondaryMuscles, libraryKey, isFavourite
+        case primaryMuscle, secondaryMuscles, libraryKey, isFavourite, restSeconds
     }
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -109,6 +116,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
             .compactMap(MuscleGroup.init(rawValue:))
         let libraryKey = try c.decodeIfPresent(String.self, forKey: .libraryKey)
         let favourite = try c.decodeIfPresent(Bool.self, forKey: .isFavourite) ?? false
+        let rest = try c.decodeIfPresent(Int.self, forKey: .restSeconds) ?? RestTimerDefaults.seconds
         self.init(id: id, name: name,
                   numberOfSeries: numberOfSeries,
                   lowestWeight: lowestWeight,
@@ -118,7 +126,8 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
                   primaryMuscle: primary,
                   secondaryMuscles: secondary,
                   libraryKey: libraryKey,
-                  isFavourite: favourite)
+                  isFavourite: favourite,
+                  restSeconds: rest)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -133,6 +142,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         try c.encode(secondaryMuscles.map(\.rawValue), forKey: .secondaryMuscles)
         try c.encodeIfPresent(libraryKey, forKey: .libraryKey)
         try c.encode(isFavourite, forKey: .isFavourite)
+        try c.encode(restSeconds, forKey: .restSeconds)
     }
 }
 
@@ -344,6 +354,41 @@ enum WorkoutLogSchemaV3: VersionedSchema {
 enum WorkoutLogSchemaV4: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(4, 0, 0) }
     static var models: [any PersistentModel.Type] {
+        [WorkoutLogSchemaV4.ExerciseDef.self, WorkoutDef.self,
+         WorkoutLogSchemaV2.WorkoutLog.self]
+    }
+
+    /// ExerciseDef as of V4 — favourites, but no rest timer. Frozen.
+    ///
+    /// The rule this codebase learned the hard way, twice: only the NEWEST
+    /// schema may list the live class. Two versions pointing at it means one
+    /// added field changes both, they describe the same shape, and staged
+    /// migration aborts at launch with "unknown model version".
+    @Model
+    final class ExerciseDef {
+        var id: UUID = UUID()
+        var name: String = ""
+        var numberOfSeries: Int = 3
+        var lowestWeight: Int = 0
+        var highestWeight: Int = 200
+        var weightIncrement: Int = 5
+        var movementType: MovementType = MovementType.none
+        var primaryMuscleRaw: String? = nil
+        var secondaryMuscleRaw: [String] = []
+        var libraryKey: String? = nil
+        var isFavourite: Bool = false
+
+        init(id: UUID = UUID(), name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+}
+
+// V5 adds the per-exercise rest time. Additive and defaulted, so lightweight.
+enum WorkoutLogSchemaV5: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(5, 0, 0) }
+    static var models: [any PersistentModel.Type] {
         [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self]
     }
 }
@@ -362,9 +407,15 @@ typealias WorkoutLog = WorkoutLogSchemaV2.WorkoutLog
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self,
-         WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self]
+         WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self, WorkoutLogSchemaV5.self]
     }
-    static var stages: [MigrationStage] { [v1toV2, v2toV3, v3toV4] }
+    static var stages: [MigrationStage] { [v1toV2, v2toV3, v3toV4, v4toV5] }
+
+    /// Additive only — see WorkoutLogSchemaV5.
+    static let v4toV5 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV4.self,
+        toVersion:   WorkoutLogSchemaV5.self
+    )
 
     /// Additive only — see WorkoutLogSchemaV4.
     static let v3toV4 = MigrationStage.lightweight(

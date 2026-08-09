@@ -14,6 +14,7 @@ I made this app for myself because I wanted logging to be quicker than in the ap
 ## Contents
 - [Getting started](#getting-started) — defining your first workout and exercises
 - [Logging a workout](#logging-a-workout) — the wheels, the buttons, skipping an exercise
+- [The rest timer](#the-rest-timer) — optional, off by default
 - [The Apple Watch app](#the-apple-watch-app) — logging at the machine
 - [Handing a workout over](#handing-a-workout-over) — moving between iPhone and Watch
 - [Apple Health](#apple-health) — optional, off by default
@@ -23,7 +24,7 @@ I made this app for myself because I wanted logging to be quicker than in the ap
 - [Your logs and statistics](#your-logs-and-statistics) — the four tabs
 - [How the strength numbers work](#how-the-strength-numbers-work) — one-rep max, hard sets, trend
 - [Muscle groups](#muscle-groups) — the body picture and the fifteen groups
-- [Settings](#settings) — sharing between devices, Health, statistics, deleting data
+- [Settings](#settings) — sharing between devices, Health, the rest timer, statistics, deleting data
 - [Your data and privacy](#your-data-and-privacy) — what leaves your device
 - [Notes and Feedback](#notes-and-feedback) — and the open source
 
@@ -42,6 +43,15 @@ After finishing a set, tap **log, next** to record the exercise and move to the 
 **quit** ends the workout without logging the exercise that is on screen. Anything you already logged during the workout is kept.
 
 If a machine is busy you can skip ahead: swipe left for the next exercise you have not logged yet, and right for the previous one. Swiping leaves the current exercise without logging it, so you can come back to it later.
+
+## The rest timer
+Off unless you switch it on, in Settings. With it off the app behaves exactly as it always has.
+
+With it on, a rest is counted after every set and after each exercise you log. A set ends when you touch a wheel — you roll it to what you just lifted, and the rest starts. Touching a wheel and putting it back on the same number counts too, which is what happens when you repeat the previous set, and a plain tap on a wheel is the simplest way to start a rest by hand. The countdown appears a few seconds after your last touch, so setting the weight and then the repetitions does not take the second wheel away from you.
+
+While it runs you are free to put the phone in your pocket or use something else: the countdown is only a display, and the phone buzzes and shows a notification when the rest is over whether or not the app is on screen. If your Apple Watch is nearby it buzzes as well. **skip rest** ends it early and takes you straight back to the wheels.
+
+How long the rest is belongs to the exercise, because a heavy compound needs longer than a light isolation movement. The first-run question sets what new exercises start with, from 0:15 up to 5:00 in quarter minutes, and 1:30 by default; any exercise can be given its own on its *edit exercise* screen.
 
 ## The Apple Watch app
 The Watch app is a companion to the iPhone app: it shows your workouts and lets you log them at the machine, without taking your phone out. Everything else — creating workouts and exercises, browsing and exporting logs, settings — is done on the iPhone.
@@ -88,7 +98,7 @@ In the list, a **star** marks an exercise as a favourite, which also floats it t
 Deleting an exercise removes it from your list *and* from any workout that used it. Sets you have already logged are kept.
 
 ## Editing an exercise
-On the *edit exercise* screen you set the name, the number of sets, the lowest weight, the highest weight and the increment that determine the numbers on its wheel, and the muscle groups it works. Underneath, **In these workouts** shows which workouts contain it, and you can add or remove it from any of them right there — the same relationship, editable from either end.
+On the *edit exercise* screen you set the name, the number of sets, the lowest weight, the highest weight and the increment that determine the numbers on its wheel, the rest this exercise gets when the rest timer is on, and the muscle groups it works. Underneath, **In these workouts** shows which workouts contain it, and you can add or remove it from any of them right there — the same relationship, editable from either end.
 
 An exercise needs a name and a primary muscle group before it can be saved, and the name has to be one you are not already using. Without a muscle group an exercise cannot be found on the body picture or grouped with anything else. **quit** leaves without keeping your changes; on an exercise you have only just created, it removes it again rather than leaving a nameless one behind.
 
@@ -144,7 +154,8 @@ The **ready-made exercises** cover every primary muscle group and come already f
 The settings screen has:
    - **Share data among your iPhones/iPads** — keeps your workouts, exercises and logs in step across your devices through your own iCloud account. Off by default.
    - **Save workouts to Apple Health** — see [Apple Health](#apple-health) above. Off by default.
-   - **Numbers for a new exercise** — the sets, weight range and increment each new exercise starts with. Exercises you already have are not changed.
+   - **Rest timer** — counts your rest after every set and after each exercise you log. Off by default, see [The rest timer](#the-rest-timer) above.
+   - **Numbers for a new exercise** — the sets, weight range, increment and rest each new exercise starts with. Exercises you already have are not changed.
    - **One-rep max formula** — which of the three formulas the statistics use. Epley by default.
    - **Workouts in the trend** — how many recent workouts the trend line uses, 16 by default and never fewer than 8.
    - **Averaging in graphs** — smooths the dots over this many workouts, 3 by default; set it to off to see every workout as logged.

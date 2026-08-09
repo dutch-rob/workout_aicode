@@ -312,6 +312,7 @@ struct EditExerciseView: View {
         let increment: Int
         let primary: MuscleGroup?
         let secondary: [MuscleGroup]
+        let restSeconds: Int
         /// True when the exercise was created just before this screen opened,
         /// in which case quitting should remove it rather than restore it.
         let isNew: Bool
@@ -379,6 +380,19 @@ struct EditExerciseView: View {
                     .multilineTextAlignment(.trailing)
             } label: { Text("Weight increment") }
 
+            // Shown whether or not the timer is switched on, so the value is
+            // already right if it is turned on later — and so the setting is
+            // discoverable from the place it applies to.
+            Section {
+                RestSecondsPicker(title: "Rest after a set", seconds: $exercise.restSeconds)
+            } footer: {
+                if RestTimerDefaults.isEnabled {
+                    Text("How long the rest timer counts after each set of this exercise, and after logging it.")
+                } else {
+                    Text("Used when you switch the rest timer on in settings.")
+                }
+            }
+
             // NOTE: the "Movement type" picker used to live here. It only fed the
             // Watch's motion-based rep counter, which no longer exists, so the
             // control did nothing while promising a feature. `movementType` stays
@@ -423,6 +437,7 @@ struct EditExerciseView: View {
                                 increment: exercise.weightIncrement,
                                 primary: exercise.primaryMuscle,
                                 secondary: exercise.secondaryMuscles,
+                                restSeconds: exercise.restSeconds,
                                 isNew: exercise.name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
     }
@@ -441,6 +456,7 @@ struct EditExerciseView: View {
                 exercise.weightIncrement = o.increment
                 exercise.primaryMuscle = o.primary
                 exercise.secondaryMuscles = o.secondary
+                exercise.restSeconds = o.restSeconds
                 try? context.save()
             }
         }
@@ -462,6 +478,7 @@ struct LogExerciseView: View {
     var onEndSession: () -> Void = {}
 
     @ObservedObject private var handoff = PhoneSessionManager.shared
+    @ObservedObject private var restTimer = RestTimer.shared
 
     @State private var startedAt = Date()
     @State private var currentIndex: Int = 0
@@ -520,7 +537,7 @@ struct LogExerciseView: View {
                 .onChange(of: loggedIndices) { _, _ in
                     handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
                 }
-                .onDisappear { handoff.leaveSession() }
+                .onDisappear { handoff.leaveSession(); restTimer.cancel() }
                 // Reloaded state after reclaiming the session in place.
                 .onChange(of: handoff.adoptSnapshot) { _, _ in
                     if let snap = handoff.takeAdoptSnapshot(for: workout.id.uuidString) {
@@ -535,6 +552,47 @@ struct LogExerciseView: View {
         .sheet(isPresented: $showAllLoggedAlert) {
             allLoggedSheet
         }
+        // Covers the whole screen on purpose: during a rest there is nothing to
+        // do here, and a countdown squeezed in beside the wheels is the kind of
+        // thing you stop noticing. "skip rest" is the way out.
+        .fullScreenCover(isPresented: Binding(
+            get: { restTimer.isShowing },
+            set: { shown in if !shown, restTimer.isShowing { restTimer.skip() } }
+        )) {
+            RestCountdownView()
+        }
+    }
+
+    // MARK: - Rest timer
+
+    /// Rest for the exercise on screen. An exercise from before the rest timer
+    /// existed migrates in with the built-in default, so this is never zero.
+    private var restSecondsForCurrent: Int {
+        exerciseAt(currentIndex)?.restSeconds ?? RestTimerDefaults.newExerciseSeconds
+    }
+
+    /// A set ended. What counts as the end of a set is a touch on a wheel: the
+    /// user rolls a wheel to what they just lifted, and that is the moment the
+    /// rest begins. Deliberately a *touch* and not a value change, because the
+    /// spec case that matters is repeating the previous set — the wheel is
+    /// moved and put back on the same number, which no `onChange` would ever
+    /// report. A plain tap on a wheel therefore also starts the rest, which is
+    /// the easiest way to start it by hand.
+    ///
+    /// Only wheels, not the whole screen: a tap anywhere would fire on the log,
+    /// quit and list buttons, which are not the end of anything.
+    private func wheelTouchEnded(_ translation: CGSize) {
+        // A horizontal fling is the page swipe to another exercise, not a set.
+        if abs(translation.width) > 40, abs(translation.width) > abs(translation.height) {
+            return
+        }
+        restTimer.setFinished(exercise: exerciseAt(currentIndex)?.name ?? "",
+                              seconds: restSecondsForCurrent)
+    }
+
+    private var wheelTouchGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onEnded { wheelTouchEnded($0.translation) }
     }
 
     // MARK: - Handover helpers
@@ -671,6 +729,7 @@ struct LogExerciseView: View {
             }
         }
         .frame(height: pickerHeight)
+        .simultaneousGesture(wheelTouchGesture)
     }
 
     private func repsPickers(for exercise: ExerciseDef) -> some View {
@@ -686,6 +745,7 @@ struct LogExerciseView: View {
             }
         }
         .frame(height: pickerHeight)
+        .simultaneousGesture(wheelTouchGesture)
     }
 
     private var wheelSpacing: CGFloat { 8 }
@@ -762,12 +822,20 @@ struct LogExerciseView: View {
 
     private func setWeight(_ value: Int, series: Int) {
         ensureSeriesCapacity(&weights[currentIndex], upTo: series, fill: exerciseAt(currentIndex)?.lowestWeight ?? 0)
+        guard weights[currentIndex][series] != value else { return }
         weights[currentIndex][series] = value
+        // Belt and braces: a wheel left on a new number is the end of a set
+        // even if the touch gesture above was swallowed by the picker.
+        restTimer.setFinished(exercise: exerciseAt(currentIndex)?.name ?? "",
+                              seconds: restSecondsForCurrent)
     }
 
     private func setRep(_ value: Int, series: Int) {
         ensureSeriesCapacity(&reps[currentIndex], upTo: series, fill: 0)
+        guard reps[currentIndex][series] != value else { return }
         reps[currentIndex][series] = value
+        restTimer.setFinished(exercise: exerciseAt(currentIndex)?.name ?? "",
+                              seconds: restSecondsForCurrent)
     }
 
     private func ensureSeriesCapacity(_ arr: inout [Int], upTo index: Int, fill: Int) {
@@ -841,7 +909,13 @@ struct LogExerciseView: View {
             return
         }
 
+        // Rest between exercises, for as long as the exercise just finished
+        // asks for — read before moving on, because goToNextUnlogged changes
+        // what `currentIndex` points at.
+        let restAfter = ex.restSeconds
+        let restName = ex.name
         goToNextUnlogged()
+        restTimer.setFinished(exercise: restName, seconds: restAfter)
     }
 
     private func goToNextUnlogged() {
@@ -1716,6 +1790,7 @@ struct SettingsView: View {
     @AppStorage(StatsSettingsKey.window) private var trendWindow = StatsEngine.defaultWindow
     @AppStorage(StatsSettingsKey.smoothing) private var smoothing = StatsEngine.defaultSmoothing
     @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
+    @AppStorage(RestTimerKey.enabled) private var restTimerOn = false
     @AppStorage(DeveloperDataSync.withdrawProblemKey) private var withdrawProblem: String?
     @AppStorage(DeveloperDataSync.uploadProblemKey) private var uploadProblem: String?
     @AppStorage(DeveloperDataSync.uploadStatusKey) private var uploadStatus: String?
@@ -1753,13 +1828,28 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle(isOn: $restTimerOn) {
+                    Label("Rest timer", systemImage: "timer")
+                }
+                .onChange(of: restTimerOn) { _, on in
+                    if on {
+                        RestTimerDefaults.requestNotificationPermission()
+                    } else {
+                        RestTimer.shared.cancel()
+                    }
+                }
+            } footer: {
+                Text("When on, a rest is counted after every set and after each exercise you log, for as long as that exercise is set to. You can leave the app while it runs: the phone buzzes when the rest is over, and your Apple Watch does too if it is nearby. With this off, the app works exactly as before.")
+            }
+
+            Section {
                 NavigationLink {
                     ExerciseDefaultsSettings()
                 } label: {
                     Label("Numbers for a new exercise", systemImage: "slider.horizontal.3")
                 }
             } footer: {
-                Text("The sets, weight range and increment each new exercise starts with. Exercises you already have are not changed.")
+                Text("The sets, weight range, increment and rest each new exercise starts with. Exercises you already have are not changed.")
             }
 
             Section {

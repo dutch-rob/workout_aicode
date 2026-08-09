@@ -17,6 +17,7 @@ struct InfoView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Button { withAnimation { proxy.scrollTo("getting-started", anchor: .top) } } label: { Text("Getting started — defining your first workout and exercises").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("logging-a-workout", anchor: .top) } } label: { Text("Logging a workout — the wheels, the buttons, skipping an exercise").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
+                        Button { withAnimation { proxy.scrollTo("the-rest-timer", anchor: .top) } } label: { Text("The rest timer — optional, off by default").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("the-apple-watch-app", anchor: .top) } } label: { Text("The Apple Watch app — logging at the machine").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("handing-a-workout-over", anchor: .top) } } label: { Text("Handing a workout over — moving between iPhone and Watch").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("apple-health", anchor: .top) } } label: { Text("Apple Health — optional, off by default").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
@@ -26,7 +27,7 @@ struct InfoView: View {
                         Button { withAnimation { proxy.scrollTo("your-logs-and-statistics", anchor: .top) } } label: { Text("Your logs and statistics — the four tabs").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("how-the-strength-numbers-work", anchor: .top) } } label: { Text("How the strength numbers work — one-rep max, hard sets, trend").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("muscle-groups", anchor: .top) } } label: { Text("Muscle groups — the body picture and the fifteen groups").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
-                        Button { withAnimation { proxy.scrollTo("settings", anchor: .top) } } label: { Text("Settings — sharing between devices, Health, statistics, deleting data").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
+                        Button { withAnimation { proxy.scrollTo("settings", anchor: .top) } } label: { Text("Settings — sharing between devices, Health, the rest timer, statistics, deleting data").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("your-data-and-privacy", anchor: .top) } } label: { Text("Your data and privacy — what leaves your device").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                         Button { withAnimation { proxy.scrollTo("notes-and-feedback", anchor: .top) } } label: { Text("Notes and Feedback — and the open source").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
                     }
@@ -45,6 +46,14 @@ struct InfoView: View {
                     Text("After finishing a set, tap **log, next** to record the exercise and move to the next one. On the last exercise that button reads **log, end**, which records it and takes you back to the start screen.")
                     Text("**quit** ends the workout without logging the exercise that is on screen. Anything you already logged during the workout is kept.")
                     Text("If a machine is busy you can skip ahead: swipe left for the next exercise you have not logged yet, and right for the previous one. Swiping leaves the current exercise without logging it, so you can come back to it later.")
+                }
+
+                Group {
+                    Text("The rest timer").font(.headline).id("the-rest-timer")
+                    Text("Off unless you switch it on, in Settings. With it off the app behaves exactly as it always has.")
+                    Text("With it on, a rest is counted after every set and after each exercise you log. A set ends when you touch a wheel — you roll it to what you just lifted, and the rest starts. Touching a wheel and putting it back on the same number counts too, which is what happens when you repeat the previous set, and a plain tap on a wheel is the simplest way to start a rest by hand. The countdown appears a few seconds after your last touch, so setting the weight and then the repetitions does not take the second wheel away from you.")
+                    Text("While it runs you are free to put the phone in your pocket or use something else: the countdown is only a display, and the phone buzzes and shows a notification when the rest is over whether or not the app is on screen. If your Apple Watch is nearby it buzzes as well. **skip rest** ends it early and takes you straight back to the wheels.")
+                    Text("How long the rest is belongs to the exercise, because a heavy compound needs longer than a light isolation movement. The first-run question sets what new exercises start with, from 0:15 up to 5:00 in quarter minutes, and 1:30 by default; any exercise can be given its own on its *edit exercise* screen.")
                 }
 
                 Group {
@@ -94,7 +103,7 @@ struct InfoView: View {
 
                 Group {
                     Text("Editing an exercise").font(.headline).id("editing-an-exercise")
-                    Text("On the *edit exercise* screen you set the name, the number of sets, the lowest weight, the highest weight and the increment that determine the numbers on its wheel, and the muscle groups it works. Underneath, **In these workouts** shows which workouts contain it, and you can add or remove it from any of them right there — the same relationship, editable from either end.")
+                    Text("On the *edit exercise* screen you set the name, the number of sets, the lowest weight, the highest weight and the increment that determine the numbers on its wheel, the rest this exercise gets when the rest timer is on, and the muscle groups it works. Underneath, **In these workouts** shows which workouts contain it, and you can add or remove it from any of them right there — the same relationship, editable from either end.")
                     Text("An exercise needs a name and a primary muscle group before it can be saved, and the name has to be one you are not already using. Without a muscle group an exercise cannot be found on the body picture or grouped with anything else. **quit** leaves without keeping your changes; on an exercise you have only just created, it removes it again rather than leaving a nameless one behind.")
                 }
 
@@ -157,7 +166,8 @@ struct InfoView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("    • **Share data among your iPhones/iPads** — keeps your workouts, exercises and logs in step across your devices through your own iCloud account. Off by default.")
                             Text("    • **Save workouts to Apple Health** — see [Apple Health](#apple-health) above. Off by default.")
-                            Text("    • **Numbers for a new exercise** — the sets, weight range and increment each new exercise starts with. Exercises you already have are not changed.")
+                            Text("    • **Rest timer** — counts your rest after every set and after each exercise you log. Off by default, see [The rest timer](#the-rest-timer) above.")
+                            Text("    • **Numbers for a new exercise** — the sets, weight range, increment and rest each new exercise starts with. Exercises you already have are not changed.")
                             Text("    • **One-rep max formula** — which of the three formulas the statistics use. Epley by default.")
                             Text("    • **Workouts in the trend** — how many recent workouts the trend line uses, 16 by default and never fewer than 8.")
                             Text("    • **Averaging in graphs** — smooths the dots over this many workouts, 3 by default; set it to off to see every workout as logged.")
