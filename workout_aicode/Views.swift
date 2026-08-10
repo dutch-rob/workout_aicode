@@ -514,6 +514,7 @@ struct LogExerciseView: View {
                 .contentShape(Rectangle())
                 .offset(x: dragOffsetX)
                 .padding()
+                .modifier(RestSettleAcknowledgement(height: geo.size.height))
                 .onAppear {
                     containerWidth = geo.size.width
                     pickerHeight = max(160, (geo.size.height - 220) / 2)

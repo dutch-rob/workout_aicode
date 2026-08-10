@@ -94,6 +94,12 @@ final class RestTimer: ObservableObject {
     /// Bumped by the tick so the countdown redraws.
     @Published private(set) var tick = Date()
 
+    /// Changes every time a rest starts or restarts before the countdown has
+    /// appeared. The log screen watches it to acknowledge the touch: without
+    /// something happening at that moment, the settle delay reads as the app
+    /// having ignored you.
+    @Published private(set) var settleToken = UUID()
+
     var remainingSeconds: Int {
         guard let endsAt else { return 0 }
         return max(0, Int(endsAt.timeIntervalSince(tick).rounded(.up)))
@@ -112,6 +118,9 @@ final class RestTimer: ObservableObject {
     /// again. The delay is part of the rest, so the countdown still starts at
     /// exactly the configured time.
     private let settleDelay: TimeInterval = 3
+
+    /// The settle window, for the log screen's acknowledgement to run over.
+    var settleDuration: TimeInterval { settleDelay }
 
     private var ticker: Timer?
     private var presentWork: DispatchWorkItem?
@@ -132,6 +141,7 @@ final class RestTimer: ObservableObject {
         let end = Date().addingTimeInterval(settleDelay + Double(seconds))
         endsAt = end
         tick = Date()
+        settleToken = UUID()
 
         scheduleNotification(at: end)
         startTicking()
@@ -291,6 +301,56 @@ final class RestTimerNotificationDelegate: NSObject, UNUserNotificationCenterDel
         // and the rest is over.
         Task { @MainActor in RestTimer.shared.onForeground() }
         completionHandler()
+    }
+}
+
+// MARK: - Settle acknowledgement
+
+/// Greys the log screen the instant a rest starts, then drains that grey away
+/// over the settle window.
+///
+/// The settle delay exists so that setting the weight does not snatch the reps
+/// wheel away, but three silent seconds after a touch read as the app having
+/// missed it — the one thing a timer must never do. So the acknowledgement is
+/// immediate, and it recedes rather than merely fading: how much grey is left
+/// is how much time is left to correct a wheel before the countdown covers it.
+///
+/// Lives here, and as a modifier rather than inline, because the log screen's
+/// modifier chain is long enough that adding four more defeated the
+/// type-checker outright.
+struct RestSettleAcknowledgement: ViewModifier {
+    /// Height to drain across — the log screen's own, not the window's.
+    let height: CGFloat
+
+    @ObservedObject private var timer = RestTimer.shared
+    @State private var fill: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.28))
+                    .frame(height: height * fill)
+                    .allowsHitTesting(false)
+            }
+            .onChange(of: timer.settleToken) { _, _ in
+                fill = 1
+                // A hop, so filling back up is a change of its own rather than
+                // being coalesced into the animated drain and never drawn.
+                DispatchQueue.main.async {
+                    withAnimation(.linear(duration: timer.settleDuration)) { fill = 0 }
+                }
+            }
+            // The countdown taking over, or the rest being called off, both end
+            // the acknowledgement early.
+            .onChange(of: timer.isShowing) { _, showing in
+                if showing { fill = 0 }
+            }
+            .onChange(of: timer.endsAt) { _, end in
+                if end == nil {
+                    withAnimation(.easeOut(duration: 0.2)) { fill = 0 }
+                }
+            }
     }
 }
 
