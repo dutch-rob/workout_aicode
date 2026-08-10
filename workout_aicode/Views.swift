@@ -1839,7 +1839,7 @@ struct SettingsView: View {
                     }
                 }
             } footer: {
-                Text("When on, a rest is counted after every set and after each exercise you log, for as long as that exercise is set to. You can leave the app while it runs: the phone buzzes when the rest is over, and your Apple Watch does too if it is nearby. With this off, the app works exactly as before.")
+                Text("When on, a rest is counted after every set and after each exercise you log, for as long as that exercise is set to. You can leave the app while it runs: the phone buzzes and shows a notification when the rest is over — and, like any notification, it reaches your Apple Watch when your phone is locked. With this off, the app works exactly as before.")
             }
 
             Section {

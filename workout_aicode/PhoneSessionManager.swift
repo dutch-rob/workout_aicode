@@ -291,38 +291,6 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         session.sendMessage(["type": "sessionEnded"], replyHandler: nil, errorHandler: nil)
     }
 
-    // MARK: - Rest timer mirroring
-    //
-    // Only the end date travels, never a countdown: the Watch runs its own
-    // notification off that date, so the two ends cannot drift and neither has
-    // to stay awake. Best effort by nature — sendMessage needs the Watch app
-    // reachable, and transferUserInfo is queued rather than immediate. When
-    // neither gets through in time the phone still buzzes, and a phone
-    // notification is mirrored to the wrist anyway while the phone is locked.
-
-    func sendRestTimer(endsAt: Date, exercise: String) {
-        let msg: [String: Any] = ["type": "restTimer",
-                                  "endsAt": endsAt.timeIntervalSince1970,
-                                  "exercise": exercise]
-        deliver(msg)
-    }
-
-    func cancelRestTimerOnWatch() {
-        deliver(["type": "restTimerCancelled"])
-    }
-
-    private func deliver(_ msg: [String: Any]) {
-        guard WCSession.isSupported() else { return }
-        let session = WCSession.default
-        guard session.activationState == .activated, session.isWatchAppInstalled else { return }
-        if session.isReachable {
-            session.sendMessage(msg, replyHandler: nil,
-                                errorHandler: { _ in session.transferUserInfo(msg) })
-        } else {
-            session.transferUserInfo(msg)
-        }
-    }
-
     // MARK: - Incoming: watch logs
     private func handleIncomingLog(_ info: [String: Any]) {
         guard let type = info["type"] as? String, type == "logSet",

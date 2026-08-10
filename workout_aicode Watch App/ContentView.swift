@@ -77,17 +77,7 @@ struct ContentView: View {
                                 onDismiss: { session.dismissPaused() })
             }
         }
-        // Mirrors the rest the phone is counting. Only visible if the user
-        // happens to be looking at the watch — the buzz at the end comes from
-        // a scheduled notification, not from this view being on screen.
-        .overlay {
-            if restTimer.isRunning {
-                WatchRestCountdownView()
-            }
-        }
     }
-
-    @ObservedObject private var restTimer = WatchRestTimer.shared
 
     private var emptyState: some View {
         VStack(spacing: 10) {

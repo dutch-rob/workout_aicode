@@ -11,14 +11,19 @@ import UserNotifications
 //
 // The design constraint that shapes everything here: the user must be free to
 // put the phone in a pocket, or read something else, while resting. So the
-// countdown is NOT what measures the time — an absolute end date is. Three
+// countdown is NOT what measures the time — an absolute end date is. Two
 // things are hung off that one date:
 //
 //   • a foreground tick, which only redraws the countdown screen;
 //   • a local notification scheduled at the end date, which is the only thing
-//     that can reach the user when the app is backgrounded or the screen off;
-//   • a message to the Apple Watch carrying the same end date, so the watch
-//     buzzes from its own notification rather than depending on staying awake.
+//     that can reach the user when the app is backgrounded or the screen off.
+//
+// Nothing is sent to the Apple Watch. iOS already forwards this notification to
+// the wrist while the phone is locked, so a second, watch-scheduled one would
+// only buzz twice. It would also be the less reliable of the two: the message
+// carrying it can only be queued when the watch app is unreachable, and a
+// queued backlog delivered on reconnect would fire a notification per stale
+// rest, minutes or hours after the workout.
 //
 // Because the notification fires regardless, it is also the finish signal in
 // the foreground: the delegate suppresses the banner and plays the haptic
@@ -129,7 +134,6 @@ final class RestTimer: ObservableObject {
         tick = Date()
 
         scheduleNotification(at: end)
-        PhoneSessionManager.shared.sendRestTimer(endsAt: end, exercise: exercise)
         startTicking()
 
         presentWork?.cancel()
@@ -148,7 +152,6 @@ final class RestTimer: ObservableObject {
 
     /// The user tapped "skip rest".
     func skip() {
-        PhoneSessionManager.shared.cancelRestTimerOnWatch()
         finish(haptic: false)
     }
 
@@ -180,7 +183,6 @@ final class RestTimer: ObservableObject {
     /// The workout ended (finished or quit) — no rest outlives it.
     func cancel() {
         guard endsAt != nil else { return }
-        PhoneSessionManager.shared.cancelRestTimerOnWatch()
         finish(haptic: false)
     }
 

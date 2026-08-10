@@ -257,31 +257,6 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
 
-    // MARK: - Rest timer (phone-driven)
-
-    private func handleRestTimer(_ msg: [String: Any]) -> Bool {
-        switch msg["type"] as? String {
-        case "restTimer":
-            guard let ends = msg["endsAt"] as? Double else { return true }
-            let name = msg["exercise"] as? String ?? ""
-            DispatchQueue.main.async {
-                Task { @MainActor in
-                    WatchRestTimer.shared.requestNotificationPermission()
-                    WatchRestTimer.shared.start(endsAt: Date(timeIntervalSince1970: ends),
-                                                exercise: name)
-                }
-            }
-            return true
-        case "restTimerCancelled":
-            DispatchQueue.main.async {
-                Task { @MainActor in WatchRestTimer.shared.cancel() }
-            }
-            return true
-        default:
-            return false
-        }
-    }
-
     private func decodeSnapshot(_ any: Any?) -> SessionSnapshot? {
         (any as? Data).flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
     }
@@ -305,13 +280,6 @@ extension WatchSessionManager: WCSessionDelegate {
 
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
         DispatchQueue.main.async { self.ingest(context: applicationContext) }
-    }
-
-    /// The fallback path when the app was not reachable at the moment the
-    /// phone's rest started. Queued, so it can arrive late — the end date it
-    /// carries is checked before anything is scheduled.
-    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
-        _ = handleRestTimer(userInfo)
     }
 
     // Messages WITH a reply handler.
@@ -340,11 +308,9 @@ extension WatchSessionManager: WCSessionDelegate {
 
     // Messages WITHOUT a reply handler.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
-        if handleRestTimer(message) { return }
         switch message["type"] as? String {
         case "sessionEnded":
             DispatchQueue.main.async {
-                Task { @MainActor in WatchRestTimer.shared.cancel() }
                 if self.role != .none {
                     self.role = .none
                     self.routeWorkoutId = nil
