@@ -23,6 +23,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
     // MARK: Definitions from the iPhone
     @Published private(set) var workouts: [SyncWorkout]  = []
     @Published private(set) var exercises: [SyncExercise] = []
+    /// The phone's rest-timer switch. Off until a payload says otherwise, so a
+    /// Watch that has not heard from the phone never invents a rest.
+    @Published private(set) var restTimerEnabled = false
     private var lastEntries: [String: SyncLastEntry] = [:]
 
     // MARK: Handover session state
@@ -73,6 +76,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
             workouts    = payload.workouts
             exercises   = payload.exercises
             lastEntries = payload.lastEntries
+            restTimerEnabled = payload.restTimerEnabled
         }
         // The phone stashes its driving snapshot here (nil when it isn't driving).
         remoteSnapshot = decodeSnapshot(context["session"])
@@ -269,8 +273,8 @@ final class WatchSessionManager: NSObject, ObservableObject {
             let name = msg["exercise"] as? String ?? ""
             Task { @MainActor in
                 WatchRestTimer.shared.requestNotificationPermission()
-                WatchRestTimer.shared.start(endsAt: Date(timeIntervalSince1970: ends),
-                                            exercise: name)
+                WatchRestTimer.shared.mirror(endsAt: Date(timeIntervalSince1970: ends),
+                                             exercise: name)
             }
             return true
         case "restTimerCancelled":
@@ -279,6 +283,15 @@ final class WatchSessionManager: NSObject, ObservableObject {
         default:
             return false
         }
+    }
+
+    /// Skipping here calls off the phone's rest too, so the phone does not
+    /// buzz for a rest the user has already finished with. Live send only, for
+    /// the same reason the phone never queues these.
+    func cancelRestTimerOnPhone() {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else { return }
+        session.sendMessage(["type": "restTimerCancelled"], replyHandler: nil, errorHandler: nil)
     }
 
     private func decodeSnapshot(_ any: Any?) -> SessionSnapshot? {

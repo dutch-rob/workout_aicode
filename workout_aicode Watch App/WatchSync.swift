@@ -3,10 +3,10 @@ import Foundation
 // MARK: - Watch ⇄ Phone sync contract
 //
 // Plain Codable value types used as the wire format between the iPhone and the
-// Apple Watch. A byte-identical copy of this file lives in the iOS app target
-// ("workout_aicode/WatchSync.swift"). The two targets are separate synchronized
-// folders and do not share source, so the JSON keys defined here MUST stay in
-// sync on both sides.
+// Apple Watch. A byte-identical copy of this file lives in the Watch App target
+// ("workout_aicode Watch App/WatchSync.swift"). The two targets are separate
+// synchronized folders and do not share source, so the JSON keys defined here
+// MUST stay in sync on both sides.
 //
 // Direction of travel:
 //   • Phone → Watch : SyncPayload (workout + exercise definitions, prefill
@@ -16,6 +16,14 @@ import Foundation
 //   • Phone → Watch : live "mirror" messages so the Watch can follow the
 //     exercise the phone is currently logging.
 
+/// Values this file needs that live in phone-only types. Repeated as literals
+/// because this file must compile unchanged in the Watch target, which has no
+/// access to `RestTimerDefaults`.
+enum SyncDefaults {
+    /// Keep in step with `RestTimerDefaults.seconds`.
+    static let restSeconds = 90
+}
+
 /// One exercise definition, flattened to primitive types (UUIDs as strings).
 struct SyncExercise: Codable, Identifiable, Hashable {
     var id: String
@@ -24,6 +32,40 @@ struct SyncExercise: Codable, Identifiable, Hashable {
     var lowestWeight: Int
     var highestWeight: Int
     var weightIncrement: Int
+    /// Rest after a set of this exercise, so a set logged on the Watch rests
+    /// for as long as the same set logged on the phone.
+    var restSeconds: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement
+        case restSeconds
+    }
+    init(id: String, name: String, numberOfSeries: Int, lowestWeight: Int,
+         highestWeight: Int, weightIncrement: Int,
+         restSeconds: Int = SyncDefaults.restSeconds) {
+        self.id = id
+        self.name = name
+        self.numberOfSeries = numberOfSeries
+        self.lowestWeight = lowestWeight
+        self.highestWeight = highestWeight
+        self.weightIncrement = weightIncrement
+        self.restSeconds = restSeconds
+    }
+    // Lenient, because the two apps update independently: a Watch on the new
+    // build can be handed a payload from the old phone build for as long as it
+    // takes the user to update, and an exercise arriving without a rest is
+    // better than a whole payload that will not decode.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        numberOfSeries = try c.decode(Int.self, forKey: .numberOfSeries)
+        lowestWeight = try c.decode(Int.self, forKey: .lowestWeight)
+        highestWeight = try c.decode(Int.self, forKey: .highestWeight)
+        weightIncrement = try c.decode(Int.self, forKey: .weightIncrement)
+        restSeconds = try c.decodeIfPresent(Int.self, forKey: .restSeconds)
+            ?? SyncDefaults.restSeconds
+    }
 }
 
 /// One workout definition. `exerciseOrder` holds exercise ids (as strings).
@@ -85,20 +127,25 @@ struct SyncPayload: Codable {
     var lastEntries: [String: SyncLastEntry]
     /// Whether the user opted in to saving finished workouts to Apple Health.
     var healthSharingEnabled: Bool
+    /// Whether the rest timer is switched on. The setting lives on the phone,
+    /// so the Watch has to be told, exactly like Health sharing.
+    var restTimerEnabled: Bool
 
     static func lastEntryKey(workoutId: String, exerciseId: String) -> String {
         "\(workoutId)|\(exerciseId)"
     }
 
     enum CodingKeys: String, CodingKey {
-        case workouts, exercises, lastEntries, healthSharingEnabled
+        case workouts, exercises, lastEntries, healthSharingEnabled, restTimerEnabled
     }
     init(workouts: [SyncWorkout], exercises: [SyncExercise],
-         lastEntries: [String: SyncLastEntry], healthSharingEnabled: Bool = false) {
+         lastEntries: [String: SyncLastEntry], healthSharingEnabled: Bool = false,
+         restTimerEnabled: Bool = false) {
         self.workouts = workouts
         self.exercises = exercises
         self.lastEntries = lastEntries
         self.healthSharingEnabled = healthSharingEnabled
+        self.restTimerEnabled = restTimerEnabled
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -106,5 +153,6 @@ struct SyncPayload: Codable {
         exercises = try c.decode([SyncExercise].self, forKey: .exercises)
         lastEntries = try c.decode([String: SyncLastEntry].self, forKey: .lastEntries)
         healthSharingEnabled = try c.decodeIfPresent(Bool.self, forKey: .healthSharingEnabled) ?? false
+        restTimerEnabled = try c.decodeIfPresent(Bool.self, forKey: .restTimerEnabled) ?? false
     }
 }

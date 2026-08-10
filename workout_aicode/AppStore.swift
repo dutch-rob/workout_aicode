@@ -158,14 +158,16 @@ final class AppStore: ObservableObject {
                          numberOfSeries: $0.numberOfSeries,
                          lowestWeight: $0.lowestWeight,
                          highestWeight: $0.highestWeight,
-                         weightIncrement: $0.weightIncrement)
+                         weightIncrement: $0.weightIncrement,
+                         restSeconds: $0.restSeconds)
         }
 
         let payload = SyncPayload(
             workouts: syncWorkouts,
             exercises: syncExercises,
             lastEntries: lastMap,
-            healthSharingEnabled: UserDefaults.standard.bool(forKey: "healthSharingEnabled")
+            healthSharingEnabled: UserDefaults.standard.bool(forKey: "healthSharingEnabled"),
+            restTimerEnabled: UserDefaults.standard.bool(forKey: RestTimerKey.enabled)
         )
         return try? JSONEncoder().encode(payload)
     }

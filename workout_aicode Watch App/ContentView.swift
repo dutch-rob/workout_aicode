@@ -81,7 +81,7 @@ struct ContentView: View {
         // happens to be looking at the watch — the buzz at the end comes from
         // a scheduled notification, not from this view being on screen.
         .overlay {
-            if restTimer.isRunning {
+            if restTimer.isShowing {
                 WatchRestCountdownView()
             }
         }

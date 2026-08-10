@@ -55,6 +55,7 @@ struct InfoView: View {
                     Text("The countdown opens a few seconds down rather than at the full time, because your rest started when the set did, not when the screen changed. Swiping to another exercise counts as still working and puts the countdown off again.")
                     Text("While it runs you are free to put the phone in your pocket or use something else: the countdown is only a display, and the phone shows a notification when the rest is over whether or not the app is on screen. If your Apple Watch is nearby and awake when the rest starts, it is told when the rest ends and taps your wrist itself. **skip rest** ends it early and takes you straight back to the wheels.")
                     Text("How loudly the phone announces it is the phone's business, not the app's: an app cannot buzz you while it is in the background, so what you feel is whatever your Sounds & Haptics settings do for a notification. The Watch is the more dependable tap on the shoulder.")
+                    Text("It works the same way when you log on the Apple Watch: a turn of a wheel or the **log** button starts the rest, the countdown covers the watch face, and **skip** ends it. Whichever device you are logging on runs the rest, and skipping on one calls it off on the other. A rest started on the Watch stays on the Watch — your phone does not buzz in a locker for a set you logged at the machine.")
                     Text("How long the rest is belongs to the exercise, because a heavy compound needs longer than a light isolation movement. The first-run question sets what new exercises start with, from 0:15 up to 5:00 in quarter minutes, and 1:30 by default; any exercise can be given its own on its *edit exercise* screen.")
                 }
 
@@ -63,6 +64,7 @@ struct InfoView: View {
                     Text("The Watch app is a companion to the iPhone app: it shows your workouts and lets you log them at the machine, without taking your phone out. Everything else — creating workouts and exercises, browsing and exporting logs, settings — is done on the iPhone.")
                     Text("Your workouts appear on the Watch automatically; they are sent from the iPhone, so open the iPhone app once after you change something. Tap a workout to start logging.")
                     Text("Because the screen is small, the Watch shows **one** row of wheels at a time. The button at the top switches between the repetitions and the weights; whichever row is not on the wheels is shown underneath them as numbers, prefixed **r** for repetitions and **w** for weights. The exercise starts on the repetitions.")
+                    Text("If the rest timer is on, it runs here too — see [The rest timer](#the-rest-timer).")
                     Text("The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise. Swiping left and right moves between exercises without logging, exactly as on the phone.")
                 }
 

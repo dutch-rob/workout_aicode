@@ -403,6 +403,10 @@ extension PhoneSessionManager: WCSessionDelegate {
     // Messages WITHOUT a reply handler.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         switch message["type"] as? String {
+        case "restTimerCancelled":
+            // Skipped on the Watch. Calls off the phone's rest so it does not
+            // buzz later for a rest the user has already walked away from.
+            Task { @MainActor in RestTimer.shared.cancel() }
         case "sessionEnded":
             DispatchQueue.main.async {
                 if self.role != .none {

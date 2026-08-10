@@ -1842,6 +1842,9 @@ struct SettingsView: View {
                     } else {
                         RestTimer.shared.cancel()
                     }
+                    // The Watch keeps its own copy of this switch, so it has to
+                    // be told — same as the Health toggle above.
+                    store.reloadAll()
                 }
             } footer: {
                 Text("When on, a rest is counted after every set and after each exercise you log, for as long as that exercise is set to. You can leave the app while it runs: a notification arrives when the rest is over, and an Apple Watch that was nearby when the rest started taps your wrist as well. With this off, the app works exactly as before.")

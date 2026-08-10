@@ -89,8 +89,11 @@ struct WatchLogExerciseView: View {
                 let width = WKInterfaceDevice.current().screenBounds.width
                 let dx = value.translation.width
                 if dx <= -swipeThreshold {
+                    // Swiping is still working, not resting: put the cover off.
+                    WatchRestTimer.shared.stillBusy()
                     settle(to: -width, landingOn: nextUnloggedIndex)
                 } else if dx >= swipeThreshold {
+                    WatchRestTimer.shared.stillBusy()
                     settle(to: width, landingOn: prevUnloggedIndex)
                 } else {
                     // Not far enough — spring back.
@@ -429,13 +432,34 @@ struct WatchLogExerciseView: View {
         if loggedIndices.count >= workout.exerciseOrder.count {
             // Whole workout logged — end the session (pops back to the list, see
             // ContentView) and report it so the phone records it to Health.
+            // No rest: there is nothing left to rest for.
             let endedAt = Date()
             onEndSession()
             session.leaveSession()
             session.finishWorkout(startedAt: startedAt, endedAt: endedAt)
             return
         }
+        // Read before moving on — goToNextUnlogged changes what currentIndex
+        // points at, and the rest belongs to the exercise just finished.
+        let restAfter = exercise.restSeconds
+        let restName = exercise.name
         goToNextUnlogged()
+        startRest(exercise: restName, seconds: restAfter)
+    }
+
+    // MARK: - Rest timer
+    //
+    // Only when the phone says the feature is on. A Watch that has not heard
+    // from the phone leaves it off rather than guessing.
+
+    private func noteSetFinished() {
+        startRest(exercise: exerciseAt(currentIndex)?.name ?? "",
+                  seconds: exerciseAt(currentIndex)?.restSeconds ?? SyncDefaults.restSeconds)
+    }
+
+    private func startRest(exercise: String, seconds: Int) {
+        guard session.restTimerEnabled else { return }
+        WatchRestTimer.shared.setFinished(exercise: exercise, seconds: seconds)
     }
 
     private func goToNextUnlogged() {
@@ -501,7 +525,9 @@ struct WatchLogExerciseView: View {
                 guard currentIndex < weights.count else { return }
                 ensureCapacity(&weights[currentIndex], upTo: series,
                                fill: exerciseAt(currentIndex)?.lowestWeight ?? 0)
+                guard weights[currentIndex][series] != newValue else { return }
                 weights[currentIndex][series] = newValue
+                noteSetFinished()
             }
         )
     }
@@ -512,7 +538,9 @@ struct WatchLogExerciseView: View {
             set: { newValue in
                 guard currentIndex < reps.count else { return }
                 ensureCapacity(&reps[currentIndex], upTo: series, fill: 0)
+                guard reps[currentIndex][series] != newValue else { return }
                 reps[currentIndex][series] = newValue
+                noteSetFinished()
             }
         )
     }

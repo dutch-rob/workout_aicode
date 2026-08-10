@@ -55,6 +55,8 @@ While it runs you are free to put the phone in your pocket or use something else
 
 How loudly the phone announces it is the phone's business, not the app's: an app cannot buzz you while it is in the background, so what you feel is whatever your Sounds & Haptics settings do for a notification. The Watch is the more dependable tap on the shoulder.
 
+It works the same way when you log on the Apple Watch: a turn of a wheel or the **log** button starts the rest, the countdown covers the watch face, and **skip** ends it. Whichever device you are logging on runs the rest, and skipping on one calls it off on the other. A rest started on the Watch stays on the Watch — your phone does not buzz in a locker for a set you logged at the machine.
+
 How long the rest is belongs to the exercise, because a heavy compound needs longer than a light isolation movement. The first-run question sets what new exercises start with, from 0:15 up to 5:00 in quarter minutes, and 1:30 by default; any exercise can be given its own on its *edit exercise* screen.
 
 ## The Apple Watch app
@@ -63,6 +65,8 @@ The Watch app is a companion to the iPhone app: it shows your workouts and lets 
 Your workouts appear on the Watch automatically; they are sent from the iPhone, so open the iPhone app once after you change something. Tap a workout to start logging.
 
 Because the screen is small, the Watch shows **one** row of wheels at a time. The button at the top switches between the repetitions and the weights; whichever row is not on the wheels is shown underneath them as numbers, prefixed **r** for repetitions and **w** for weights. The exercise starts on the repetitions.
+
+If the rest timer is on, it runs here too — see [The rest timer](#the-rest-timer).
 
 The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise. Swiping left and right moves between exercises without logging, exactly as on the phone.
 

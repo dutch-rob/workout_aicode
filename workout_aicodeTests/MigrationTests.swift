@@ -335,3 +335,50 @@ private func removeStore(at url: URL) {
     UserDefaults.standard.removeObject(forKey: RestTimerKey.enabled)
     #expect(!RestTimerDefaults.isEnabled)
 }
+
+// MARK: - The Watch sync contract
+//
+// The phone and the Watch app update independently: a Watch on the new build
+// can be handed a payload from the old phone build for as long as it takes the
+// user to update the other one, and vice versa. A field added to this contract
+// must therefore never be the reason a payload fails to decode — that would
+// take the Watch's whole exercise list away, not just its rest times.
+
+@Test func aPayloadFromBeforeTheRestTimerStillDecodes() throws {
+    let json = """
+    {"workouts":[{"id":"w1","name":"Upper","exerciseOrder":["e1"]}],
+     "exercises":[{"id":"e1","name":"Row","numberOfSeries":3,"lowestWeight":20,
+                   "highestWeight":120,"weightIncrement":5}],
+     "lastEntries":{},"healthSharingEnabled":true}
+    """
+    let payload = try JSONDecoder().decode(SyncPayload.self, from: Data(json.utf8))
+    #expect(payload.exercises.count == 1)
+    #expect(payload.exercises[0].name == "Row")
+    // The rest has to land on something usable: zero would mean "no rest" and
+    // the Watch would never run the timer for that exercise.
+    #expect(payload.exercises[0].restSeconds == SyncDefaults.restSeconds)
+    #expect(payload.healthSharingEnabled)
+    // An old phone cannot have the timer on, so off is the only honest reading.
+    #expect(!payload.restTimerEnabled)
+}
+
+@Test func restTimesAndTheSwitchSurviveTheRoundTrip() throws {
+    let payload = SyncPayload(
+        workouts: [SyncWorkout(id: "w1", name: "Upper", exerciseOrder: ["e1"])],
+        exercises: [SyncExercise(id: "e1", name: "Row", numberOfSeries: 3,
+                                 lowestWeight: 20, highestWeight: 120,
+                                 weightIncrement: 5, restSeconds: 150)],
+        lastEntries: [:],
+        healthSharingEnabled: false,
+        restTimerEnabled: true)
+    let restored = try JSONDecoder().decode(
+        SyncPayload.self, from: try JSONEncoder().encode(payload))
+    #expect(restored.exercises[0].restSeconds == 150)
+    #expect(restored.restTimerEnabled)
+}
+
+@Test func theSyncFallbackMatchesThePhonesDefault() {
+    // Two literals in two files that must not drift: the Watch copy of the
+    // sync contract cannot see RestTimerDefaults.
+    #expect(SyncDefaults.restSeconds == RestTimerDefaults.seconds)
+}
