@@ -11,19 +11,22 @@ import UserNotifications
 //
 // The design constraint that shapes everything here: the user must be free to
 // put the phone in a pocket, or read something else, while resting. So the
-// countdown is NOT what measures the time — an absolute end date is. Two
+// countdown is NOT what measures the time — an absolute end date is. Three
 // things are hung off that one date:
 //
 //   • a foreground tick, which only redraws the countdown screen;
 //   • a local notification scheduled at the end date, which is the only thing
-//     that can reach the user when the app is backgrounded or the screen off.
+//     that can reach the user when the app is backgrounded or the screen off;
+//   • the same end date sent to the Apple Watch, which schedules its own
+//     notification from it and so buzzes the wrist whether or not it is awake.
 //
-// Nothing is sent to the Apple Watch. iOS already forwards this notification to
-// the wrist while the phone is locked, so a second, watch-scheduled one would
-// only buzz twice. It would also be the less reliable of the two: the message
-// carrying it can only be queued when the watch app is unreachable, and a
-// queued backlog delivered on reconnect would fire a notification per stale
-// rest, minutes or hours after the workout.
+// The watch is told ONLY when it is reachable at that moment, and the message
+// is never queued for later delivery. A queued backlog drained on reconnect
+// would fire one notification per stale rest, long after the workout — which is
+// exactly why this path is a live send or nothing at all. Relying on iOS
+// forwarding the phone's own notification instead is not enough: that only
+// happens while the phone is locked, so it misses the common case of the phone
+// being in your hand.
 //
 // Because the notification fires regardless, it is also the finish signal in
 // the foreground: the delegate suppresses the banner and plays the haptic
@@ -115,8 +118,11 @@ final class RestTimer: ObservableObject {
     /// the reps wheel — and covering the screen after the first one would take
     /// the second wheel away mid-edit. So the countdown waits this long after
     /// the last touch before appearing, and each further touch pushes it out
-    /// again. The delay is part of the rest, so the countdown still starts at
-    /// exactly the configured time.
+    /// again.
+    ///
+    /// The delay only postpones the *cover*, never the rest: your rest began
+    /// when the set ended, so the countdown opens already that many seconds
+    /// down rather than starting over at the full time.
     private let settleDelay: TimeInterval = 3
 
     /// The settle window, for the log screen's acknowledgement to run over.
@@ -138,17 +144,29 @@ final class RestTimer: ObservableObject {
 
         exerciseName = exercise
         totalSeconds = seconds
-        let end = Date().addingTimeInterval(settleDelay + Double(seconds))
+        let end = Date().addingTimeInterval(Double(seconds))
         endsAt = end
         tick = Date()
-        settleToken = UUID()
 
         scheduleNotification(at: end)
+        PhoneSessionManager.shared.sendRestTimer(endsAt: end, exercise: exercise)
         startTicking()
+        postponeCover()
+    }
 
+    /// The user is still working rather than resting — swiping to another
+    /// exercise, say. Pushes the cover out again without moving the rest
+    /// itself, which stays where the finished set put it.
+    func stillBusy() {
+        guard endsAt != nil, !isShowing else { return }
+        postponeCover()
+    }
+
+    private func postponeCover() {
+        settleToken = UUID()
         presentWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, self.endsAt != nil else { return }
+            guard let self, let endsAt = self.endsAt, endsAt > Date() else { return }
             self.isShowing = true
             // Resting with the phone on the bench should not mean unlocking it
             // again to see the countdown.
@@ -162,6 +180,7 @@ final class RestTimer: ObservableObject {
 
     /// The user tapped "skip rest".
     func skip() {
+        PhoneSessionManager.shared.cancelRestTimerOnWatch()
         finish(haptic: false)
     }
 
@@ -193,6 +212,7 @@ final class RestTimer: ObservableObject {
     /// The workout ended (finished or quit) — no rest outlives it.
     func cancel() {
         guard endsAt != nil else { return }
+        PhoneSessionManager.shared.cancelRestTimerOnWatch()
         finish(haptic: false)
     }
 

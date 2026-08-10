@@ -49,7 +49,11 @@ Off unless you switch it on, in Settings. With it off the app behaves exactly as
 
 With it on, a rest is counted after every set and after each exercise you log. A set ends when you touch a wheel — you roll it to what you just lifted, and the rest starts. Touching a wheel and putting it back on the same number counts too, which is what happens when you repeat the previous set, and a plain tap on a wheel is the simplest way to start a rest by hand. The countdown appears a few seconds after your last touch, so setting the weight and then the repetitions does not take the second wheel away from you.
 
-While it runs you are free to put the phone in your pocket or use something else: the countdown is only a display, and the phone buzzes and shows a notification when the rest is over whether or not the app is on screen. Like any other notification, it reaches your Apple Watch when your phone is locked. **skip rest** ends it early and takes you straight back to the wheels.
+The countdown opens a few seconds down rather than at the full time, because your rest started when the set did, not when the screen changed. Swiping to another exercise counts as still working and puts the countdown off again.
+
+While it runs you are free to put the phone in your pocket or use something else: the countdown is only a display, and the phone shows a notification when the rest is over whether or not the app is on screen. If your Apple Watch is nearby and awake when the rest starts, it is told when the rest ends and taps your wrist itself. **skip rest** ends it early and takes you straight back to the wheels.
+
+How loudly the phone announces it is the phone's business, not the app's: an app cannot buzz you while it is in the background, so what you feel is whatever your Sounds & Haptics settings do for a notification. The Watch is the more dependable tap on the shoulder.
 
 How long the rest is belongs to the exercise, because a heavy compound needs longer than a light isolation movement. The first-run question sets what new exercises start with, from 0:15 up to 5:00 in quarter minutes, and 1:30 by default; any exercise can be given its own on its *edit exercise* screen.
 

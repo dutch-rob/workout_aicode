@@ -777,6 +777,10 @@ struct LogExerciseView: View {
                 let threshold: CGFloat = 80
                 let horizontal = value.translation.width
 
+                // Swiping to another exercise is still working, not resting:
+                // push the cover out so it does not land mid-swipe.
+                if abs(horizontal) >= threshold { restTimer.stillBusy() }
+
                 if horizontal <= -threshold {
                     withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = -containerWidth }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
@@ -1840,7 +1844,7 @@ struct SettingsView: View {
                     }
                 }
             } footer: {
-                Text("When on, a rest is counted after every set and after each exercise you log, for as long as that exercise is set to. You can leave the app while it runs: the phone buzzes and shows a notification when the rest is over — and, like any notification, it reaches your Apple Watch when your phone is locked. With this off, the app works exactly as before.")
+                Text("When on, a rest is counted after every set and after each exercise you log, for as long as that exercise is set to. You can leave the app while it runs: a notification arrives when the rest is over, and an Apple Watch that was nearby when the rest started taps your wrist as well. With this off, the app works exactly as before.")
             }
 
             Section {

@@ -291,6 +291,36 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         session.sendMessage(["type": "sessionEnded"], replyHandler: nil, errorHandler: nil)
     }
 
+    // MARK: - Rest timer mirroring
+    //
+    // Only the end date travels, never a countdown: the Watch schedules its own
+    // notification from that date, so it buzzes the wrist even with its screen
+    // off and neither side has to stay awake.
+    //
+    // Sent ONLY while the Watch is reachable, and never handed to
+    // transferUserInfo. Queued delivery is what would turn a walk out of range
+    // into a burst of notifications for rests that finished long ago; a rest
+    // the Watch misses is simply a rest the Watch misses.
+
+    func sendRestTimer(endsAt: Date, exercise: String) {
+        deliver(["type": "restTimer",
+                 "endsAt": endsAt.timeIntervalSince1970,
+                 "exercise": exercise])
+    }
+
+    func cancelRestTimerOnWatch() {
+        deliver(["type": "restTimerCancelled"])
+    }
+
+    private func deliver(_ msg: [String: Any]) {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        guard session.activationState == .activated,
+              session.isWatchAppInstalled,
+              session.isReachable else { return }
+        session.sendMessage(msg, replyHandler: nil, errorHandler: nil)
+    }
+
     // MARK: - Incoming: watch logs
     private func handleIncomingLog(_ info: [String: Any]) {
         guard let type = info["type"] as? String, type == "logSet",
