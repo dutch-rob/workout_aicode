@@ -77,6 +77,9 @@ struct ContentView: View {
                                 onDismiss: { session.dismissPaused() })
             }
         }
+        // Applied before the countdown overlay, so the countdown lands on top
+        // of the grey rather than under it.
+        .modifier(WatchRestSettleAcknowledgement())
         // Mirrors the rest the phone is counting. Only visible if the user
         // happens to be looking at the watch — the buzz at the end comes from
         // a scheduled notification, not from this view being on screen.

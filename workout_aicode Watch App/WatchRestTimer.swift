@@ -47,10 +47,18 @@ final class WatchRestTimer: ObservableObject {
     /// rest: a Watch-driven rest waits out the settle delay first.
     @Published private(set) var isShowing = false
 
+    /// Changes every time the cover is put off, so the log screen can show
+    /// that the turn of the wheel was received. Three silent seconds read as
+    /// the app having missed it — the same on this screen as on the phone's.
+    @Published private(set) var settleToken = UUID()
+
     /// Same reasoning as the phone's: a set is logged over several separate
     /// turns of the crown, and covering the screen after the first would take
     /// the wheel away mid-edit. Postpones only the cover, never the rest.
     private let settleDelay: TimeInterval = 3
+
+    /// The settle window, for the acknowledgement to run over.
+    var settleDuration: TimeInterval { settleDelay }
 
     var remainingSeconds: Int {
         guard let endsAt else { return 0 }
@@ -103,6 +111,7 @@ final class WatchRestTimer: ObservableObject {
     }
 
     private func postponeCover() {
+        settleToken = UUID()
         presentWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, let endsAt = self.endsAt, endsAt > Date() else { return }
@@ -199,6 +208,57 @@ enum WatchRestHaptics {
         let device = WKInterfaceDevice.current()
         device.play(.notification)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { device.play(.notification) }
+    }
+}
+
+// MARK: - Settle acknowledgement
+
+/// The Watch's half of the phone's draining grey: the screen greys the instant
+/// a rest starts here and the grey recedes across the settle window, so how
+/// much is left is how much time is left to correct a wheel before the
+/// countdown covers it.
+///
+/// Only for rests started ON the Watch. A rest mirrored from the phone shows
+/// its countdown at once — the phone has already served the settle delay, and
+/// greying the watch for three seconds after the fact would be theatre.
+///
+/// White rather than grey: the watch UI is on black, where a grey wash is
+/// almost invisible and a light one reads as exactly the same gesture.
+struct WatchRestSettleAcknowledgement: ViewModifier {
+    @ObservedObject private var timer = WatchRestTimer.shared
+    @State private var fill: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottom) {
+                // Measured against the screen rather than the laid-out content:
+                // the buttons sit in their own safe-area strip, and a grey that
+                // stopped short of them looked like a rendering fault rather
+                // than a deliberate wash over the screen.
+                Rectangle()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(height: WKInterfaceDevice.current().screenBounds.height * fill)
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+            }
+            .onChange(of: timer.settleToken) { _, _ in
+                fill = 1
+                // A hop, so filling back up is a change of its own rather than
+                // being coalesced into the animated drain and never drawn.
+                DispatchQueue.main.async {
+                    withAnimation(.linear(duration: timer.settleDuration)) { fill = 0 }
+                }
+            }
+            // The countdown taking over, or the rest being called off, both end
+            // the acknowledgement early.
+            .onChange(of: timer.isShowing) { _, showing in
+                if showing { fill = 0 }
+            }
+            .onChange(of: timer.endsAt) { _, end in
+                if end == nil {
+                    withAnimation(.easeOut(duration: 0.2)) { fill = 0 }
+                }
+            }
     }
 }
 
