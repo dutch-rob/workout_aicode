@@ -47,18 +47,31 @@ final class WatchRestTimer: ObservableObject {
     /// rest: a Watch-driven rest waits out the settle delay first.
     @Published private(set) var isShowing = false
 
-    /// Changes every time the cover is put off, so the log screen can show
-    /// that the turn of the wheel was received. Three silent seconds read as
-    /// the app having missed it — the same on this screen as on the phone's.
-    @Published private(set) var settleToken = UUID()
+    /// When the cover is due, or nil when nothing is settling. The
+    /// acknowledgement is computed from this and `tick` rather than animated,
+    /// which is what makes it survive the Digital Crown — see below.
+    @Published private(set) var coverAt: Date?
 
     /// Same reasoning as the phone's: a set is logged over several separate
     /// turns of the crown, and covering the screen after the first would take
     /// the wheel away mid-edit. Postpones only the cover, never the rest.
     private let settleDelay: TimeInterval = 3
 
-    /// The settle window, for the acknowledgement to run over.
-    var settleDuration: TimeInterval { settleDelay }
+    /// How much of the screen the acknowledgement should cover, 1 at the
+    /// moment of the turn and 0 when the cover is due.
+    ///
+    /// Computed from the clock, deliberately, rather than being a piece of
+    /// animated state. The crown reports every value it passes through, so one
+    /// spin of the wheel is dozens of "set finished" events; restarting a
+    /// three-second animation on each of them left SwiftUI blending dozens of
+    /// overlapping animations of the same property, and the grey crawled down
+    /// the screen for far longer than the rest itself. A number derived from
+    /// two dates cannot pile up: however many events arrive, the answer is
+    /// always "this far, right now".
+    var settleFill: CGFloat {
+        guard let coverAt, settleDelay > 0 else { return 0 }
+        return max(0, min(1, CGFloat(coverAt.timeIntervalSince(tick) / settleDelay)))
+    }
 
     var remainingSeconds: Int {
         guard let endsAt else { return 0 }
@@ -70,7 +83,9 @@ final class WatchRestTimer: ObservableObject {
     }
 
     private var ticker: Timer?
+    private var tickerIsFast = false
     private var presentWork: DispatchWorkItem?
+    private var scheduleWork: DispatchWorkItem?
 
     /// The phone is driving and its rest ends at `date`.
     func mirror(endsAt date: Date, exercise: String) {
@@ -99,23 +114,27 @@ final class WatchRestTimer: ObservableObject {
         endsAt = date
         exerciseName = exercise
         tick = Date()
-        scheduleNotification(at: date)
-        startTicking()
+        scheduleNotificationSoon()
+        startTicking(fast: coverAt != nil)
         return true
     }
 
     private func showCover() {
         presentWork?.cancel()
         presentWork = nil
+        coverAt = nil
         isShowing = true
+        startTicking(fast: false)
     }
 
     private func postponeCover() {
-        settleToken = UUID()
+        coverAt = Date().addingTimeInterval(settleDelay)
+        tick = Date()
+        startTicking(fast: true)
         presentWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, let endsAt = self.endsAt, endsAt > Date() else { return }
-            self.isShowing = true
+            self.showCover()
         }
         presentWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay, execute: work)
@@ -132,7 +151,10 @@ final class WatchRestTimer: ObservableObject {
     func cancel() {
         presentWork?.cancel()
         presentWork = nil
+        scheduleWork?.cancel()
+        scheduleWork = nil
         endsAt = nil
+        coverAt = nil
         isShowing = false
         stopTicking()
         cancelNotification()
@@ -148,7 +170,10 @@ final class WatchRestTimer: ObservableObject {
     private func finish() {
         presentWork?.cancel()
         presentWork = nil
+        scheduleWork?.cancel()
+        scheduleWork = nil
         endsAt = nil
+        coverAt = nil
         isShowing = false
         stopTicking()
         // Only reached with the app awake; otherwise the notification does the
@@ -156,9 +181,15 @@ final class WatchRestTimer: ObservableObject {
         WatchRestHaptics.strong()
     }
 
-    private func startTicking() {
+    /// `fast` only while the acknowledgement is on screen: it is drawn from the
+    /// clock, so its smoothness is this interval. The rest of the time a
+    /// countdown of whole seconds needs nothing like that rate, and this is a
+    /// watch battery.
+    private func startTicking(fast: Bool) {
+        if ticker != nil, tickerIsFast == fast { return }
         stopTicking()
-        let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        tickerIsFast = fast
+        let t = Timer(timeInterval: fast ? 1.0 / 15 : 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let endsAt = self.endsAt else { return }
                 self.tick = Date()
@@ -172,6 +203,19 @@ final class WatchRestTimer: ObservableObject {
     private func stopTicking() {
         ticker?.invalidate()
         ticker = nil
+    }
+
+    /// Debounced, because the crown redefines the end of the rest dozens of
+    /// times a second while it is turning, and asking the notification centre
+    /// to reschedule at that rate is both pointless and slow.
+    private func scheduleNotificationSoon() {
+        scheduleWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let endsAt = self.endsAt else { return }
+            self.scheduleNotification(at: endsAt)
+        }
+        scheduleWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     private func scheduleNotification(at date: Date) {
@@ -226,7 +270,6 @@ enum WatchRestHaptics {
 /// almost invisible and a light one reads as exactly the same gesture.
 struct WatchRestSettleAcknowledgement: ViewModifier {
     @ObservedObject private var timer = WatchRestTimer.shared
-    @State private var fill: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
@@ -235,29 +278,17 @@ struct WatchRestSettleAcknowledgement: ViewModifier {
                 // the buttons sit in their own safe-area strip, and a grey that
                 // stopped short of them looked like a rendering fault rather
                 // than a deliberate wash over the screen.
+                //
+                // No @State and no animation here on purpose — see settleFill.
+                // Quitting mid-drain used to leave the grey sliding down over
+                // the workout list, because an animation in flight does not
+                // care that the thing it was describing has been called off.
                 Rectangle()
                     .fill(Color.white.opacity(0.22))
-                    .frame(height: WKInterfaceDevice.current().screenBounds.height * fill)
+                    .frame(height: WKInterfaceDevice.current().screenBounds.height
+                                   * timer.settleFill)
                     .allowsHitTesting(false)
                     .ignoresSafeArea()
-            }
-            .onChange(of: timer.settleToken) { _, _ in
-                fill = 1
-                // A hop, so filling back up is a change of its own rather than
-                // being coalesced into the animated drain and never drawn.
-                DispatchQueue.main.async {
-                    withAnimation(.linear(duration: timer.settleDuration)) { fill = 0 }
-                }
-            }
-            // The countdown taking over, or the rest being called off, both end
-            // the acknowledgement early.
-            .onChange(of: timer.isShowing) { _, showing in
-                if showing { fill = 0 }
-            }
-            .onChange(of: timer.endsAt) { _, end in
-                if end == nil {
-                    withAnimation(.easeOut(duration: 0.2)) { fill = 0 }
-                }
             }
     }
 }

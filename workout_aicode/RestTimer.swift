@@ -97,11 +97,10 @@ final class RestTimer: ObservableObject {
     /// Bumped by the tick so the countdown redraws.
     @Published private(set) var tick = Date()
 
-    /// Changes every time a rest starts or restarts before the countdown has
-    /// appeared. The log screen watches it to acknowledge the touch: without
-    /// something happening at that moment, the settle delay reads as the app
-    /// having ignored you.
-    @Published private(set) var settleToken = UUID()
+    /// When the countdown is due, or nil when nothing is settling. The
+    /// acknowledgement is computed from this rather than animated — see
+    /// `settleFill`.
+    @Published private(set) var coverAt: Date?
 
     var remainingSeconds: Int {
         guard let endsAt else { return 0 }
@@ -125,10 +124,32 @@ final class RestTimer: ObservableObject {
     /// down rather than starting over at the full time.
     private let settleDelay: TimeInterval = 3
 
-    /// The settle window, for the log screen's acknowledgement to run over.
-    var settleDuration: TimeInterval { settleDelay }
+    /// How much of the log screen the acknowledgement should cover, 1 at the
+    /// moment of the touch and 0 when the countdown is due.
+    ///
+    /// Computed from the clock rather than held as animated state. A wheel
+    /// dragged slowly reports every value it passes, and restarting a
+    /// three-second animation on each of them leaves SwiftUI blending a stack
+    /// of overlapping animations of one property — which on the Watch, where
+    /// the Digital Crown reports far more of them, dragged the grey out to
+    /// longer than the rest itself. A number derived from two dates cannot
+    /// pile up, and cannot outlive being cancelled either.
+    var settleFill: CGFloat {
+        Self.settleFill(coverAt: coverAt, now: tick, window: settleDelay)
+    }
+
+    /// Pulled out as a pure function so the shape of the drain can be pinned by
+    /// a test. The bug it is guarding against was invisible to inspection —
+    /// the code read as a three-second linear fade and behaved as a
+    /// thirty-second one — so "it looks right" is not evidence here.
+    nonisolated static func settleFill(coverAt: Date?, now: Date,
+                                       window: TimeInterval) -> CGFloat {
+        guard let coverAt, window > 0 else { return 0 }
+        return max(0, min(1, CGFloat(coverAt.timeIntervalSince(now) / window)))
+    }
 
     private var ticker: Timer?
+    private var tickerIsFast = false
     private var presentWork: DispatchWorkItem?
 
     // MARK: - Starting
@@ -150,7 +171,6 @@ final class RestTimer: ObservableObject {
 
         scheduleNotification(at: end)
         PhoneSessionManager.shared.sendRestTimer(endsAt: end, exercise: exercise)
-        startTicking()
         postponeCover()
     }
 
@@ -163,11 +183,15 @@ final class RestTimer: ObservableObject {
     }
 
     private func postponeCover() {
-        settleToken = UUID()
+        coverAt = Date().addingTimeInterval(settleDelay)
+        tick = Date()
+        startTicking(fast: true)
         presentWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, let endsAt = self.endsAt, endsAt > Date() else { return }
+            self.coverAt = nil
             self.isShowing = true
+            self.startTicking(fast: false)
             // Resting with the phone on the bench should not mean unlocking it
             // again to see the countdown.
             UIApplication.shared.isIdleTimerDisabled = true
@@ -204,8 +228,11 @@ final class RestTimer: ObservableObject {
         guard let endsAt else { return }
         if endsAt <= Date() {
             finish(haptic: false)
-        } else if isShowing {
-            startTicking()
+        } else {
+            // Timers do not fire while backgrounded, so whatever was ticking
+            // has stopped. Pick it back up at whichever rate the current state
+            // wants — the acknowledgement needs the fast one.
+            startTicking(fast: coverAt != nil)
         }
     }
 
@@ -219,6 +246,7 @@ final class RestTimer: ObservableObject {
     private func finish(haptic: Bool) {
         presentWork?.cancel()
         presentWork = nil
+        coverAt = nil
         stopTicking()
         cancelNotification()
         endsAt = nil
@@ -229,9 +257,14 @@ final class RestTimer: ObservableObject {
 
     // MARK: - Ticking (display only)
 
-    private func startTicking() {
+    /// `fast` only while the acknowledgement is on screen: it is drawn from the
+    /// clock, so its smoothness is this interval. A countdown of whole seconds
+    /// needs nothing like that rate.
+    private func startTicking(fast: Bool) {
+        if ticker != nil, tickerIsFast == fast { return }
         stopTicking()
-        let t = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+        tickerIsFast = fast
+        let t = Timer(timeInterval: fast ? 1.0 / 30 : 0.2, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let endsAt = self.endsAt else { return }
                 self.tick = Date()
@@ -343,33 +376,18 @@ struct RestSettleAcknowledgement: ViewModifier {
     let height: CGFloat
 
     @ObservedObject private var timer = RestTimer.shared
-    @State private var fill: CGFloat = 0
 
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .bottom) {
+                // No @State and no animation on purpose — see `settleFill`.
+                // Anything the countdown or a quit calls off has to vanish with
+                // it, and an animation in flight does not care that the thing
+                // it was describing is over.
                 Rectangle()
                     .fill(Color.secondary.opacity(0.28))
-                    .frame(height: height * fill)
+                    .frame(height: height * timer.settleFill)
                     .allowsHitTesting(false)
-            }
-            .onChange(of: timer.settleToken) { _, _ in
-                fill = 1
-                // A hop, so filling back up is a change of its own rather than
-                // being coalesced into the animated drain and never drawn.
-                DispatchQueue.main.async {
-                    withAnimation(.linear(duration: timer.settleDuration)) { fill = 0 }
-                }
-            }
-            // The countdown taking over, or the rest being called off, both end
-            // the acknowledgement early.
-            .onChange(of: timer.isShowing) { _, showing in
-                if showing { fill = 0 }
-            }
-            .onChange(of: timer.endsAt) { _, end in
-                if end == nil {
-                    withAnimation(.easeOut(duration: 0.2)) { fill = 0 }
-                }
             }
     }
 }

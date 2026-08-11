@@ -61,7 +61,10 @@ struct WatchLogExerciseView: View {
             .onChange(of: loggedIndices) { _, _ in
                 session.updateLiveSnapshot(currentSnapshot()); session.checkpoint()
             }
-            .onDisappear { session.leaveSession() }
+            // Cancelling here, not just on quit: leaving this screen by any
+            // route ends the workout, and a rest that outlived it went on to
+            // buzz for a set the user had already walked away from.
+            .onDisappear { session.leaveSession(); WatchRestTimer.shared.cancel() }
             // Reloaded state after reclaiming the session in place.
             .onChange(of: session.adoptSnapshot) { _, _ in
                 if let snap = session.takeAdoptSnapshot(for: workout.id) { adopt(snap) }
