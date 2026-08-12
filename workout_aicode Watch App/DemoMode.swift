@@ -15,6 +15,12 @@ enum DemoMode {
 
     static var isEnabled: Bool { CommandLine.arguments.contains("-SRWDemo") }
 
+    // Kept in step with the iPhone's DemoMode, so the two rest-timer captures
+    // show the same rest.
+    static let restExercise = "Lats pull down"
+    static let restTotal = 90
+    static let restRemaining = 68
+
     static var screen: String? {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "-SRWScreen"), i + 1 < args.count else { return nil }

@@ -140,6 +140,19 @@ final class WatchRestTimer: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay, execute: work)
     }
 
+    #if DEBUG
+    /// Screenshot demo mode only (see DemoMode.swift). Not `setFinished`: that
+    /// would schedule a notification, and a screenshot run should not leave a
+    /// pending alert on the watch.
+    func showDemoCountdown(exercise: String, remaining: Int) {
+        exerciseName = exercise
+        endsAt = Date().addingTimeInterval(Double(remaining))
+        tick = Date()
+        coverAt = nil
+        isShowing = true
+    }
+    #endif
+
     /// The user tapped "skip" here. Also calls off the phone's rest, which is
     /// harmless when the phone has none.
     func skip() {
@@ -337,6 +350,10 @@ struct WatchRestCountdownView: View {
         }
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.9))
+        // Opaque, and over the safe area: at 0.9 the wheels and buttons ghosted
+        // through, which read as a rendering fault rather than a screen of its
+        // own — and left the "skip" button sitting on top of the log button it
+        // is not.
+        .background(Color.black.ignoresSafeArea())
     }
 }

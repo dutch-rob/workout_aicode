@@ -17,6 +17,13 @@ enum DemoMode {
 
     static var isEnabled: Bool { CommandLine.arguments.contains("-SRWDemo") }
 
+    // The rest-timer capture. Fixed numbers so the iPhone and the Watch shots
+    // show the same rest, and a remaining time that leaves the ring obviously
+    // part-way round rather than nearly full or nearly empty.
+    static let restExercise = "Lats pull down"
+    static let restTotal = 90
+    static let restRemaining = 68
+
     /// Value passed after `-SRWScreen`, if any.
     static var screen: String? {
         let args = CommandLine.arguments

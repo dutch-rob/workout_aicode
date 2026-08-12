@@ -200,6 +200,21 @@ final class RestTimer: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay, execute: work)
     }
 
+    #if DEBUG
+    /// Screenshot demo mode only (see DemoMode.swift): put the countdown on
+    /// screen at a chosen time. Deliberately not `setFinished` — that would
+    /// schedule a notification and message the Watch, and a screenshot run
+    /// should not buzz anything or leave a pending alert behind.
+    func showDemoCountdown(exercise: String, total: Int, remaining: Int) {
+        exerciseName = exercise
+        totalSeconds = total
+        endsAt = Date().addingTimeInterval(Double(remaining))
+        tick = Date()
+        coverAt = nil
+        isShowing = true
+    }
+    #endif
+
     // MARK: - Ending
 
     /// The user tapped "skip rest".

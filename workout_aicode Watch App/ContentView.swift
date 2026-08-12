@@ -72,6 +72,14 @@ struct ContentView: View {
             switch DemoMode.screen {
             case "log":    path = [DemoMode.workoutId]
             case "paused": session.showDemoPaused()
+            case "rest":
+                path = [DemoMode.workoutId]
+                // After the log screen exists, so the countdown covers it.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    WatchRestTimer.shared.showDemoCountdown(
+                        exercise: DemoMode.restExercise,
+                        remaining: DemoMode.restRemaining)
+                }
             default:       break
             }
             #endif

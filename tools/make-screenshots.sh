@@ -8,7 +8,9 @@
 # data and no UI test driving is needed.
 #
 #   -SRWDemo             seed sample workouts + history (in-memory on iOS)
-#   -SRWScreen <name>    which screen to open
+#   -SRWScreen <name>    which screen to open ("rest" opens the log screen with
+#                        the rest countdown over it — the timer is off by
+#                        default, so it cannot be reached by launching alone)
 #
 # Usage:  tools/make-screenshots.sh            # everything
 #         DEVICES=phone tools/make-screenshots.sh
@@ -45,9 +47,11 @@ udid_of() {   # exact device name -> UDID
 
 # Screens per form factor: "<launch-arg-screen>:<file label>"
 # Order matters: this is the order they appear on the App Store page.
-IOS_SCREENS=("workouts:01_workouts" "log:02_log_exercise" "library:03_library"
-             "graphs:04_graphs" "progress:05_progress" "logs:06_logs" "info:07_info")
-WATCH_SCREENS=("workouts:01_watch_workouts" "log:02_watch_log" "paused:03_watch_handover")
+IOS_SCREENS=("workouts:01_workouts" "log:02_log_exercise" "rest:03_rest_timer"
+             "library:04_library" "graphs:05_graphs" "progress:06_progress"
+             "logs:07_logs" "info:08_info")
+WATCH_SCREENS=("workouts:01_watch_workouts" "log:02_watch_log"
+               "rest:03_watch_rest_timer" "paused:04_watch_handover")
 
 shoot() {   # udid  devlabel  bundle  screen  filelabel  settle  minkb
   local udid="$1" dev="$2" bundle="$3" screen="$4" label="$5"

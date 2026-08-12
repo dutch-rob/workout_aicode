@@ -57,6 +57,17 @@ enum BuildStamp {
 /// watch face at footnote size.
 struct BuildStampView: View {
     var body: some View {
+        // Hidden during a screenshot run: this is a diagnostic for TestFlight,
+        // and a version string in an App Store screenshot is just clutter that
+        // goes stale the moment the next build is made.
+        #if DEBUG
+        if DemoMode.isEnabled { EmptyView() } else { stamp }
+        #else
+        stamp
+        #endif
+    }
+
+    @ViewBuilder private var stamp: some View {
         VStack(spacing: 1) {
             Text("\(BuildStamp.version) (\(BuildStamp.build))")
             if let builtAt = BuildStamp.builtAt {
