@@ -387,6 +387,12 @@ struct RestSettleAcknowledgement: ViewModifier {
                 Rectangle()
                     .fill(Color.secondary.opacity(0.28))
                     .frame(height: height * timer.settleFill)
+                    // Same reasoning as the Watch's copy: the height is a
+                    // function of the clock, and an animation on top of it can
+                    // only lag the truth. The phone does not show the rise the
+                    // Watch did — its picker reports from outside an animated
+                    // transaction — but nothing here should depend on that.
+                    .transaction { $0.animation = nil }
                     .allowsHitTesting(false)
             }
     }

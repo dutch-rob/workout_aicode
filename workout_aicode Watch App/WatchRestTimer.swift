@@ -287,6 +287,15 @@ struct WatchRestSettleAcknowledgement: ViewModifier {
                     .fill(Color.white.opacity(0.22))
                     .frame(height: WKInterfaceDevice.current().screenBounds.height
                                    * timer.settleFill)
+                // Never animated, in either direction. The height is already a
+                // function of the clock, so an animation on top of it can only
+                // lag or overshoot the truth — and the rise is worse than that:
+                // the crown changes the picker's selection inside an animated
+                // transaction, SwiftUI applies that animation to anything else
+                // changed during it, and the grey slid up from nothing instead
+                // of simply being there. An acknowledgement that takes a third
+                // of a second to appear is not acknowledging anything.
+                .transaction { $0.animation = nil }
                     .allowsHitTesting(false)
                     .ignoresSafeArea()
             }
