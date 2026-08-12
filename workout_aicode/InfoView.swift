@@ -216,6 +216,9 @@ struct InfoView: View {
                         Text("3. The muscle diagram is \"Muscles front and back\" by OpenStax, Tomáš Kebert and umimeto.org, from Wikimedia Commons, used under the Creative Commons Attribution-ShareAlike 4.0 licence (https://creativecommons.org/licenses/by-sa/4.0/). It was cropped into two figures and given a transparent background; the anatomy itself is unchanged. Those two images stay under CC BY-SA 4.0.")
                     }
                 }
+
+                Divider()
+                BuildStampView()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)

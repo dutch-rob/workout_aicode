@@ -21,12 +21,19 @@ struct ContentView: View {
                 if session.workouts.isEmpty {
                     emptyState
                 } else {
-                    List(session.workouts) { workout in
-                        NavigationLink(value: workout.id) {
-                            Text(workout.name)
-                                .font(.headline)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                    List {
+                        ForEach(session.workouts) { workout in
+                            NavigationLink(value: workout.id) {
+                                Text(workout.name)
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
+                        // Last row rather than a fixed footer: the watch screen
+                        // has no room to spare, and this only needs to be
+                        // findable, not visible.
+                        BuildStampView()
+                            .listRowBackground(Color.clear)
                     }
                 }
             }
@@ -101,6 +108,9 @@ struct ContentView: View {
                 .multilineTextAlignment(.center)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+            // Shown here too: an empty list is exactly when someone is working
+            // out whether the right build is installed.
+            BuildStampView()
         }
         .padding()
     }

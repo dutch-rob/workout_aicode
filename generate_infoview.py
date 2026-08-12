@@ -252,6 +252,15 @@ def generate(items: list) -> str:
     while out and out[-1] == "":
         out.pop()
 
+    # The build stamp closes the screen. Appended here rather than written into
+    # README.md: it is a property of the app, not of the text, and the README
+    # is read on GitHub where it would be meaningless.
+    out += [
+        "",
+        "            " + "    " * 1 + "Divider()",
+        "            " + "    " * 1 + "BuildStampView()",
+    ]
+
     out += [
         "                }",
         "                .padding(.horizontal, 16)",
