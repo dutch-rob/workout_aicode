@@ -283,21 +283,28 @@ struct WatchRestSettleAcknowledgement: ViewModifier {
                 // Quitting mid-drain used to leave the grey sliding down over
                 // the workout list, because an animation in flight does not
                 // care that the thing it was describing has been called off.
-                Rectangle()
-                    .fill(Color.white.opacity(0.22))
-                    .frame(height: WKInterfaceDevice.current().screenBounds.height
-                                   * timer.settleFill)
-                // Never animated, in either direction. The height is already a
-                // function of the clock, so an animation on top of it can only
-                // lag or overshoot the truth — and the rise is worse than that:
-                // the crown changes the picker's selection inside an animated
-                // transaction, SwiftUI applies that animation to anything else
-                // changed during it, and the grey slid up from nothing instead
-                // of simply being there. An acknowledgement that takes a third
-                // of a second to appear is not acknowledging anything.
-                .transaction { $0.animation = nil }
-                    .allowsHitTesting(false)
-                    .ignoresSafeArea()
+                //
+                // Drawn into a Canvas rather than being a Rectangle with an
+                // animated height, and that is the whole point of it.
+                //
+                // A `.frame(height:)` is animatable, so SwiftUI will happily
+                // interpolate it — and the crown changes the picker's
+                // selection inside an animated transaction, which SwiftUI
+                // applies to everything else changed during that update. The
+                // grey slid up from nothing before it began draining. Asking
+                // for the animation to be dropped (`.transaction`) did not
+                // hold. A Canvas has no animatable geometry in the first
+                // place: the closure runs, the rectangle is where it is.
+                Canvas { context, size in
+                    let height = size.height * timer.settleFill
+                    guard height > 0 else { return }
+                    context.fill(
+                        Path(CGRect(x: 0, y: size.height - height,
+                                    width: size.width, height: height)),
+                        with: .color(.white.opacity(0.22)))
+                }
+                .allowsHitTesting(false)
+                .ignoresSafeArea()
             }
     }
 }

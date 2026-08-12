@@ -384,16 +384,21 @@ struct RestSettleAcknowledgement: ViewModifier {
                 // Anything the countdown or a quit calls off has to vanish with
                 // it, and an animation in flight does not care that the thing
                 // it was describing is over.
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.28))
-                    .frame(height: height * timer.settleFill)
-                    // Same reasoning as the Watch's copy: the height is a
-                    // function of the clock, and an animation on top of it can
-                    // only lag the truth. The phone does not show the rise the
-                    // Watch did — its picker reports from outside an animated
-                    // transaction — but nothing here should depend on that.
-                    .transaction { $0.animation = nil }
-                    .allowsHitTesting(false)
+                // A Canvas, for the reason spelled out in the Watch's copy:
+                // an animated frame height is exactly what a picker's own
+                // animated transaction latches onto. The phone never showed
+                // the symptom, but it has the same wheels and there is no
+                // reason for the two to be built differently.
+                Canvas { context, size in
+                    let filled = size.height * timer.settleFill
+                    guard filled > 0 else { return }
+                    context.fill(
+                        Path(CGRect(x: 0, y: size.height - filled,
+                                    width: size.width, height: filled)),
+                        with: .color(.secondary.opacity(0.28)))
+                }
+                .frame(height: height)
+                .allowsHitTesting(false)
             }
     }
 }
