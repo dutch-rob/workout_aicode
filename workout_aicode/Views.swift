@@ -1940,7 +1940,7 @@ struct SettingsView: View {
 }
 
 #Preview("Edit Workouts") {
-    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     let context = container.mainContext
     let store = AppStore(context: context)
     // Seed sample data
@@ -1956,7 +1956,7 @@ struct SettingsView: View {
 }
 
 #Preview("Edit Workout") {
-    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     let context = container.mainContext
     let store = AppStore(context: context)
     // Seed workout and exercises
@@ -1974,7 +1974,7 @@ struct SettingsView: View {
 }
 
 #Preview("Edit Exercises") {
-    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     let context = container.mainContext
     let store = AppStore(context: context)
     // Seed sample exercises
@@ -1990,7 +1990,7 @@ struct SettingsView: View {
 }
 
 #Preview("Log Exercise") {
-    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+    let container = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     let context = container.mainContext
     let store = AppStore(context: context)
     let e1 = ExerciseDef(name: "Curl", numberOfSeries: 3)
@@ -2006,7 +2006,7 @@ struct SettingsView: View {
 
 #Preview("Logs") {
     let container = try! ModelContainer(
-        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     let context = container.mainContext

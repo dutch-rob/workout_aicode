@@ -20,6 +20,57 @@ enum MovementType: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// What sort of thing an exercise is. Not a muscle group, despite appearing
+/// next to them in the picker as "AE": a muscle group says which part of you a
+/// movement works, and every strength statistic in this app — estimated 1RM,
+/// hard sets, the trend ranking — is computed from weights and repetitions. A
+/// twenty-minute row has neither, so it must be excluded from those by
+/// construction rather than by remembering to check for one special group.
+enum ExerciseKind: String, Codable, CaseIterable, Identifiable {
+    case strength
+    case aerobic
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .strength: return "Strength"
+        case .aerobic:  return "Aerobic"
+        }
+    }
+}
+
+/// Which kind of cardio, so the Watch can start the matching Apple workout and
+/// HealthKit collects the right things for it (a row and a run do not measure
+/// the same way, and the workout that lands in Fitness should say which it was).
+///
+/// Deliberately not HKWorkoutActivityType itself: this file describes what is
+/// stored, and storing a framework enum's raw value would tie the database to
+/// HealthKit's numbering. The mapping lives in the HealthKit layer.
+enum AerobicActivity: String, Codable, CaseIterable, Identifiable {
+    case walking
+    case running
+    case cycling
+    case rowing
+    case elliptical
+    case stairStepper
+    case swimming
+    case other
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .walking:      return "Walking"
+        case .running:      return "Running"
+        case .cycling:      return "Cycling"
+        case .rowing:       return "Rowing"
+        case .elliptical:   return "Elliptical"
+        case .stairStepper: return "Stair stepper"
+        case .swimming:     return "Swimming"
+        case .other:        return "Other cardio"
+        }
+    }
+}
+
 @Model
 final class ExerciseDef: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
@@ -48,10 +99,27 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     /// of a long list.
     var isFavourite: Bool = false
 
+    /// Strength or aerobic. Stored as a raw string for the same reason the
+    /// muscle groups are: an unrecognised value from a future version degrades
+    /// to "strength" instead of failing to decode the whole exercise.
+    var kindRaw: String = ExerciseKind.strength.rawValue
+    /// Which cardio activity, for aerobic exercises. Nil for strength.
+    var aerobicActivityRaw: String? = nil
+
     /// Seconds of rest after a set of this exercise. Per exercise, because a
     /// heavy compound needs longer than a light isolation movement. Only used
     /// when the rest timer is switched on in Settings.
     var restSeconds: Int = RestTimerDefaults.seconds
+
+    var kind: ExerciseKind {
+        get { ExerciseKind(rawValue: kindRaw) ?? .strength }
+        set { kindRaw = newValue.rawValue }
+    }
+
+    var aerobicActivity: AerobicActivity? {
+        get { aerobicActivityRaw.flatMap(AerobicActivity.init(rawValue:)) }
+        set { aerobicActivityRaw = newValue?.rawValue }
+    }
 
     var primaryMuscle: MuscleGroup? {
         get { primaryMuscleRaw.flatMap(MuscleGroup.init(rawValue:)) }
@@ -74,7 +142,9 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
          secondaryMuscles: [MuscleGroup] = [],
          libraryKey: String? = nil,
          isFavourite: Bool = false,
-         restSeconds: Int = RestTimerDefaults.seconds) {
+         restSeconds: Int = RestTimerDefaults.seconds,
+         kind: ExerciseKind = .strength,
+         aerobicActivity: AerobicActivity? = nil) {
         let clampedNumberOfSeries = max(0, numberOfSeries)
         let clampedLowest = max(0, lowestWeight)
         let clampedHighest = max(clampedLowest, highestWeight)
@@ -92,11 +162,14 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         self.libraryKey = libraryKey
         self.isFavourite = isFavourite
         self.restSeconds = restSeconds
+        self.kindRaw = kind.rawValue
+        self.aerobicActivityRaw = aerobicActivity?.rawValue
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement, movementType
         case primaryMuscle, secondaryMuscles, libraryKey, isFavourite, restSeconds
+        case kind, aerobicActivity
     }
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -117,6 +190,13 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         let libraryKey = try c.decodeIfPresent(String.self, forKey: .libraryKey)
         let favourite = try c.decodeIfPresent(Bool.self, forKey: .isFavourite) ?? false
         let rest = try c.decodeIfPresent(Int.self, forKey: .restSeconds) ?? RestTimerDefaults.seconds
+        // An export from before aerobic exercises existed describes a strength
+        // exercise, and an unknown kind from a future one is safer read as
+        // strength than dropped.
+        let kind = (try c.decodeIfPresent(String.self, forKey: .kind))
+            .flatMap(ExerciseKind.init(rawValue:)) ?? .strength
+        let activity = (try c.decodeIfPresent(String.self, forKey: .aerobicActivity))
+            .flatMap(AerobicActivity.init(rawValue:))
         self.init(id: id, name: name,
                   numberOfSeries: numberOfSeries,
                   lowestWeight: lowestWeight,
@@ -127,7 +207,9 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
                   secondaryMuscles: secondary,
                   libraryKey: libraryKey,
                   isFavourite: favourite,
-                  restSeconds: rest)
+                  restSeconds: rest,
+                  kind: kind,
+                  aerobicActivity: activity)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -143,6 +225,8 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         try c.encodeIfPresent(libraryKey, forKey: .libraryKey)
         try c.encode(isFavourite, forKey: .isFavourite)
         try c.encode(restSeconds, forKey: .restSeconds)
+        try c.encode(kind.rawValue, forKey: .kind)
+        try c.encodeIfPresent(aerobicActivity?.rawValue, forKey: .aerobicActivity)
     }
 }
 
@@ -389,7 +473,116 @@ enum WorkoutLogSchemaV4: VersionedSchema {
 enum WorkoutLogSchemaV5: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(5, 0, 0) }
     static var models: [any PersistentModel.Type] {
-        [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self]
+        [WorkoutLogSchemaV5.ExerciseDef.self, WorkoutDef.self,
+         WorkoutLogSchemaV2.WorkoutLog.self]
+    }
+
+    /// ExerciseDef as of V5 — the rest timer, but nothing aerobic. Frozen, for
+    /// the reason restated at every version: only the newest schema may name
+    /// the live class.
+    @Model
+    final class ExerciseDef {
+        var id: UUID = UUID()
+        var name: String = ""
+        var numberOfSeries: Int = 3
+        var lowestWeight: Int = 0
+        var highestWeight: Int = 200
+        var weightIncrement: Int = 5
+        var movementType: MovementType = MovementType.none
+        var primaryMuscleRaw: String? = nil
+        var secondaryMuscleRaw: [String] = []
+        var libraryKey: String? = nil
+        var isFavourite: Bool = false
+        var restSeconds: Int = RestTimerDefaults.seconds
+
+        init(id: UUID = UUID(), name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+}
+
+// V6 adds the aerobic side: what kind of exercise this is, and what a finished
+// aerobic session measured.
+//
+// The measurements live in their own entity rather than as new columns on
+// WorkoutLog, and that is not a stylistic choice. WorkoutLog had never changed
+// since V2, so V2's class was the live one AND the shape V3, V4 and V5
+// described; adding fields meant freezing V2's copy and making a new live class
+// with the same name. SwiftData takes the entity name from the class name, and
+// with two classes called WorkoutLog the new properties were silently dropped:
+// a value set in init came back as its default, though the store had the
+// column and assigning after insert worked. A separate entity has a name of its
+// own, so nothing collides, and adding an entity is as lightweight a migration
+// as adding a column.
+enum WorkoutLogSchemaV6: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(6, 0, 0) }
+    static var models: [any PersistentModel.Type] {
+        [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self,
+         AerobicResult.self]
+    }
+}
+
+/// What a finished aerobic session measured, alongside the WorkoutLog row that
+/// records it happened.
+///
+/// Joined by `logId` rather than a SwiftData relationship: every other model
+/// here refers to its neighbours by UUID, the Watch sync and the exports are
+/// built on those ids, and a relationship would be the only one of its kind.
+@Model
+final class AerobicResult: Identifiable, Codable {
+    var id: UUID = UUID()
+    /// The WorkoutLog this belongs to.
+    var logId: UUID = UUID()
+    /// How long the session actually ran.
+    var durationSeconds: Int = 0
+    /// Zero when there was no Watch, or Health access was refused — a normal
+    /// outcome rather than an error, so the session still stands without them.
+    /// A sentinel rather than an optional: SwiftData threw from `encodeNil`
+    /// while building this entity's defaults, and nobody has a heart rate of
+    /// zero, so nothing is lost by saying it plainly.
+    var averageHeartRate: Int = 0
+    var maximumHeartRate: Int = 0
+    /// Seconds in each of the five zones, lowest first. Empty when no heart
+    /// rate was measured; five entries when it was.
+    var zoneSeconds: [Int] = []
+
+    init(id: UUID = UUID(),
+         logId: UUID,
+         durationSeconds: Int,
+         averageHeartRate: Int = 0,
+         maximumHeartRate: Int = 0,
+         zoneSeconds: [Int] = []) {
+        self.id = id
+        self.logId = logId
+        self.durationSeconds = durationSeconds
+        self.averageHeartRate = averageHeartRate
+        self.maximumHeartRate = maximumHeartRate
+        self.zoneSeconds = zoneSeconds
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, logId, durationSeconds, averageHeartRate, maximumHeartRate, zoneSeconds
+    }
+    convenience init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id:               try c.decode(UUID.self, forKey: .id),
+            logId:            try c.decode(UUID.self, forKey: .logId),
+            durationSeconds:  try c.decode(Int.self, forKey: .durationSeconds),
+            averageHeartRate: try c.decodeIfPresent(Int.self, forKey: .averageHeartRate) ?? 0,
+            maximumHeartRate: try c.decodeIfPresent(Int.self, forKey: .maximumHeartRate) ?? 0,
+            zoneSeconds:      try c.decodeIfPresent([Int].self, forKey: .zoneSeconds) ?? []
+        )
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(logId, forKey: .logId)
+        try c.encode(durationSeconds, forKey: .durationSeconds)
+        try c.encode(averageHeartRate, forKey: .averageHeartRate)
+        try c.encode(maximumHeartRate, forKey: .maximumHeartRate)
+        try c.encode(zoneSeconds, forKey: .zoneSeconds)
     }
 }
 
@@ -407,9 +600,16 @@ typealias WorkoutLog = WorkoutLogSchemaV2.WorkoutLog
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self,
-         WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self, WorkoutLogSchemaV5.self]
+         WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self, WorkoutLogSchemaV5.self,
+         WorkoutLogSchemaV6.self]
     }
-    static var stages: [MigrationStage] { [v1toV2, v2toV3, v3toV4, v4toV5] }
+    static var stages: [MigrationStage] { [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6] }
+
+    /// Additive only — see WorkoutLogSchemaV6.
+    static let v5toV6 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV5.self,
+        toVersion:   WorkoutLogSchemaV6.self
+    )
 
     /// Additive only — see WorkoutLogSchemaV5.
     static let v4toV5 = MigrationStage.lightweight(

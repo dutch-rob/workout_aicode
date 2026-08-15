@@ -243,7 +243,7 @@ final class AppSetup: ObservableObject {
 
         do {
             let c = try ModelContainer(
-                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self,
                 migrationPlan: WorkoutMigrationPlan.self,
                 configurations: config
             )
@@ -262,7 +262,7 @@ final class AppSetup: ObservableObject {
         // plan, not less.
         do {
             let c = try ModelContainer(
-                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self,
                 configurations: config
             )
             print("[ModelContainer] opened without the migration plan (sync=\(syncEnabled))")
@@ -279,7 +279,7 @@ final class AppSetup: ObservableObject {
         // No migration plan — SwiftData creates a brand-new store.
         let config = ModelConfiguration(url: localStoreURL, cloudKitDatabase: .none)
         // swiftlint:disable:next force_try
-        let c = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
+        let c = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self,
                                     configurations: config)
         return (c, AppStore(context: c.mainContext))
     }

@@ -59,7 +59,7 @@ private func removeStore(at url: URL) {
 
     // ── Reopen through the migration plan, as the updated app does ────────
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV5.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -114,7 +114,7 @@ private func removeStore(at url: URL) {
     }
 
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV5.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -198,7 +198,7 @@ private func removeStore(at url: URL) {
     }
 
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV5.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -271,7 +271,7 @@ private func removeStore(at url: URL) {
     }
 
     let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV5.self),
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
         migrationPlan: WorkoutMigrationPlan.self,
         configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
     )
@@ -432,3 +432,134 @@ private let settleNow = Date(timeIntervalSince1970: 1_700_000_000)
                                     now: settleNow, window: settleWindow)
     #expect(fill == 1)
 }
+
+// MARK: - V6: aerobic exercises
+//
+// V6 is the first version to change WorkoutLog since V2. That class had been
+// the live one AND the shape V3, V4 and V5 all described, so adding a field to
+// it would have changed four versions at once — the collision that aborted
+// staged migration twice before. V2's copy is frozen and the live log is new.
+// These check that the rows survived that move.
+
+@Test func anExerciseFromBeforeAerobicIsAStrengthExercise() throws {
+    let url = temporaryStoreURL()
+    defer { removeStore(at: url) }
+    do {
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        context.insert(WorkoutLogSchemaV1.ExerciseDef(name: "Squat"))
+        try context.save()
+    }
+    let container = try ModelContainer(
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+        migrationPlan: WorkoutMigrationPlan.self,
+        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+    )
+    let exercise = try #require(try ModelContext(container)
+        .fetch(FetchDescriptor<ExerciseDef>()).first)
+    #expect(exercise.kind == .strength)
+    #expect(exercise.aerobicActivity == nil)
+}
+
+@Test func anAerobicSessionKeepsItsMeasurements() throws {
+    let url = temporaryStoreURL()
+    defer { removeStore(at: url) }
+    let container = try ModelContainer(
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+    )
+    let context = ModelContext(container)
+    let rower = ExerciseDef(name: "Rower", kind: .aerobic, aerobicActivity: .rowing)
+    context.insert(rower)
+    let log = WorkoutLog(workoutId: UUID(), exerciseId: rower.id, weights: [], reps: [])
+    context.insert(log)
+    context.insert(AerobicResult(logId: log.id, durationSeconds: 1200,
+                                 averageHeartRate: 138, maximumHeartRate: 161,
+                                 zoneSeconds: [120, 300, 600, 180, 0]))
+    try context.save()
+
+    let fresh = ModelContext(container)
+    let result = try #require(try fresh.fetch(FetchDescriptor<AerobicResult>()).first)
+    #expect(result.logId == log.id)
+    #expect(result.durationSeconds == 1200)
+    #expect(result.averageHeartRate == 138)
+    #expect(result.maximumHeartRate == 161)
+    #expect(result.zoneSeconds == [120, 300, 600, 180, 0])
+
+    let exercise = try #require(try fresh.fetch(FetchDescriptor<ExerciseDef>()).first)
+    #expect(exercise.kind == .aerobic)
+    #expect(exercise.aerobicActivity == .rowing)
+}
+
+/// The trap that shaped the design above, kept as a test so the reasoning is
+/// not just a comment: measurements set in `init` must survive, which is what
+/// failed while these lived on a second class also called WorkoutLog.
+@Test func aerobicMeasurementsSetInInitSurvive() throws {
+    let url = temporaryStoreURL()
+    defer { removeStore(at: url) }
+    let container = try ModelContainer(
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+    )
+    let context = ModelContext(container)
+    let logId = UUID()
+    context.insert(AerobicResult(logId: logId, durationSeconds: 900,
+                                 averageHeartRate: 121, zoneSeconds: [60, 120, 500, 220, 0]))
+    try context.save()
+    let reread = try #require(try ModelContext(container)
+        .fetch(FetchDescriptor<AerobicResult>()).first)
+    #expect(reread.durationSeconds == 900)
+    #expect(reread.averageHeartRate == 121)
+    #expect(reread.maximumHeartRate == 0)
+    #expect(reread.zoneSeconds == [60, 120, 500, 220, 0])
+}
+
+@Test func anAerobicResultSurvivesAnExportRoundTrip() throws {
+    let original = AerobicResult(logId: UUID(), durationSeconds: 1800,
+                                 averageHeartRate: 142, maximumHeartRate: 170,
+                                 zoneSeconds: [0, 200, 900, 600, 100])
+    let restored = try JSONDecoder().decode(
+        AerobicResult.self, from: try JSONEncoder().encode(original))
+    #expect(restored.durationSeconds == 1800)
+    #expect(restored.zoneSeconds == [0, 200, 900, 600, 100])
+    #expect(restored.maximumHeartRate == 170)
+}
+
+@Test func anAerobicExerciseSurvivesAnExportRoundTrip() throws {
+    let original = ExerciseDef(name: "Treadmill", kind: .aerobic, aerobicActivity: .running)
+    let restored = try JSONDecoder().decode(
+        ExerciseDef.self, from: try JSONEncoder().encode(original))
+    #expect(restored.kind == .aerobic)
+    #expect(restored.aerobicActivity == .running)
+}
+
+@Test func anUnknownKindReadsAsStrengthRatherThanFailing() throws {
+    // One unrecognised value from a future version should cost one attribute,
+    // not the whole exercise — the same rule the muscle groups follow.
+    let json = """
+    {"id":"\(UUID().uuidString)","name":"Future exercise","numberOfSeries":3,
+     "lowestWeight":0,"highestWeight":200,"weightIncrement":5,
+     "kind":"telekinesis","aerobicActivity":"levitation"}
+    """
+    let restored = try JSONDecoder().decode(ExerciseDef.self, from: Data(json.utf8))
+    #expect(restored.name == "Future exercise")
+    #expect(restored.kind == .strength)
+    #expect(restored.aerobicActivity == nil)
+}
+
+@Test func aLogIsUnchangedByTheAerobicVersion() throws {
+    // WorkoutLog deliberately gained nothing in V6 — the measurements went to
+    // their own entity — so an export from any earlier version decodes exactly
+    // as it always did.
+    let json = """
+    {"id":"\(UUID().uuidString)","date":728000000,"workoutId":"\(UUID().uuidString)",
+     "exerciseId":"\(UUID().uuidString)","weights":[50],"reps":[10]}
+    """
+    let restored = try JSONDecoder().decode(WorkoutLog.self, from: Data(json.utf8))
+    #expect(restored.weights == [50])
+    #expect(restored.reps == [10])
+}
+
