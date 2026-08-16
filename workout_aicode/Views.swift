@@ -523,6 +523,10 @@ struct LogExerciseView: View {
 
     @ObservedObject private var handoff = PhoneSessionManager.shared
     @ObservedObject private var restTimer = RestTimer.shared
+    @ObservedObject private var aerobic = AerobicCountdown.shared
+    /// Every aerobic result, to pre-fill the wheel with what was done last
+    /// time — the same courtesy the weight wheels have always paid.
+    @Query private var aerobicResults: [AerobicResult]
 
     @State private var startedAt = Date()
     @State private var currentIndex: Int = 0
@@ -530,6 +534,15 @@ struct LogExerciseView: View {
     @State private var reps: [[Int]] = []
 
     @State private var loggedIndices: Set<Int> = []
+    /// What the wheel is set to, per exercise: how long you mean to go.
+    @State private var durations: [Int] = []
+    /// What was actually done, per exercise; 0 until a session has run.
+    ///
+    /// Kept apart from the wheel deliberately. Folding the two together meant
+    /// stopping twenty seconds into an eighteen-minute row rewrote the wheel to
+    /// "1" — the wheel counts whole minutes and cannot say twenty seconds — so
+    /// the number you had chosen was destroyed by the act of measuring it.
+    @State private var actualSeconds: [Int] = []
     @State private var showAllLoggedAlert = false
     @State private var dragOffsetX: CGFloat = 0
     @State private var containerWidth: CGFloat = 0
@@ -582,7 +595,7 @@ struct LogExerciseView: View {
                 .onChange(of: loggedIndices) { _, _ in
                     handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
                 }
-                .onDisappear { handoff.leaveSession(); restTimer.cancel() }
+                .onDisappear { handoff.leaveSession(); restTimer.cancel(); aerobic.cancel() }
                 // Reloaded state after reclaiming the session in place.
                 .onChange(of: handoff.adoptSnapshot) { _, _ in
                     if let snap = handoff.takeAdoptSnapshot(for: workout.id.uuidString) {
@@ -605,6 +618,20 @@ struct LogExerciseView: View {
             set: { shown in if !shown, restTimer.isShowing { restTimer.skip() } }
         )) {
             RestCountdownView()
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { aerobic.isShowing },
+            set: { shown in if !shown, aerobic.isShowing { aerobic.stop() } }
+        )) {
+            AerobicCountdownView()
+        }
+        // What was actually done replaces what was planned. Recorded against
+        // the exercise that was on screen, not whatever is current when the
+        // value arrives — a notification tap can bring the app back elsewhere.
+        .onChange(of: aerobic.finishedSeconds) { _, seconds in
+            guard let seconds, seconds > 0, currentIndex < actualSeconds.count else { return }
+            actualSeconds[currentIndex] = seconds
+            aerobic.finishedSeconds = nil
         }
     }
 
@@ -681,10 +708,14 @@ struct LogExerciseView: View {
             buttonRow
             Text(exercise?.name ?? "").font(.title2).bold()
             if let exercise {
-                Text("weight used").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
-                weightPickers(for: exercise)
-                Text("repetitions").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
-                repsPickers(for: exercise)
+                if exercise.kind == .aerobic {
+                    aerobicContent(for: exercise)
+                } else {
+                    Text("weight used").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
+                    weightPickers(for: exercise)
+                    Text("repetitions").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
+                    repsPickers(for: exercise)
+                }
             }
         }
     }
@@ -795,6 +826,77 @@ struct LogExerciseView: View {
 
     private var wheelSpacing: CGFloat { 8 }
 
+    // MARK: - Aerobic
+
+    /// One wheel, a start button, and what the last session came to.
+    ///
+    /// No swipe-to-page gesture worries here: the wheel is a single column and
+    /// the paging gesture lives on the whole page as it always did.
+    @ViewBuilder
+    private func aerobicContent(for exercise: ExerciseDef) -> some View {
+        Text(exercise.aerobicActivity?.label ?? "aerobic")
+            .font(.system(size: 18))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+        Text("minutes").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
+        Picker("", selection: minutesBinding()) {
+            ForEach(AerobicDefaults.minuteChoices, id: \.self) { Text("\($0)").tag($0) }
+        }
+        .pickerStyle(.wheel)
+        .frame(maxWidth: .infinity)
+        .frame(height: pickerHeight)
+        .wheelOutline()
+
+        Button {
+            aerobic.start(exercise: exercise.name,
+                          seconds: durationSeconds(at: currentIndex))
+        } label: {
+            Text("start")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .padding(.top, 8)
+
+        if currentIndex < actualSeconds.count, actualSeconds[currentIndex] > 0 {
+            Text("done: \(AerobicDefaults.label(actualSeconds[currentIndex]))")
+                .font(.footnote)
+                .bold()
+        } else if let done = lastRecorded(for: exercise) {
+            Text("last time: \(AerobicDefaults.label(done))")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+
+        Spacer(minLength: 0)
+    }
+
+    /// What this exercise came to the last time it was logged, if anything.
+    private func lastRecorded(for exercise: ExerciseDef) -> Int? {
+        let logs = store.lastEntries(for: workout)
+        guard let log = logs[exercise.id] else { return nil }
+        return aerobicResults.first { $0.logId == log.id }?.durationSeconds
+    }
+
+    private func durationSeconds(at index: Int) -> Int {
+        guard index < durations.count, durations[index] > 0 else {
+            return AerobicDefaults.defaultMinutes * 60
+        }
+        return durations[index]
+    }
+
+    private func minutesBinding() -> Binding<Int> {
+        Binding<Int>(
+            get: { max(1, durationSeconds(at: currentIndex) / 60) },
+            set: { newValue in
+                guard currentIndex < durations.count else { return }
+                durations[currentIndex] = newValue * 60
+            }
+        )
+    }
+
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 10, coordinateSpace: .local)
             .onChanged { value in
@@ -856,6 +958,14 @@ struct LogExerciseView: View {
         let last = store.lastEntries(for: workout)
         weights = exerciseIds.map { exId in last[exId]?.weights ?? [] }
         reps = exerciseIds.map { exId in last[exId]?.reps ?? [] }
+        // Pre-filled from the last session of each aerobic exercise, so the
+        // wheel opens where it was left, exactly like the weight wheels.
+        durations = exerciseIds.map { exId in
+            guard let log = last[exId],
+                  let result = aerobicResults.first(where: { $0.logId == log.id })
+            else { return AerobicDefaults.defaultMinutes * 60 }
+            return result.durationSeconds
+        }
     }
 
     /// Guarantee one weights/reps row per exercise. An adopted snapshot can be
@@ -867,6 +977,11 @@ struct LogExerciseView: View {
         if weights.count > n { weights = Array(weights.prefix(n)) }
         if reps.count < n { reps += Array(repeating: [], count: n - reps.count) }
         if reps.count > n { reps = Array(reps.prefix(n)) }
+        let fallback = AerobicDefaults.defaultMinutes * 60
+        if durations.count < n { durations += Array(repeating: fallback, count: n - durations.count) }
+        if durations.count > n { durations = Array(durations.prefix(n)) }
+        if actualSeconds.count < n { actualSeconds += Array(repeating: 0, count: n - actualSeconds.count) }
+        if actualSeconds.count > n { actualSeconds = Array(actualSeconds.prefix(n)) }
     }
 
     private func setWeight(_ value: Int, series: Int) {
@@ -936,6 +1051,7 @@ struct LogExerciseView: View {
                                  weights: weights[currentIndex],
                                  reps: reps[currentIndex])
             context.insert(log)
+            recordAerobicResult(for: ex, log: log)
             handoff.noteActivity()
             // Pop first, then end the session and record to Health.
             let endedAt = Date()
@@ -950,6 +1066,7 @@ struct LogExerciseView: View {
                              weights: weights[currentIndex],
                              reps: reps[currentIndex])
         context.insert(log)
+        recordAerobicResult(for: ex, log: log)
         handoff.noteActivity()
 
         guard loggedIndices.count < exerciseIds.count else {
@@ -961,10 +1078,30 @@ struct LogExerciseView: View {
         // Rest between exercises, for as long as the exercise just finished
         // asks for — read before moving on, because goToNextUnlogged changes
         // what `currentIndex` points at.
+        //
+        // Never after cardio: you have just done twenty minutes of it, and a
+        // ninety-second rest prompt on top would be noise.
         let restAfter = ex.restSeconds
         let restName = ex.name
+        let wasAerobic = ex.kind == .aerobic
         goToNextUnlogged()
-        restTimer.setFinished(exercise: restName, seconds: restAfter)
+        if !wasAerobic {
+            restTimer.setFinished(exercise: restName, seconds: restAfter)
+        }
+    }
+
+    /// Store what an aerobic session measured beside the log that records it.
+    /// Nothing is written for a strength exercise, and nothing for an aerobic
+    /// one that was never actually run.
+    private func recordAerobicResult(for exercise: ExerciseDef, log: WorkoutLog) {
+        guard exercise.kind == .aerobic else { return }
+        // What was actually done, if a session ran. Otherwise what the wheel
+        // says: someone may have used the machine's own timer and only wants
+        // it written down, which is no less a record than the rest of this app.
+        let measured = currentIndex < actualSeconds.count ? actualSeconds[currentIndex] : 0
+        let seconds = measured > 0 ? measured : durationSeconds(at: currentIndex)
+        guard seconds > 0 else { return }
+        context.insert(AerobicResult(logId: log.id, durationSeconds: seconds))
     }
 
     private func goToNextUnlogged() {

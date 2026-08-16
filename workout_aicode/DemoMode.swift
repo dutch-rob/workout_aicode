@@ -77,6 +77,7 @@ enum DemoMode {
         // weeks, as a real routine would.
         addHistory(for: upper, upperBody, daysAgo: upperDays, hour: 18, into: ctx)
         addHistory(for: lower, lowerBody, daysAgo: lowerDays, hour: 9, into: ctx)
+        addAerobic(to: lower, into: ctx)
         try? ctx.save()
     }
 
@@ -88,6 +89,27 @@ enum DemoMode {
     private static let lowerDays: [Int] = (0..<12).map { 75 - $0 * 7 }
 
     @discardableResult
+    /// One aerobic exercise, on the end of leg day. Without it every demo
+    /// screen shows a library and a log with no cardio in them, and the AE
+    /// filter photographs as an empty list.
+    private static func addAerobic(to workout: WorkoutDef, into ctx: ModelContext) {
+        let rower = ExerciseDef(name: "Rowing machine",
+                                kind: .aerobic, aerobicActivity: .rowing)
+        ctx.insert(rower)
+        workout.exerciseOrder.append(rower.id)
+
+        // A couple of past sessions, so "last time" has something to say.
+        for (daysAgo, seconds) in [(3, 18 * 60), (10, 20 * 60)] {
+            let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
+            let log = WorkoutLog(date: date, workoutId: workout.id,
+                                 exerciseId: rower.id, weights: [], reps: [])
+            ctx.insert(log)
+            ctx.insert(AerobicResult(logId: log.id, durationSeconds: seconds,
+                                     averageHeartRate: 138, maximumHeartRate: 157,
+                                     zoneSeconds: [60, 240, 600, 180, 0]))
+        }
+    }
+
     private static func build(_ name: String, _ rows: [Row],
                               sortIndex: Int, into ctx: ModelContext) -> WorkoutDef {
         var ids: [UUID] = []

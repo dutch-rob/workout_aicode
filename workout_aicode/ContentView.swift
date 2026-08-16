@@ -161,6 +161,7 @@ struct ContentView: View {
                 handoff.onForeground()
                 // A rest that ran out while the app was away is simply over.
                 RestTimer.shared.onForeground()
+                AerobicCountdown.shared.onForeground()
             }
         }
         // Presented here rather than by logs/stats itself — see that view.

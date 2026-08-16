@@ -610,3 +610,21 @@ struct SchemaMigrationTests {
         #expect(reread.kind == .aerobic)
     }
 }
+
+// MARK: - The aerobic countdown
+
+@Test func aerobicMinutesCoverAUsefulRange() {
+    #expect(AerobicDefaults.minuteChoices.first == 1)
+    #expect(AerobicDefaults.minuteChoices.last == 120)
+    // The default has to be one of the choices or the wheel opens blank.
+    #expect(AerobicDefaults.minuteChoices.contains(AerobicDefaults.defaultMinutes))
+}
+
+@Test func aerobicDurationsAreLabelledAsMinutesAndSeconds() {
+    #expect(AerobicDefaults.label(1200) == "20:00")
+    #expect(AerobicDefaults.label(90) == "1:30")
+    #expect(AerobicDefaults.label(0) == "0:00")
+    // Over an hour keeps counting in minutes rather than wrapping to 0:00,
+    // because a 75-minute ride shown as "15:00" would be a lie.
+    #expect(AerobicDefaults.label(4500) == "75:00")
+}
