@@ -39,34 +39,38 @@ enum ExerciseKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// Which kind of cardio, so the Watch can start the matching Apple workout and
-/// HealthKit collects the right things for it (a row and a run do not measure
-/// the same way, and the workout that lands in Fitness should say which it was).
+/// Which cardio, named as the Apple Workout app names its indoor workouts, so
+/// what you pick here is what appears in Fitness afterwards.
+///
+/// "Indoor" is not a separate HealthKit activity — it is
+/// `HKWorkoutConfiguration.locationType = .indoor` alongside the ordinary
+/// activity type, which is exactly why Apple's own list reads this way. The
+/// mapping for each case, for when the Watch starts the session:
+///
+///   indoorWalk   → .walking       + indoor
+///   indoorRun    → .running       + indoor
+///   indoorCycle  → .cycling       + indoor
+///   elliptical   → .elliptical    + indoor
+///   stairStepper → .stairClimbing + indoor
 ///
 /// Deliberately not HKWorkoutActivityType itself: this file describes what is
 /// stored, and storing a framework enum's raw value would tie the database to
 /// HealthKit's numbering. The mapping lives in the HealthKit layer.
 enum AerobicActivity: String, Codable, CaseIterable, Identifiable {
-    case walking
-    case running
-    case cycling
-    case rowing
+    case indoorWalk
+    case indoorRun
+    case indoorCycle
     case elliptical
     case stairStepper
-    case swimming
-    case other
 
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .walking:      return "Walking"
-        case .running:      return "Running"
-        case .cycling:      return "Cycling"
-        case .rowing:       return "Rowing"
+        case .indoorWalk:   return "Indoor walk"
+        case .indoorRun:    return "Indoor run"
+        case .indoorCycle:  return "Indoor cycle"
         case .elliptical:   return "Elliptical"
         case .stairStepper: return "Stair stepper"
-        case .swimming:     return "Swimming"
-        case .other:        return "Other cardio"
         }
     }
 }

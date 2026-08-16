@@ -111,11 +111,11 @@ import SwiftData
 }
 
 @Test func anAerobicExerciseSurvivesAnExportRoundTrip() throws {
-    let original = ExerciseDef(name: "Treadmill", kind: .aerobic, aerobicActivity: .running)
+    let original = ExerciseDef(name: "Treadmill", kind: .aerobic, aerobicActivity: .indoorRun)
     let restored = try JSONDecoder().decode(
         ExerciseDef.self, from: try JSONEncoder().encode(original))
     #expect(restored.kind == .aerobic)
-    #expect(restored.aerobicActivity == .running)
+    #expect(restored.aerobicActivity == .indoorRun)
 }
 
 @Test func anUnknownKindReadsAsStrengthRatherThanFailing() throws {
@@ -532,7 +532,7 @@ struct SchemaMigrationTests {
             configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
         )
         let context = ModelContext(container)
-        let rower = ExerciseDef(name: "Rower", kind: .aerobic, aerobicActivity: .rowing)
+        let rower = ExerciseDef(name: "Exercise bike", kind: .aerobic, aerobicActivity: .indoorCycle)
         context.insert(rower)
         let log = WorkoutLog(workoutId: UUID(), exerciseId: rower.id, weights: [], reps: [])
         context.insert(log)
@@ -551,7 +551,7 @@ struct SchemaMigrationTests {
 
         let exercise = try #require(try fresh.fetch(FetchDescriptor<ExerciseDef>()).first)
         #expect(exercise.kind == .aerobic)
-        #expect(exercise.aerobicActivity == .rowing)
+        #expect(exercise.aerobicActivity == .indoorCycle)
     }
     /// The trap that shaped the design above, kept as a test so the reasoning is
     /// not just a comment: measurements set in `init` must survive, which is what
@@ -597,14 +597,14 @@ struct SchemaMigrationTests {
             for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
             configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
         let context = ModelContext(container)
-        context.insert(ExerciseDef(name: "Rower", numberOfSeries: 4,
+        context.insert(ExerciseDef(name: "Exercise bike", numberOfSeries: 4,
                                    restSeconds: 120,
-                                   kind: .aerobic, aerobicActivity: .rowing))
+                                   kind: .aerobic, aerobicActivity: .indoorCycle))
         try context.save()
 
         let reread = try #require(try ModelContext(container)
             .fetch(FetchDescriptor<ExerciseDef>()).first)
-        #expect(reread.name == "Rower")
+        #expect(reread.name == "Exercise bike")
         #expect(reread.numberOfSeries == 4)
         #expect(reread.restSeconds == 120)
         #expect(reread.kind == .aerobic)

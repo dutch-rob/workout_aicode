@@ -93,16 +93,16 @@ enum DemoMode {
     /// screen shows a library and a log with no cardio in them, and the AE
     /// filter photographs as an empty list.
     private static func addAerobic(to workout: WorkoutDef, into ctx: ModelContext) {
-        let rower = ExerciseDef(name: "Rowing machine",
-                                kind: .aerobic, aerobicActivity: .rowing)
-        ctx.insert(rower)
-        workout.exerciseOrder.append(rower.id)
+        let bike = ExerciseDef(name: "Exercise bike",
+                               kind: .aerobic, aerobicActivity: .indoorCycle)
+        ctx.insert(bike)
+        workout.exerciseOrder.append(bike.id)
 
         // A couple of past sessions, so "last time" has something to say.
         for (daysAgo, seconds) in [(3, 18 * 60), (10, 20 * 60)] {
             let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
             let log = WorkoutLog(date: date, workoutId: workout.id,
-                                 exerciseId: rower.id, weights: [], reps: [])
+                                 exerciseId: bike.id, weights: [], reps: [])
             ctx.insert(log)
             ctx.insert(AerobicResult(logId: log.id, durationSeconds: seconds,
                                      averageHeartRate: 138, maximumHeartRate: 157,
