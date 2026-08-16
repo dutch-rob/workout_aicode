@@ -563,3 +563,38 @@ private let settleNow = Date(timeIntervalSince1970: 1_700_000_000)
     #expect(restored.reps == [10])
 }
 
+/// The V6 schema must open. It did not, while `AerobicResult` carried optional
+/// `Int?` columns: CoreData threw from `encodeNil` building the entity's
+/// defaults, and every test that opened a container died with it. The heart
+/// rates are plain `Int` with zero meaning "not measured" for that reason.
+@Test func theAerobicSchemaOpens() throws {
+    let url = temporaryStoreURL()
+    defer { removeStore(at: url) }
+    _ = try ModelContainer(
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+}
+
+@Test func propertiesSetInInitActuallyPersist() throws {
+    // Does an ExerciseDef built by its initialiser keep what it was built with,
+    // once inserted and read back? `ExerciseDefaults.makeExercise` sets every
+    // value that way, so if this fails, the rest a user chose never reaches
+    // their exercises — in the shipped version, not just on this branch.
+    let url = temporaryStoreURL()
+    defer { removeStore(at: url) }
+    let container = try ModelContainer(
+        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+    let context = ModelContext(container)
+    context.insert(ExerciseDef(name: "Rower", numberOfSeries: 4,
+                               restSeconds: 120,
+                               kind: .aerobic, aerobicActivity: .rowing))
+    try context.save()
+
+    let reread = try #require(try ModelContext(container)
+        .fetch(FetchDescriptor<ExerciseDef>()).first)
+    #expect(reread.name == "Rower")
+    #expect(reread.numberOfSeries == 4)
+    #expect(reread.restSeconds == 120)
+    #expect(reread.kind == .aerobic)
+}
