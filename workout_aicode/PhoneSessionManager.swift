@@ -321,6 +321,23 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         session.sendMessage(msg, replyHandler: nil, errorHandler: nil)
     }
 
+    // MARK: - Aerobic sessions
+    //
+    // Only the Watch can run an HKWorkoutSession, so an aerobic exercise
+    // started here asks the Watch to run one and then listens. Live sends
+    // only, never queued: a workout instruction that turns up ten minutes late
+    // would start a session for something already finished.
+
+    func startAerobicOnWatch(activityRaw: String?, exercise: String) {
+        var msg: [String: Any] = ["type": "aerobicStart", "exercise": exercise]
+        if let activityRaw { msg["activity"] = activityRaw }
+        deliver(msg)
+    }
+
+    func endAerobicOnWatch() {
+        deliver(["type": "aerobicEnd"])
+    }
+
     // MARK: - Incoming: watch logs
     private func handleIncomingLog(_ info: [String: Any]) {
         guard let type = info["type"] as? String, type == "logSet",
@@ -403,6 +420,12 @@ extension PhoneSessionManager: WCSessionDelegate {
     // Messages WITHOUT a reply handler.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         switch message["type"] as? String {
+        case "heartRate":
+            guard let bpm = message["bpm"] as? Int else { return }
+            let zone = message["zone"] as? Int
+            Task { @MainActor in
+                AerobicCountdown.shared.receiveHeartRate(bpm, zone: zone)
+            }
         case "restTimerCancelled":
             // Skipped on the Watch. Calls off the phone's rest so it does not
             // buzz later for a rest the user has already walked away from.

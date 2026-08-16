@@ -115,7 +115,7 @@ struct ZoneTally {
     /// counted by `secondsBelowZone1` rather than being silently dropped.
     private(set) var seconds = [Int](repeating: 0, count: HeartRateZones.zoneCount)
     private(set) var secondsBelowZone1 = 0
-    private var last: (date: Date, bpm: Int)?
+    private var last: (date: Date, zone: Int?)?
 
     init(zones: HeartRateZones) {
         self.zones = zones
@@ -125,14 +125,25 @@ struct ZoneTally {
     /// to it, so a jump between zones does not backdate the new one over time
     /// spent in the old.
     mutating func add(beatsPerMinute: Int, at date: Date) {
-        defer { last = (date, beatsPerMinute) }
+        add(zone: zones.zone(for: beatsPerMinute), at: date)
+    }
+
+    /// The same, for a zone worked out elsewhere.
+    ///
+    /// The phone takes this route: the Watch sends the zone alongside the beat
+    /// count, because the Watch is the one with permission to read the resting
+    /// rate and date of birth the boundaries are drawn from. Classifying again
+    /// on the phone from default boundaries would quietly disagree with the
+    /// wrist about which zone the same beat was in.
+    mutating func add(zone: Int?, at date: Date) {
+        defer { last = (date, zone) }
         guard let previous = last else { return }
         let elapsed = Int(date.timeIntervalSince(previous.date).rounded())
         // A gap this long means the watch stopped reporting — the wrist was
         // down, or the app was asleep. Guessing what happened in between would
         // be inventing data.
         guard elapsed > 0, elapsed <= 60 else { return }
-        if let zone = zones.zone(for: previous.bpm) {
+        if let zone = previous.zone, zone >= 1, zone <= HeartRateZones.zoneCount {
             seconds[zone - 1] += elapsed
         } else {
             secondsBelowZone1 += elapsed

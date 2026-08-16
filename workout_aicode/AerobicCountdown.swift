@@ -48,6 +48,42 @@ final class AerobicCountdown: ObservableObject {
     /// spent, whether it ran out or was stopped early.
     @Published var finishedSeconds: Int?
 
+    // MARK: Heart rate, as reported by the Watch
+    //
+    // The Watch runs the Apple workout and sends each reading here. The zone
+    // comes with it rather than being worked out again: the Watch is the device
+    // with permission to read the resting rate and date of birth the boundaries
+    // are drawn from, and classifying again here would let the phone and the
+    // wrist disagree about the same beat.
+
+    @Published private(set) var currentHeartRate: Int?
+    @Published private(set) var currentZone: Int?
+    /// Highest seen this session, and the running average of what arrived.
+    @Published private(set) var maximumHeartRate = 0
+    private var heartRateSum = 0
+    private var heartRateCount = 0
+    private var tally = ZoneTally(zones: HeartRateZones())
+
+    var averageHeartRate: Int {
+        heartRateCount > 0 ? Int((Double(heartRateSum) / Double(heartRateCount)).rounded()) : 0
+    }
+
+    /// Time in each zone so far. Empty when no reading ever arrived, which is
+    /// the ordinary case without a Watch and must not read as five zeroes —
+    /// "no heart rate" and "no time in any zone" are different claims.
+    var zoneSeconds: [Int] { heartRateCount > 0 ? tally.seconds : [] }
+
+    /// A reading from the Watch.
+    func receiveHeartRate(_ beatsPerMinute: Int, zone: Int?, at date: Date = Date()) {
+        guard endsAt != nil else { return }   // nothing running; ignore stragglers
+        currentHeartRate = beatsPerMinute
+        currentZone = zone
+        maximumHeartRate = max(maximumHeartRate, beatsPerMinute)
+        heartRateSum += beatsPerMinute
+        heartRateCount += 1
+        tally.add(zone: zone, at: date)
+    }
+
     private var startedAt: Date?
     private var ticker: Timer?
 
@@ -68,7 +104,7 @@ final class AerobicCountdown: ObservableObject {
 
     // MARK: - Running
 
-    func start(exercise: String, seconds: Int) {
+    func start(exercise: String, seconds: Int, activityRaw: String?) {
         guard seconds > 0, !isShowing else { return }
         exerciseName = exercise
         totalSeconds = seconds
@@ -78,8 +114,18 @@ final class AerobicCountdown: ObservableObject {
         tick = now
         finishedSeconds = nil
         isShowing = true
+        currentHeartRate = nil
+        currentZone = nil
+        maximumHeartRate = 0
+        heartRateSum = 0
+        heartRateCount = 0
+        tally = ZoneTally(zones: HeartRateZones())
         UIApplication.shared.isIdleTimerDisabled = true
         scheduleNotification(at: endsAt!)
+        // The Watch is what actually measures: it starts a real Apple workout
+        // for this activity, which is also what puts the session in Fitness.
+        PhoneSessionManager.shared.startAerobicOnWatch(activityRaw: activityRaw,
+                                                       exercise: exercise)
         startTicking()
     }
 
@@ -107,6 +153,7 @@ final class AerobicCountdown: ObservableObject {
     }
 
     private func clear() {
+        PhoneSessionManager.shared.endAerobicOnWatch()
         ticker?.invalidate()
         ticker = nil
         endsAt = nil
@@ -162,6 +209,47 @@ final class AerobicCountdown: ObservableObject {
 
 // MARK: - The countdown screen
 
+/// Current heart rate and which of the five zones it is in.
+///
+/// Nothing at all when there is no reading: without an Apple Watch on the wrist
+/// there never will be one, and five empty zone pips would be furniture
+/// promising something the app cannot deliver. A dash while waiting for the
+/// first reading, because those few seconds are normal and not a failure.
+struct HeartRateBar: View {
+    let bpm: Int?
+    let zone: Int?
+
+    var body: some View {
+        if let bpm {
+            VStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "heart.fill").foregroundStyle(.red)
+                    Text("\(bpm)").font(.title2).bold().monospacedDigit()
+                    Text("bpm").font(.footnote).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 4) {
+                    ForEach(1...HeartRateZones.zoneCount, id: \.self) { index in
+                        Capsule()
+                            .fill(index == zone ? Color.red : Color.secondary.opacity(0.2))
+                            .frame(height: 8)
+                            .overlay(alignment: .center) {
+                                if index == zone {
+                                    Text("\(index)")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                    }
+                }
+                .frame(maxWidth: 220)
+                Text(zone.map { "zone \($0)" } ?? "below zone 1")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 struct AerobicCountdownView: View {
     @ObservedObject private var session = AerobicCountdown.shared
 
@@ -184,6 +272,8 @@ struct AerobicCountdownView: View {
                     .monospacedDigit()
             }
             .frame(width: 240, height: 240)
+
+            HeartRateBar(bpm: session.currentHeartRate, zone: session.currentZone)
 
             Text("You can leave the app — it will buzz when the time is up.")
                 .font(.footnote)

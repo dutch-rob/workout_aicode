@@ -294,6 +294,40 @@ final class WatchSessionManager: NSObject, ObservableObject {
         session.sendMessage(["type": "restTimerCancelled"], replyHandler: nil, errorHandler: nil)
     }
 
+    // MARK: - Aerobic sessions (phone-driven)
+    //
+    // Only the Watch can run an HKWorkoutSession, so the phone asks and this
+    // obliges. Live messages only, like the rest timer: an instruction to start
+    // a workout that arrives ten minutes late would start one for a session
+    // already over.
+
+    private func handleAerobic(_ msg: [String: Any]) -> Bool {
+        switch msg["type"] as? String {
+        case "aerobicStart":
+            let activity = msg["activity"] as? String
+            Task { @MainActor in
+                await WatchAerobicWorkout.shared.start(activityRaw: activity)
+            }
+            return true
+        case "aerobicEnd":
+            Task { @MainActor in _ = await WatchAerobicWorkout.shared.finish() }
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// One heart-rate reading on its way to the phone, with the zone it fell
+    /// in — worked out here because this is the device allowed to read the
+    /// resting rate and date of birth the boundaries come from.
+    func sendHeartRate(_ beatsPerMinute: Int, zone: Int?) {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else { return }
+        var msg: [String: Any] = ["type": "heartRate", "bpm": beatsPerMinute]
+        if let zone { msg["zone"] = zone }
+        session.sendMessage(msg, replyHandler: nil, errorHandler: nil)
+    }
+
     private func decodeSnapshot(_ any: Any?) -> SessionSnapshot? {
         (any as? Data).flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
     }
@@ -346,10 +380,14 @@ extension WatchSessionManager: WCSessionDelegate {
     // Messages WITHOUT a reply handler.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         if handleRestTimer(message) { return }
+        if handleAerobic(message) { return }
         switch message["type"] as? String {
         case "sessionEnded":
             DispatchQueue.main.async {
-                Task { @MainActor in WatchRestTimer.shared.cancel() }
+                Task { @MainActor in
+                    WatchRestTimer.shared.cancel()
+                    _ = await WatchAerobicWorkout.shared.finish()
+                }
                 if self.role != .none {
                     self.role = .none
                     self.routeWorkoutId = nil

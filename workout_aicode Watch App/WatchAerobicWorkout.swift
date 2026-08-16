@@ -176,10 +176,14 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
 
         if let latest = statistics.mostRecentQuantity()?.doubleValue(for: unit) {
             let bpm = Int(latest.rounded())
+            let zone = zones.zone(for: bpm)
             currentHeartRate = bpm
-            currentZone = zones.zone(for: bpm)
+            currentZone = zone
             tally.add(beatsPerMinute: bpm,
                       at: statistics.mostRecentQuantityDateInterval()?.end ?? date)
+            // Straight on to the phone, which is where the countdown the user
+            // is looking at usually lives.
+            WatchSessionManager.shared.sendHeartRate(bpm, zone: zone)
         }
         if let average = statistics.averageQuantity()?.doubleValue(for: unit) {
             averageHeartRate = Int(average.rounded())

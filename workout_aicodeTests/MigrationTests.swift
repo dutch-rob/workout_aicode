@@ -872,3 +872,29 @@ private func at(_ seconds: Int) -> Date {
     #expect(configuration.activityType == .running)
     #expect(configuration.locationType == .indoor)
 }
+
+@Test func aZoneWorkedOutElsewhereTalliesTheSameWay() {
+    // The phone takes the Watch's word for the zone, because the Watch is the
+    // one that can read the resting rate the boundaries come from. Both routes
+    // must credit time identically or the two devices would disagree about the
+    // same session.
+    let zones = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
+    var byRate = ZoneTally(zones: zones)
+    byRate.add(beatsPerMinute: 150, at: at(0))
+    byRate.add(beatsPerMinute: 150, at: at(40))
+
+    var byZone = ZoneTally(zones: zones)
+    byZone.add(zone: 3, at: at(0))
+    byZone.add(zone: 3, at: at(40))
+
+    #expect(byRate.seconds == byZone.seconds)
+    #expect(byZone.seconds[2] == 40)
+}
+
+@Test func anUnknownZoneFromTheWatchIsCountedAsBelowZoneOne() {
+    var tally = ZoneTally(zones: HeartRateZones())
+    tally.add(zone: nil, at: at(0))
+    tally.add(zone: nil, at: at(25))
+    #expect(tally.secondsBelowZone1 == 25)
+    #expect(tally.seconds.allSatisfy { $0 == 0 })
+}

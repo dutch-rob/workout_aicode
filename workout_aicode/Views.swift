@@ -850,7 +850,8 @@ struct LogExerciseView: View {
 
         Button {
             aerobic.start(exercise: exercise.name,
-                          seconds: durationSeconds(at: currentIndex))
+                          seconds: durationSeconds(at: currentIndex),
+                          activityRaw: exercise.aerobicActivityRaw)
         } label: {
             Text("start")
                 .frame(maxWidth: .infinity)
@@ -1101,7 +1102,19 @@ struct LogExerciseView: View {
         let measured = currentIndex < actualSeconds.count ? actualSeconds[currentIndex] : 0
         let seconds = measured > 0 ? measured : durationSeconds(at: currentIndex)
         guard seconds > 0 else { return }
-        context.insert(AerobicResult(logId: log.id, durationSeconds: seconds))
+
+        // Heart rate belongs to a session that actually ran, and only to the
+        // exercise that ran it. The countdown keeps its readings until the next
+        // session starts, so a second aerobic exercise logged straight off the
+        // wheel would otherwise inherit the first one's heart rate and claim to
+        // have measured something it never did.
+        let ranASession = measured > 0
+        context.insert(AerobicResult(
+            logId: log.id,
+            durationSeconds: seconds,
+            averageHeartRate: ranASession ? aerobic.averageHeartRate : 0,
+            maximumHeartRate: ranASession ? aerobic.maximumHeartRate : 0,
+            zoneSeconds: ranASession ? aerobic.zoneSeconds : []))
     }
 
     private func goToNextUnlogged() {
