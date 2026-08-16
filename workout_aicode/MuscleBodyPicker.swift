@@ -32,7 +32,11 @@ struct MuscleBodyPicker: View {
             figure(isBack: false, labels: Self.frontLabels)
                 .overlay(alignment: .bottomLeading) {
                     AerobicFilterButton(isOn: $aerobic)
-                        .padding(.leading, 2)
+                        // Clear of the Quads connector, which runs diagonally
+                        // through the corner on its way up to the thigh. Far
+                        // enough right to sit in open space, not so far as to
+                        // touch the foot.
+                        .padding(.leading, 28)
                         .padding(.bottom, 6)
                 }
             viewCaptions
