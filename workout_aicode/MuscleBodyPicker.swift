@@ -148,7 +148,6 @@ struct MuscleBodyPicker: View {
     /// the two halves sit closer together and the bodies grow.
     private var viewCaptions: some View {
         VStack(spacing: 14) {
-            AerobicFilterButton(isOn: $aerobic, rotated: true)
             Spacer(minLength: 0)
             VStack(spacing: 1) {
                 arrow(pointsLeft: true)
@@ -221,8 +220,11 @@ struct MuscleBodyPicker: View {
                         let target = CGPoint(x: art.minX + c.x * art.width,
                                              y: art.minY + c.y * art.height)
                         let edgeX = isBack ? size.width : 0
+                        // Same inset as the labels, or the connectors would
+                        // point at where they used to be.
                         let edgeY = rowCentre(index: index, count: labels.count,
-                                              height: size.height)
+                                              height: size.height,
+                                              bottomInset: isBack ? 14 : Self.aerobicReserve)
                         Path { path in
                             path.move(to: CGPoint(x: edgeX, y: edgeY))
                             path.addLine(to: target)
@@ -262,7 +264,9 @@ struct MuscleBodyPicker: View {
     private func labelColumn(_ labels: [MuscleGroup], trailing: Bool) -> some View {
         GeometryReader { geo in
             ForEach(Array(labels.enumerated()), id: \.offset) { index, group in
-                let y = rowCentre(index: index, count: labels.count, height: geo.size.height)
+                let y = rowCentre(index: index, count: labels.count,
+                                  height: geo.size.height,
+                                  bottomInset: trailing ? Self.aerobicReserve : 14)
                 Button {
                     selection = (selection == group) ? nil : group
                 } label: {
@@ -283,6 +287,17 @@ struct MuscleBodyPicker: View {
                 .frame(width: geo.size.width, alignment: trailing ? .trailing : .leading)
                 .position(x: geo.size.width / 2, y: y)
             }
+
+            // The aerobic filter lives at the foot of the front column, below
+            // the last muscle label and beside the figure's feet. It began life
+            // in the strip between the two heads, where it read as a label for
+            // the head rather than as a control of its own.
+            if trailing {
+                AerobicFilterButton(isOn: $aerobic)
+                    .frame(width: geo.size.width, alignment: .trailing)
+                    .position(x: geo.size.width / 2,
+                              y: geo.size.height - Self.aerobicReserve / 2 + 4)
+            }
         }
         // Narrow on purpose: whatever the labels take, the two figures divide
         // between them, and the artwork is width-limited here.
@@ -292,10 +307,16 @@ struct MuscleBodyPicker: View {
     /// Labels are spread evenly down the column rather than placed at their
     /// muscle's own height: at true heights the shoulder labels would overlap
     /// each other, and the connector is what carries the meaning anyway.
-    private func rowCentre(index: Int, count: Int, height: CGFloat) -> CGFloat {
-        let inset: CGFloat = 14
-        guard count > 1 else { return height / 2 }
-        let usable = height - inset * 2
-        return inset + usable * CGFloat(index) / CGFloat(count - 1)
+    /// Room kept at the foot of the front column for the aerobic heart. Without
+    /// it the heart landed on top of the last muscle label — the labels spread
+    /// across the whole height, so "the bottom" was already taken.
+    static let aerobicReserve: CGFloat = 52
+
+    private func rowCentre(index: Int, count: Int, height: CGFloat,
+                           bottomInset: CGFloat) -> CGFloat {
+        let top: CGFloat = 14
+        guard count > 1 else { return (height - bottomInset) / 2 }
+        let usable = height - top - bottomInset
+        return top + usable * CGFloat(index) / CGFloat(count - 1)
     }
 }

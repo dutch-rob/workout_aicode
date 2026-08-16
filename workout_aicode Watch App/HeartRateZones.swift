@@ -91,6 +91,25 @@ struct HeartRateZones: Equatable {
         return index + 1
     }
 
+    /// Where within its zone a heart rate sits, 0 at the bottom of the zone and
+    /// 1 at the top — what the little marker under the band points at.
+    ///
+    /// The top zone has no ceiling, so its span is taken as the same width as
+    /// the one below: an arrow that pinned itself to the left edge for every
+    /// rate above the last boundary would say less than nothing.
+    func fraction(forBeatsPerMinute bpm: Int, inZone zone: Int) -> Double {
+        guard let range = range(forZone: zone) else { return 0 }
+        let width: Int
+        if let upper = range.upper {
+            width = upper - range.lower + 1
+        } else {
+            let below = self.range(forZone: zone - 1)
+            width = below.map { ($0.upper ?? $0.lower) - $0.lower + 1 } ?? 20
+        }
+        guard width > 0 else { return 0 }
+        return min(1, max(0, Double(bpm - range.lower) / Double(width)))
+    }
+
     /// The range shown for a zone. The top zone has no upper bound worth
     /// printing — there is always a little more.
     func range(forZone zone: Int) -> (lower: Int, upper: Int?)? {

@@ -450,7 +450,7 @@ struct MuscleButtonGrid: View {
                 column(MuscleBodyPicker.frontOrder, caption: "front")
                 column(MuscleBodyPicker.backOrder, caption: "back")
             }
-            AerobicFilterButton(isOn: $aerobic)
+            AerobicFilterButton(isOn: $aerobic, size: 38)
         }
         .padding(.horizontal)
         .padding(.vertical, 6)

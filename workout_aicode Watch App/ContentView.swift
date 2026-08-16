@@ -86,8 +86,14 @@ struct ContentView: View {
         }
         // A workout active on the iPhone shows here as a Paused screen; the
         // session only moves over when the user taps "Continue here".
+        // An aerobic session takes precedence over the Paused screen. The phone
+        // drives one, so the Watch was being offered "Continue here" for a
+        // workout it was already running — the only visible sign of which was
+        // that the Watch appeared to have stopped responding.
         .overlay {
-            if session.role == .paused {
+            if aerobic.isRunning {
+                WatchHeartRateView()
+            } else if session.role == .paused {
                 WatchPausedView(onContinue: { session.reclaim() },
                                 onDismiss: { session.dismissPaused() })
             }
@@ -106,6 +112,7 @@ struct ContentView: View {
     }
 
     @ObservedObject private var restTimer = WatchRestTimer.shared
+    @ObservedObject private var aerobic = WatchAerobicWorkout.shared
 
     private var emptyState: some View {
         VStack(spacing: 10) {

@@ -36,6 +36,10 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     @Published private(set) var isRunning = false
     /// Which zone the current rate falls in, 1...5, or nil below zone 1.
     @Published private(set) var currentZone: Int?
+    /// Where inside that zone, 0...1, for the marker under the band.
+    @Published private(set) var currentZoneFraction: Double = 0
+    /// The exercise this session belongs to, for the screen to name.
+    @Published private(set) var exerciseName = ""
 
     private var zones = HeartRateZones()
     private var tally = ZoneTally(zones: HeartRateZones())
@@ -73,8 +77,9 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
 
     // MARK: - Running
 
-    func start(activityRaw: String?) async {
+    func start(activityRaw: String?, exercise: String = "") async {
         guard !isRunning, HKHealthStore.isHealthDataAvailable() else { return }
+        exerciseName = exercise
         await requestAuthorization()
 
         zones = await currentZones()
@@ -179,6 +184,9 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
             let zone = zones.zone(for: bpm)
             currentHeartRate = bpm
             currentZone = zone
+            currentZoneFraction = zone.map {
+                zones.fraction(forBeatsPerMinute: bpm, inZone: $0)
+            } ?? 0
             tally.add(beatsPerMinute: bpm,
                       at: statistics.mostRecentQuantityDateInterval()?.end ?? date)
             // Straight on to the phone, which is where the countdown the user

@@ -305,8 +305,10 @@ final class WatchSessionManager: NSObject, ObservableObject {
         switch msg["type"] as? String {
         case "aerobicStart":
             let activity = msg["activity"] as? String
+            let exercise = msg["exercise"] as? String ?? ""
             Task { @MainActor in
-                await WatchAerobicWorkout.shared.start(activityRaw: activity)
+                await WatchAerobicWorkout.shared.start(activityRaw: activity,
+                                                       exercise: exercise)
             }
             return true
         case "aerobicEnd":
