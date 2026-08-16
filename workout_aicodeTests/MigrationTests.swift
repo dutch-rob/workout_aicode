@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import SwiftData
+import HealthKit
 @testable import workout_aicode
 
 
@@ -835,4 +836,39 @@ private func at(_ seconds: Int) -> Date {
     sparse.add(beatsPerMinute: 150, at: at(60))
     #expect(dense.seconds == sparse.seconds)
     #expect(dense.totalCountedSeconds == 60)
+}
+
+// MARK: - Activity → Apple workout
+
+@Test func everyActivityStartsTheRightAppleWorkout() {
+    // A missing case does not fail, it starts a workout called "Other" — so
+    // the absence of .other is the assertion that matters here.
+    for activity in AerobicActivity.allCases {
+        let type = WatchAerobicActivity.activityType(for: activity.rawValue)
+        #expect(type != .other, "\(activity.rawValue) has no HealthKit workout type")
+    }
+}
+
+@Test func distinctActivitiesStartDistinctWorkouts() {
+    // Two activities mapped to the same HealthKit type would be
+    // indistinguishable in Fitness afterwards.
+    let types = AerobicActivity.allCases.map {
+        WatchAerobicActivity.activityType(for: $0.rawValue)
+    }
+    #expect(Set(types).count == types.count)
+}
+
+@Test func anUnknownActivityStillProducesAWorkout() {
+    // A newer phone naming something this build has never heard of should get
+    // a workout, just an unlabelled one — not a crash and not nothing.
+    #expect(WatchAerobicActivity.activityType(for: "jetpacking") == .other)
+    #expect(WatchAerobicActivity.activityType(for: nil) == .other)
+}
+
+@Test func everyAerobicWorkoutIsAnIndoorOne() {
+    // "Indoor" is the location type, not the activity — the whole reason the
+    // names read as the Workout app's do.
+    let configuration = WatchAerobicActivity.configuration(for: "indoorRun")
+    #expect(configuration.activityType == .running)
+    #expect(configuration.locationType == .indoor)
 }

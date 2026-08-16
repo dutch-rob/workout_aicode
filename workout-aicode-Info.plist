@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSHealthShareUsageDescription</key>
-	<string>SetsRepsWheels does not read any information from Apple Health. Health access is requested only so that the workouts you log can be saved to Health; your existing health and fitness data is never read or used by this app.</string>
+	<string>SetsRepsWheels reads your heart rate, and your resting heart rate and date of birth, only while you are doing an aerobic exercise with the rest timer’s countdown running, so it can show your current heart rate and which zone you are in. Those readings stay on your devices, are never sent anywhere, and are never included in the anonymous data you can choose to share with the developer. Nothing else in Apple Health is read.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>When you turn on “Save workouts to Apple Health” in Settings, SetsRepsWheels saves each workout you finish as a Traditional Strength Training session, recording only its start time, end time and duration. Nothing else is shared, and no data is sent anywhere outside your devices.</string>
 	<key>UIBackgroundModes</key>

@@ -2,10 +2,12 @@ import SwiftUI
 
 // MARK: - Which build am I looking at?
 //
-// A byte-identical copy of this file lives in the Watch App target
+// A copy of this file lives in the Watch App target
 // ("workout_aicode Watch App/BuildStamp.swift"). The two targets are separate
 // synchronized folders and do not share source — the same arrangement as
-// WatchSync.swift. Keep them the same.
+// WatchSync.swift. `BuildStamp` itself must stay identical; `BuildStampView`
+// deliberately does not, because the full string will not fit across a watch
+// face at this size.
 //
 // This exists because the question "is the thing on my wrist the build I just
 // made?" had no answer from inside the app, and a round of testing went into
