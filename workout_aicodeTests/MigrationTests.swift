@@ -709,3 +709,130 @@ struct SchemaMigrationTests {
     #expect(LibraryOrder.rank(isFavourite: true, isInAnyWorkout: false,
                               choosingForWorkout: true) < inIt)
 }
+
+// MARK: - Heart rate zones
+//
+// A stand-in until the OS 27 SDK, where HealthKit hands over the user's real
+// configuration. These pin the arithmetic and, more importantly, the edges —
+// an empty Health database supplies nonsense, and the boundaries have to stay
+// in order regardless.
+
+@Test func zonesDivideTheReserveFromHalfwayUp() {
+    // Resting 60, max 180 → reserve 120. Boundaries at 50/60/70/80/90%.
+    let z = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
+    #expect(z.lowerBounds == [120, 132, 144, 156, 168])
+}
+
+@Test func aHeartRateLandsInTheRightZone() {
+    let z = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
+    #expect(z.zone(for: 119) == nil)     // not training yet
+    #expect(z.zone(for: 120) == 1)       // exactly on a boundary is in the zone
+    #expect(z.zone(for: 143) == 2)
+    #expect(z.zone(for: 144) == 3)
+    #expect(z.zone(for: 175) == 5)
+    #expect(z.zone(for: 250) == 5)       // above maximum is still the top zone
+}
+
+@Test func belowTheFirstBoundaryIsNoZoneRatherThanZoneZero() {
+    // There is no zone 0. Returning nil makes a caller handle "not training
+    // yet" instead of quietly showing a zone that does not exist.
+    let z = HeartRateZones()
+    #expect(z.zone(for: 40) == nil)
+}
+
+@Test func zoneRangesMeetWithoutOverlapping() {
+    let z = HeartRateZones(restingHeartRate: 55, maximumHeartRate: 185)
+    for zone in 1..<HeartRateZones.zoneCount {
+        let this = z.range(forZone: zone)!
+        let next = z.range(forZone: zone + 1)!
+        #expect(this.upper! + 1 == next.lower)
+    }
+    // The top zone is open-ended: there is always a little more.
+    #expect(z.range(forZone: 5)?.upper == nil)
+    #expect(z.range(forZone: 0) == nil)
+    #expect(z.range(forZone: 6) == nil)
+}
+
+@Test func nonsenseFromAnEmptyHealthDatabaseStillGivesUsableZones() {
+    // A maximum at or below resting would stack every boundary on the next and
+    // make "which zone" meaningless.
+    let z = HeartRateZones(restingHeartRate: 200, maximumHeartRate: 50)
+    #expect(z.maximumHeartRate > z.restingHeartRate)
+    #expect(z.lowerBounds == z.lowerBounds.sorted())
+    #expect(Set(z.lowerBounds).count == HeartRateZones.zoneCount)
+}
+
+@Test func theEstimatedMaximumFollowsAgeButStaysSane() {
+    #expect(HeartRateZones.estimatedMaximum(forAge: 40) == 180)
+    #expect(HeartRateZones.estimatedMaximum(forAge: 20) == 200)
+    // Nonsense ages come from a mis-set birth date, not from a 300-year-old.
+    #expect(HeartRateZones.estimatedMaximum(forAge: 300) == 100)
+    #expect(HeartRateZones.estimatedMaximum(forAge: -5) == 220)
+}
+
+@Test func zonesSayWhereTheyCameFrom() {
+    // Nothing should ever claim to be the Workout app's own zones until it is.
+    #expect(HeartRateZones().source == .estimated)
+}
+
+// MARK: - Time in zone
+
+private func at(_ seconds: Int) -> Date {
+    Date(timeIntervalSince1970: 1_700_000_000).addingTimeInterval(Double(seconds))
+}
+
+@Test func timeIsCreditedToTheZoneItWasSpentIn() {
+    let zones = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
+    var tally = ZoneTally(zones: zones)
+    tally.add(beatsPerMinute: 130, at: at(0))    // zone 1, from here
+    tally.add(beatsPerMinute: 150, at: at(30))   // 30s credited to zone 1
+    tally.add(beatsPerMinute: 150, at: at(60))   // 30s to zone 3
+    #expect(tally.seconds[0] == 30)
+    #expect(tally.seconds[2] == 30)
+    #expect(tally.totalCountedSeconds == 60)
+}
+
+@Test func theFirstReadingCreditsNothing() {
+    // There is no interval before the first sample, and inventing one would
+    // credit time that had not happened.
+    var tally = ZoneTally(zones: HeartRateZones())
+    tally.add(beatsPerMinute: 150, at: at(0))
+    #expect(tally.totalCountedSeconds == 0)
+}
+
+@Test func timeUnderZoneOneIsCountedSeparatelyNotDropped() {
+    let zones = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
+    var tally = ZoneTally(zones: zones)
+    tally.add(beatsPerMinute: 80, at: at(0))
+    tally.add(beatsPerMinute: 80, at: at(45))
+    #expect(tally.secondsBelowZone1 == 45)
+    #expect(tally.seconds.allSatisfy { $0 == 0 })
+}
+
+@Test func aLongGapInReadingsIsNotGuessedAt() {
+    // The wrist went down or the app slept. Filling in five minutes at the last
+    // known rate would be inventing the middle of the session.
+    let zones = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
+    var tally = ZoneTally(zones: zones)
+    tally.add(beatsPerMinute: 150, at: at(0))
+    tally.add(beatsPerMinute: 150, at: at(300))
+    #expect(tally.totalCountedSeconds == 0)
+    // ...and it picks straight back up afterwards.
+    tally.add(beatsPerMinute: 150, at: at(310))
+    #expect(tally.seconds[2] == 10)
+}
+
+@Test func totalsDoNotDependOnHowOftenTheWatchSamples() {
+    // Dense and sparse streams over the same minute must agree, which counting
+    // readings rather than intervals would not.
+    let zones = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
+    var dense = ZoneTally(zones: zones)
+    for second in stride(from: 0, through: 60, by: 5) {
+        dense.add(beatsPerMinute: 150, at: at(second))
+    }
+    var sparse = ZoneTally(zones: zones)
+    sparse.add(beatsPerMinute: 150, at: at(0))
+    sparse.add(beatsPerMinute: 150, at: at(60))
+    #expect(dense.seconds == sparse.seconds)
+    #expect(dense.totalCountedSeconds == 60)
+}

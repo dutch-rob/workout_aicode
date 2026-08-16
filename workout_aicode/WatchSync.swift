@@ -22,6 +22,9 @@ import Foundation
 enum SyncDefaults {
     /// Keep in step with `RestTimerDefaults.seconds`.
     static let restSeconds = 90
+    /// Keep in step with `ExerciseKind`'s raw values.
+    static let strengthKind = "strength"
+    static let aerobicKind = "aerobic"
 }
 
 /// One exercise definition, flattened to primitive types (UUIDs as strings).
@@ -35,14 +38,22 @@ struct SyncExercise: Codable, Identifiable, Hashable {
     /// Rest after a set of this exercise, so a set logged on the Watch rests
     /// for as long as the same set logged on the phone.
     var restSeconds: Int
+    /// "strength" or "aerobic", and for an aerobic one which activity. Raw
+    /// strings rather than the enums: those live in the phone's Models.swift,
+    /// which the Watch target does not compile, and an unrecognised value from
+    /// a newer phone should cost one attribute rather than the whole payload.
+    var kindRaw: String
+    var aerobicActivityRaw: String?
 
     enum CodingKeys: String, CodingKey {
         case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement
-        case restSeconds
+        case restSeconds, kindRaw, aerobicActivityRaw
     }
     init(id: String, name: String, numberOfSeries: Int, lowestWeight: Int,
          highestWeight: Int, weightIncrement: Int,
-         restSeconds: Int = SyncDefaults.restSeconds) {
+         restSeconds: Int = SyncDefaults.restSeconds,
+         kindRaw: String = SyncDefaults.strengthKind,
+         aerobicActivityRaw: String? = nil) {
         self.id = id
         self.name = name
         self.numberOfSeries = numberOfSeries
@@ -50,6 +61,8 @@ struct SyncExercise: Codable, Identifiable, Hashable {
         self.highestWeight = highestWeight
         self.weightIncrement = weightIncrement
         self.restSeconds = restSeconds
+        self.kindRaw = kindRaw
+        self.aerobicActivityRaw = aerobicActivityRaw
     }
     // Lenient, because the two apps update independently: a Watch on the new
     // build can be handed a payload from the old phone build for as long as it
@@ -65,7 +78,17 @@ struct SyncExercise: Codable, Identifiable, Hashable {
         weightIncrement = try c.decode(Int.self, forKey: .weightIncrement)
         restSeconds = try c.decodeIfPresent(Int.self, forKey: .restSeconds)
             ?? SyncDefaults.restSeconds
+        // A payload from a phone that predates aerobic exercises describes
+        // strength ones, which is also the safe reading of anything unknown:
+        // the Watch shows its wheels rather than a workout it cannot start.
+        kindRaw = try c.decodeIfPresent(String.self, forKey: .kindRaw)
+            ?? SyncDefaults.strengthKind
+        aerobicActivityRaw = try c.decodeIfPresent(String.self, forKey: .aerobicActivityRaw)
     }
+
+    /// Whether this is one the Watch should offer a duration and a workout for
+    /// rather than weight and reps wheels.
+    var isAerobic: Bool { kindRaw == SyncDefaults.aerobicKind }
 }
 
 /// One workout definition. `exerciseOrder` holds exercise ids (as strings).

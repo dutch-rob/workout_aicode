@@ -159,7 +159,9 @@ final class AppStore: ObservableObject {
                          lowestWeight: $0.lowestWeight,
                          highestWeight: $0.highestWeight,
                          weightIncrement: $0.weightIncrement,
-                         restSeconds: $0.restSeconds)
+                         restSeconds: $0.restSeconds,
+                         kindRaw: $0.kindRaw,
+                         aerobicActivityRaw: $0.aerobicActivityRaw)
         }
 
         let payload = SyncPayload(

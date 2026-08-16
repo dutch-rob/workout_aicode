@@ -1,0 +1,143 @@
+import Foundation
+
+// MARK: - Heart rate zones
+//
+// A byte-identical copy of this file lives in the Watch App target
+// ("workout_aicode Watch App/HeartRateZones.swift"), like WatchSync.swift and
+// BuildStamp.swift. Keep them the same.
+//
+// THIS IS A STAND-IN, and the seam is the point of it.
+//
+// From OS 27 HealthKit hands over the real thing:
+// `HKHealthStore.preferredWorkoutZoneConfiguration(for:)` returns the very
+// configuration the Apple Workout app is using — automatic or custom,
+// whichever is active in Settings — and `HKWorkoutZoneGroup` carries the
+// time-in-zone for a finished workout, so none of the arithmetic below is
+// needed there. That SDK is beta and not installed, so this computes zones the
+// way Apple documents its automatic ones, from heart rate reserve.
+//
+// Expect the numbers to be close but not identical to what the Watch shows:
+// Apple uses a *measured* maximum from your history, which no API exposes, and
+// anyone can override the boundaries by hand. Nothing here should ever claim to
+// BE the Workout app's zones — see `ZoneSource`.
+
+/// Where a set of zone boundaries came from, so the interface can be honest
+/// about it rather than implying more precision than it has.
+enum ZoneSource: String {
+    /// Worked out here from resting and maximum heart rate.
+    case estimated
+    /// Read from HealthKit — the same zones the Workout app uses. Not reachable
+    /// until the app is built against the OS 27 SDK; the case exists so the
+    /// call sites are already written for it.
+    case healthKit
+}
+
+struct HeartRateZones: Equatable {
+    /// Lower bound of each zone in beats per minute, lowest first. Five zones,
+    /// so five bounds; anything under the first is "below zone 1", which is
+    /// what a warm-up mostly is.
+    let lowerBounds: [Int]
+    let restingHeartRate: Int
+    let maximumHeartRate: Int
+    let source: ZoneSource
+
+    static let zoneCount = 5
+
+    /// Apple's automatic zones are described as being based on heart rate
+    /// reserve — the room between resting and maximum — divided into fifths
+    /// from 50% upward. Below 50% is not a training zone at all.
+    static let reserveFractions: [Double] = [0.5, 0.6, 0.7, 0.8, 0.9]
+
+    /// Rough maximum for someone of this age, the textbook 220 − age.
+    ///
+    /// Only a starting point: real maxima vary by a good ten beats either way,
+    /// which is exactly why Apple prefers a measured one. Used when a birth
+    /// date is available; otherwise `defaultMaximum`.
+    static func estimatedMaximum(forAge age: Int) -> Int {
+        max(100, min(220, 220 - age))
+    }
+
+    /// For when there is no birth date to work from — roughly a forty-year-old.
+    static let defaultMaximum = 180
+    /// For when there is no resting rate on record.
+    static let defaultResting = 60
+
+    init(restingHeartRate: Int = defaultResting,
+         maximumHeartRate: Int = defaultMaximum,
+         source: ZoneSource = .estimated) {
+        // A maximum at or below resting would put every boundary on top of the
+        // next and make "which zone" meaningless, so it is nudged apart rather
+        // than trusted. Bad inputs here come from an empty Health database, not
+        // from anything the user did wrong.
+        let resting = max(30, min(restingHeartRate, 120))
+        let maximum = max(resting + 30, min(maximumHeartRate, 230))
+        let reserve = Double(maximum - resting)
+        self.restingHeartRate = resting
+        self.maximumHeartRate = maximum
+        self.source = source
+        self.lowerBounds = Self.reserveFractions.map {
+            Int((Double(resting) + reserve * $0).rounded())
+        }
+    }
+
+    /// Which zone a heart rate falls in: 1...5, or nil for anything below the
+    /// first boundary. Nil rather than "zone 0" because there is no such zone —
+    /// it is simply not training yet, and a caller that forgets to handle it
+    /// should have to notice.
+    func zone(for beatsPerMinute: Int) -> Int? {
+        guard let index = lowerBounds.lastIndex(where: { beatsPerMinute >= $0 }) else {
+            return nil
+        }
+        return index + 1
+    }
+
+    /// The range shown for a zone. The top zone has no upper bound worth
+    /// printing — there is always a little more.
+    func range(forZone zone: Int) -> (lower: Int, upper: Int?)? {
+        guard zone >= 1, zone <= Self.zoneCount else { return nil }
+        let lower = lowerBounds[zone - 1]
+        let upper = zone < Self.zoneCount ? lowerBounds[zone] - 1 : nil
+        return (lower, upper)
+    }
+}
+
+// MARK: - Adding up the time
+
+/// Accumulates seconds per zone from a stream of heart-rate readings.
+///
+/// Each reading is credited with the time since the one before it, which is
+/// what makes the totals independent of how often the Watch happens to sample —
+/// counting readings instead would make a dense stretch look longer than a
+/// sparse one of the same duration.
+struct ZoneTally {
+    let zones: HeartRateZones
+    /// Seconds in each of the five zones, lowest first. Time under zone 1 is
+    /// counted by `secondsBelowZone1` rather than being silently dropped.
+    private(set) var seconds = [Int](repeating: 0, count: HeartRateZones.zoneCount)
+    private(set) var secondsBelowZone1 = 0
+    private var last: (date: Date, bpm: Int)?
+
+    init(zones: HeartRateZones) {
+        self.zones = zones
+    }
+
+    /// A reading is credited to the zone it was IN for the interval leading up
+    /// to it, so a jump between zones does not backdate the new one over time
+    /// spent in the old.
+    mutating func add(beatsPerMinute: Int, at date: Date) {
+        defer { last = (date, beatsPerMinute) }
+        guard let previous = last else { return }
+        let elapsed = Int(date.timeIntervalSince(previous.date).rounded())
+        // A gap this long means the watch stopped reporting — the wrist was
+        // down, or the app was asleep. Guessing what happened in between would
+        // be inventing data.
+        guard elapsed > 0, elapsed <= 60 else { return }
+        if let zone = zones.zone(for: previous.bpm) {
+            seconds[zone - 1] += elapsed
+        } else {
+            secondsBelowZone1 += elapsed
+        }
+    }
+
+    var totalCountedSeconds: Int { seconds.reduce(0, +) + secondsBelowZone1 }
+}
