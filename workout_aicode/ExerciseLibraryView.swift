@@ -52,6 +52,10 @@ struct ExerciseLibraryView: View {
     @AppStorage("libraryFavouritesOnly") private var favouritesOnly = false
 
     @State private var filter: MuscleGroup? = nil
+    /// Aerobic and a muscle group are mutually exclusive — see the two
+    /// onChange handlers below. An exercise is one kind or the other, so both
+    /// at once could only ever show nothing.
+    @State private var aerobicOnly = false
     @State private var pendingExercise: ExerciseDef? = nil
     @State private var exerciseToDuplicate: ExerciseDef? = nil
     @State private var exercisePendingDelete: ExerciseDef? = nil
@@ -64,9 +68,9 @@ struct ExerciseLibraryView: View {
     var body: some View {
         VStack(spacing: 0) {
             if style == .body {
-                MuscleBodyPicker(selection: $filter)
+                MuscleBodyPicker(selection: $filter, aerobic: $aerobicOnly)
             } else {
-                MuscleButtonGrid(selection: $filter)
+                MuscleButtonGrid(selection: $filter, aerobic: $aerobicOnly)
             }
 
             controls
@@ -89,12 +93,16 @@ struct ExerciseLibraryView: View {
                 if ownExercises.isEmpty && templates.isEmpty {
                     ContentUnavailableView("Nothing here",
                                            systemImage: "line.3.horizontal.decrease.circle",
-                                           description: Text(favouritesOnly
-                                                             ? "No favourites in this muscle group."
-                                                             : "No exercises for this muscle group."))
+                                           description: Text(emptyExplanation))
                 }
             }
             .listStyle(.insetGrouped)
+        }
+        .onChange(of: aerobicOnly) { _, on in
+            if on { filter = nil }
+        }
+        .onChange(of: filter) { _, group in
+            if group != nil { aerobicOnly = false }
         }
         .navigationTitle(context_.workout == nil ? "exercise library" : "select exercise")
         .navigationBarTitleDisplayMode(.inline)
@@ -139,6 +147,10 @@ struct ExerciseLibraryView: View {
 
             Button {
                 filter = nil
+                // "all groups" means everything, so it lets go of AE as well.
+                // Leaving it on lit both this and AE at once while showing only
+                // the aerobic exercises, which said two contradictory things.
+                aerobicOnly = false
             } label: {
                 // "all muscle groups" does not fit beside the other three
                 // controls on a phone — it came out as "all muscle gro…".
@@ -147,9 +159,9 @@ struct ExerciseLibraryView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
                     .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Capsule().fill(filter == nil
+                    .background(Capsule().fill(showingEverything
                                                ? Color.blue : Color.secondary.opacity(0.15)))
-                    .foregroundStyle(filter == nil ? Color.white : Color.primary)
+                    .foregroundStyle(showingEverything ? Color.white : Color.primary)
             }
             .buttonStyle(.plain)
 
@@ -268,8 +280,26 @@ struct ExerciseLibraryView: View {
 
     // MARK: Contents
 
+    /// The empty list has to say which filter emptied it, or it reads as the
+    /// app having lost the exercises. "This muscle group" was wrong the moment
+    /// AE existed — aerobic is not a muscle group.
+    /// No filter of any sort in force.
+    private var showingEverything: Bool { filter == nil && !aerobicOnly }
+
+    private var emptyExplanation: String {
+        switch (aerobicOnly, favouritesOnly) {
+        case (true, true):   return "No aerobic favourites yet."
+        case (true, false):  return "No aerobic exercises yet. Tap “new exercise” to add one."
+        case (false, true):  return filter == nil ? "No favourites yet."
+                                                  : "No favourites in this muscle group."
+        case (false, false): return filter == nil ? "No exercises yet."
+                                                  : "No exercises for this muscle group."
+        }
+    }
+
     private var ownExercises: [ExerciseDef] {
         exercises
+            .filter { aerobicOnly ? $0.kind == .aerobic : $0.kind == .strength }
             .filter { filter == nil || $0.primaryMuscle == filter }
             .filter { !favouritesOnly || $0.isFavourite }
             .sorted { a, b in
@@ -282,7 +312,9 @@ struct ExerciseLibraryView: View {
     /// the user's own exercises, so filtering by them hides this section
     /// entirely rather than showing entries that can never match.
     private var templates: [LibraryExercise] {
-        guard !favouritesOnly else { return [] }
+        // The ready-made catalogue is all strength movements, so it has nothing
+        // to offer while the aerobic filter is on.
+        guard !favouritesOnly, !aerobicOnly else { return [] }
         let taken = Set(exercises.compactMap(\.libraryKey))
         return ExerciseLibrary.forPrimary(filter).filter { !taken.contains($0.key) }
     }
@@ -331,11 +363,15 @@ struct ExerciseLibraryView: View {
 /// where the diagram is more height than they want to give it.
 struct MuscleButtonGrid: View {
     @Binding var selection: MuscleGroup?
+    @Binding var aerobic: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            column(MuscleBodyPicker.frontOrder, caption: "front")
-            column(MuscleBodyPicker.backOrder, caption: "back")
+        VStack(spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
+                column(MuscleBodyPicker.frontOrder, caption: "front")
+                column(MuscleBodyPicker.backOrder, caption: "back")
+            }
+            AerobicFilterButton(isOn: $aerobic)
         }
         .padding(.horizontal)
         .padding(.vertical, 6)

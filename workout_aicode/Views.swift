@@ -313,6 +313,8 @@ struct EditExerciseView: View {
         let primary: MuscleGroup?
         let secondary: [MuscleGroup]
         let restSeconds: Int
+        let kind: ExerciseKind
+        let activity: AerobicActivity?
         /// True when the exercise was created just before this screen opened,
         /// in which case quitting should remove it rather than restore it.
         let isNew: Bool
@@ -330,11 +332,19 @@ struct EditExerciseView: View {
         }?.name
     }
 
-    /// A muscle group is required as well as a name: without one the exercise
-    /// cannot be found by the muscle-group filter, is left out of any grouping
-    /// by muscle, and would be a blank in shared data.
+    /// A name, and then whatever that kind of exercise cannot do without.
+    ///
+    /// A strength exercise needs a primary muscle: without one it cannot be
+    /// found by the muscle-group filter, is left out of any grouping by muscle,
+    /// and would be a blank in shared data. An aerobic one needs an activity
+    /// instead, because that is what the Apple workout is started as — a rest
+    /// timer can fall back on a default, but "which workout is this" cannot.
     private var canSave: Bool {
-        !trimmedName.isEmpty && duplicateName == nil && exercise.primaryMuscle != nil
+        guard !trimmedName.isEmpty, duplicateName == nil else { return false }
+        switch exercise.kind {
+        case .strength: return exercise.primaryMuscle != nil
+        case .aerobic:  return exercise.aerobicActivity != nil
+        }
     }
 
     var body: some View {
@@ -348,12 +358,39 @@ struct EditExerciseView: View {
                 Text("An exercise needs a name before it can be saved.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            } else if exercise.primaryMuscle == nil {
+            } else if exercise.kind == .strength, exercise.primaryMuscle == nil {
                 Text("Choose a primary muscle group below before saving.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if exercise.kind == .aerobic, exercise.aerobicActivity == nil {
+                Text("Choose which activity this is before saving.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
+            Picker("Kind", selection: Binding(
+                get: { exercise.kind },
+                set: { exercise.kind = $0 }
+            )) {
+                ForEach(ExerciseKind.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+
+            if exercise.kind == .aerobic {
+                Picker(selection: Binding(
+                    get: { exercise.aerobicActivity },
+                    set: { exercise.aerobicActivity = $0 }
+                )) {
+                    Text("Choose…").tag(AerobicActivity?.none)
+                    ForEach(AerobicActivity.allCases) {
+                        Text($0.label).tag(AerobicActivity?.some($0))
+                    }
+                } label: {
+                    Text("Activity")
+                }
+            }
+
+            if exercise.kind == .strength {
             LabeledContent {
                 Stepper(value: $exercise.numberOfSeries, in: 1...10) {
                     Text("\(exercise.numberOfSeries)")
@@ -379,6 +416,7 @@ struct EditExerciseView: View {
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
             } label: { Text("Weight increment") }
+            }
 
             // Shown whether or not the timer is switched on, so the value is
             // already right if it is turned on later — and so the setting is
@@ -398,7 +436,9 @@ struct EditExerciseView: View {
             // control did nothing while promising a feature. `movementType` stays
             // on the model so existing data and JSON exports keep working.
 
-            MuscleGroupSection(exercise: exercise)
+            if exercise.kind == .strength {
+                MuscleGroupSection(exercise: exercise)
+            }
 
             WorkoutMembershipSection(exercise: exercise)
         }
@@ -438,6 +478,8 @@ struct EditExerciseView: View {
                                 primary: exercise.primaryMuscle,
                                 secondary: exercise.secondaryMuscles,
                                 restSeconds: exercise.restSeconds,
+                                kind: exercise.kind,
+                                activity: exercise.aerobicActivity,
                                 isNew: exercise.name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
     }
@@ -457,6 +499,8 @@ struct EditExerciseView: View {
                 exercise.primaryMuscle = o.primary
                 exercise.secondaryMuscles = o.secondary
                 exercise.restSeconds = o.restSeconds
+                exercise.kind = o.kind
+                exercise.aerobicActivity = o.activity
                 try? context.save()
             }
         }

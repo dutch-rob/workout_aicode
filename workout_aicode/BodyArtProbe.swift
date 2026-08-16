@@ -10,7 +10,7 @@ struct BodyArtProbe: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            MuscleBodyPicker(selection: .constant(groups[index]))
+            MuscleBodyPicker(selection: .constant(groups[index]), aerobic: .constant(false))
             Text("highlighted: \(groups[index].label)").font(.footnote).bold()
             Button("next") { index = (index + 1) % groups.count }
         }

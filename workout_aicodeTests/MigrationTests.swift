@@ -3,34 +3,6 @@ import Foundation
 import SwiftData
 @testable import workout_aicode
 
-// Does a database written by the shipped app still open, with all its data, on
-// the current version?
-//
-// Reopening is always done at the newest schema, because that is what the app
-// declares. Pinning these to an older version once the plan grew past it made
-// CoreData throw and took the whole test process down with it.
-//
-// This is the one failure mode with no recovery: a user updates and their
-// training history is gone. Adding ExerciseDef fields broke staged migration
-// once already (V2 and V3 became indistinguishable), and that showed up as a
-// launch crash — so the check is a real store on disk, written through the old
-// schema and reopened through the migration plan, not a mock.
-
-private func temporaryStoreURL() -> URL {
-    URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("migration-\(UUID().uuidString).sqlite")
-}
-
-private func removeStore(at url: URL) {
-    let folder = url.deletingLastPathComponent()
-    let stem = url.deletingPathExtension().lastPathComponent
-    let contents = (try? FileManager.default.contentsOfDirectory(at: folder,
-                                                                 includingPropertiesForKeys: nil)) ?? []
-    for f in contents where f.lastPathComponent.hasPrefix(stem) {
-        try? FileManager.default.removeItem(at: f)
-    }
-}
-
 
 
 @Test func secondaryMuscleListIsCappedAtFour() {
@@ -107,8 +79,6 @@ private func removeStore(at url: URL) {
     #expect(!ExerciseDefaults.shouldAsk(existingExercises: 7))
 }
 
-// MARK: - The rest timer column
-
 
 @Test func restSecondsSurvivesAnExportRoundTrip() throws {
     let original = ExerciseDef(name: "Front squat", restSeconds: 180)
@@ -125,139 +95,6 @@ private func removeStore(at url: URL) {
     let restored = try JSONDecoder().decode(ExerciseDef.self, from: Data(json.utf8))
     #expect(restored.restSeconds == RestTimerDefaults.seconds)
 }
-
-// MARK: - Rest lengths offered
-
-@Test func restChoicesRunFromFifteenSecondsToFiveMinutes() {
-    #expect(RestTimerDefaults.choices.first == 15)
-    #expect(RestTimerDefaults.choices.last == 300)
-    #expect(RestTimerDefaults.choices.count == 20)
-    // The default must be one of the options, or the picker would show blank.
-    #expect(RestTimerDefaults.choices.contains(RestTimerDefaults.seconds))
-}
-
-@Test func restIsLabelledAsMinutesAndSeconds() {
-    #expect(RestTimerDefaults.label(90) == "1:30")
-    #expect(RestTimerDefaults.label(45) == "0:45")
-    #expect(RestTimerDefaults.label(300) == "5:00")
-}
-
-@Test func aNewExerciseGetsTheChosenRest() {
-    let d = UserDefaults.standard
-    d.set(120, forKey: RestTimerKey.defaultSeconds)
-    defer { d.removeObject(forKey: RestTimerKey.defaultSeconds) }
-    #expect(ExerciseDefaults.makeExercise(name: "Dip").restSeconds == 120)
-}
-
-@Test func theRestTimerIsOffUntilItIsTurnedOn() {
-    UserDefaults.standard.removeObject(forKey: RestTimerKey.enabled)
-    #expect(!RestTimerDefaults.isEnabled)
-}
-
-// MARK: - The Watch sync contract
-//
-// The phone and the Watch app update independently: a Watch on the new build
-// can be handed a payload from the old phone build for as long as it takes the
-// user to update the other one, and vice versa. A field added to this contract
-// must therefore never be the reason a payload fails to decode — that would
-// take the Watch's whole exercise list away, not just its rest times.
-
-@Test func aPayloadFromBeforeTheRestTimerStillDecodes() throws {
-    let json = """
-    {"workouts":[{"id":"w1","name":"Upper","exerciseOrder":["e1"]}],
-     "exercises":[{"id":"e1","name":"Row","numberOfSeries":3,"lowestWeight":20,
-                   "highestWeight":120,"weightIncrement":5}],
-     "lastEntries":{},"healthSharingEnabled":true}
-    """
-    let payload = try JSONDecoder().decode(SyncPayload.self, from: Data(json.utf8))
-    #expect(payload.exercises.count == 1)
-    #expect(payload.exercises[0].name == "Row")
-    // The rest has to land on something usable: zero would mean "no rest" and
-    // the Watch would never run the timer for that exercise.
-    #expect(payload.exercises[0].restSeconds == SyncDefaults.restSeconds)
-    #expect(payload.healthSharingEnabled)
-    // An old phone cannot have the timer on, so off is the only honest reading.
-    #expect(!payload.restTimerEnabled)
-}
-
-@Test func restTimesAndTheSwitchSurviveTheRoundTrip() throws {
-    let payload = SyncPayload(
-        workouts: [SyncWorkout(id: "w1", name: "Upper", exerciseOrder: ["e1"])],
-        exercises: [SyncExercise(id: "e1", name: "Row", numberOfSeries: 3,
-                                 lowestWeight: 20, highestWeight: 120,
-                                 weightIncrement: 5, restSeconds: 150)],
-        lastEntries: [:],
-        healthSharingEnabled: false,
-        restTimerEnabled: true)
-    let restored = try JSONDecoder().decode(
-        SyncPayload.self, from: try JSONEncoder().encode(payload))
-    #expect(restored.exercises[0].restSeconds == 150)
-    #expect(restored.restTimerEnabled)
-}
-
-@Test func theSyncFallbackMatchesThePhonesDefault() {
-    // Two literals in two files that must not drift: the Watch copy of the
-    // sync contract cannot see RestTimerDefaults.
-    #expect(SyncDefaults.restSeconds == RestTimerDefaults.seconds)
-}
-
-// MARK: - The settle acknowledgement
-//
-// This used to be animated state: each turn of a wheel reset a three-second
-// animation, and because the Digital Crown reports every value it passes, one
-// spin stacked dozens of overlapping animations of one property. SwiftUI
-// blended them, and the grey took far longer to drain than the rest itself —
-// on a 0:15 rest the haptic fired while it was still going down. It is now
-// derived from two dates, and these pin the shape of it, because the failure
-// was invisible to reading the code.
-
-private let settleWindow: TimeInterval = 3
-private let settleNow = Date(timeIntervalSince1970: 1_700_000_000)
-
-@Test func theAcknowledgementIsFullAtTheMomentOfTheTouch() {
-    let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(settleWindow),
-                                    now: settleNow, window: settleWindow)
-    #expect(abs(fill - 1) < 1e-9)
-}
-
-@Test func theAcknowledgementIsHalfwayDownHalfwayThrough() {
-    let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(settleWindow),
-                                    now: settleNow.addingTimeInterval(settleWindow / 2),
-                                    window: settleWindow)
-    #expect(abs(fill - 0.5) < 1e-9)
-}
-
-@Test func theAcknowledgementIsGoneWhenTheCoverIsDue() {
-    // The whole complaint in one assertion: at the end of the window there must
-    // be nothing left, however many times the wheel moved on the way there.
-    let coverAt = settleNow.addingTimeInterval(settleWindow)
-    #expect(RestTimer.settleFill(coverAt: coverAt, now: coverAt, window: settleWindow) == 0)
-    #expect(RestTimer.settleFill(coverAt: coverAt,
-                                 now: coverAt.addingTimeInterval(60),
-                                 window: settleWindow) == 0)
-}
-
-@Test func aCancelledRestLeavesNothingOnScreen() {
-    // Quitting mid-drain used to leave the grey sliding down over the workout
-    // list, because the animation did not care that it had been called off.
-    #expect(RestTimer.settleFill(coverAt: nil, now: settleNow, window: settleWindow) == 0)
-}
-
-@Test func theAcknowledgementNeverExceedsTheScreen() {
-    // A clock that jumped backwards, or a cover date further out than the
-    // window, must not produce a rectangle taller than what it covers.
-    let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(600),
-                                    now: settleNow, window: settleWindow)
-    #expect(fill == 1)
-}
-
-// MARK: - V6: aerobic exercises
-//
-// V6 is the first version to change WorkoutLog since V2. That class had been
-// the live one AND the shape V3, V4 and V5 all described, so adding a field to
-// it would have changed four versions at once — the collision that aborted
-// staged migration twice before. V2's copy is frozen and the live log is new.
-// These check that the rows survived that move.
 
 
 
@@ -311,15 +148,42 @@ private let settleNow = Date(timeIntervalSince1970: 1_700_000_000)
 // MARK: - Schema and migration
 //
 // Serialized, and that is load-bearing. Swift Testing runs tests in parallel
-// within one process, and SwiftData keeps per-model-class state global to it —
-// so a container opened from the V2 schema, whose frozen ExerciseDef has no
-// `kind` column, races one opened from V6, and the newer columns read back as
-// their defaults. It looks exactly like a persistence bug: the value is set,
-// the save succeeds, and the row returns the default. Two separate hours went
-// into chasing that as a SwiftData bug before the pattern showed itself —
-// every test here opens a container, so they take turns.
+// within one process, and SwiftData keeps per-model-class state that is global
+// to it — so a container opened from the V2 schema, whose frozen ExerciseDef
+// has no `kind` column, races one opened from V6 and the newer columns read
+// back as their defaults. It looks exactly like a persistence bug: the value is
+// set, the save succeeds, and the row comes back with the default. Every one of
+// these tests opens a container, so they take turns.
 @Suite(.serialized)
 struct SchemaMigrationTests {
+
+    // Does a database written by the shipped app still open, with all its data, on
+    // the current version?
+    //
+    // Reopening is always done at the newest schema, because that is what the app
+    // declares. Pinning these to an older version once the plan grew past it made
+    // CoreData throw and took the whole test process down with it.
+    //
+    // This is the one failure mode with no recovery: a user updates and their
+    // training history is gone. Adding ExerciseDef fields broke staged migration
+    // once already (V2 and V3 became indistinguishable), and that showed up as a
+    // launch crash — so the check is a real store on disk, written through the old
+    // schema and reopened through the migration plan, not a mock.
+
+    private func temporaryStoreURL() -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("migration-\(UUID().uuidString).sqlite")
+    }
+
+    private func removeStore(at url: URL) {
+        let folder = url.deletingLastPathComponent()
+        let stem = url.deletingPathExtension().lastPathComponent
+        let contents = (try? FileManager.default.contentsOfDirectory(at: folder,
+                                                                     includingPropertiesForKeys: nil)) ?? []
+        for f in contents where f.lastPathComponent.hasPrefix(stem) {
+            try? FileManager.default.removeItem(at: f)
+        }
+    }
 
     @Test func storeWrittenByVersion1_2SurvivesTheUpgrade() throws {
         let url = temporaryStoreURL()
@@ -387,7 +251,6 @@ struct SchemaMigrationTests {
         #expect(workout.name == "Upper body")
         #expect(workout.exerciseOrder == [exerciseId])
     }
-
     @Test func migratedExerciseCanBeGivenMuscleGroups() throws {
         let url = temporaryStoreURL()
         defer { removeStore(at: url) }
@@ -420,7 +283,6 @@ struct SchemaMigrationTests {
         #expect(reread.primaryMuscle == .quads)
         #expect(reread.secondaryMuscles == [.glutes, .hamstrings])
     }
-
     @Test func favouriteFlagSurvivesTheUpgradeAndDefaultsToOff() throws {
         // The store is written at V2 (no muscle groups, no favourite flag) and
         // reopened through both later stages, as a user updating from the shipped
@@ -455,6 +317,7 @@ struct SchemaMigrationTests {
             .fetch(FetchDescriptor<ExerciseDef>()).first)
         #expect(reread.isFavourite)
     }
+    // MARK: - The rest timer column
 
     @Test func restSecondsArrivesWithADefaultAndThenPersists() throws {
         // Written at V2 — the shipped shape before muscle groups, favourites or the
@@ -506,6 +369,138 @@ struct SchemaMigrationTests {
             .fetch(FetchDescriptor<ExerciseDef>()).first)
         #expect(reread.restSeconds == 120)
     }
+    // MARK: - Rest lengths offered
+
+    @Test func restChoicesRunFromFifteenSecondsToFiveMinutes() {
+        #expect(RestTimerDefaults.choices.first == 15)
+        #expect(RestTimerDefaults.choices.last == 300)
+        #expect(RestTimerDefaults.choices.count == 20)
+        // The default must be one of the options, or the picker would show blank.
+        #expect(RestTimerDefaults.choices.contains(RestTimerDefaults.seconds))
+    }
+
+    @Test func restIsLabelledAsMinutesAndSeconds() {
+        #expect(RestTimerDefaults.label(90) == "1:30")
+        #expect(RestTimerDefaults.label(45) == "0:45")
+        #expect(RestTimerDefaults.label(300) == "5:00")
+    }
+
+    @Test func aNewExerciseGetsTheChosenRest() {
+        let d = UserDefaults.standard
+        d.set(120, forKey: RestTimerKey.defaultSeconds)
+        defer { d.removeObject(forKey: RestTimerKey.defaultSeconds) }
+        #expect(ExerciseDefaults.makeExercise(name: "Dip").restSeconds == 120)
+    }
+
+    @Test func theRestTimerIsOffUntilItIsTurnedOn() {
+        UserDefaults.standard.removeObject(forKey: RestTimerKey.enabled)
+        #expect(!RestTimerDefaults.isEnabled)
+    }
+
+    // MARK: - The Watch sync contract
+    //
+    // The phone and the Watch app update independently: a Watch on the new build
+    // can be handed a payload from the old phone build for as long as it takes the
+    // user to update the other one, and vice versa. A field added to this contract
+    // must therefore never be the reason a payload fails to decode — that would
+    // take the Watch's whole exercise list away, not just its rest times.
+
+    @Test func aPayloadFromBeforeTheRestTimerStillDecodes() throws {
+        let json = """
+        {"workouts":[{"id":"w1","name":"Upper","exerciseOrder":["e1"]}],
+         "exercises":[{"id":"e1","name":"Row","numberOfSeries":3,"lowestWeight":20,
+                       "highestWeight":120,"weightIncrement":5}],
+         "lastEntries":{},"healthSharingEnabled":true}
+        """
+        let payload = try JSONDecoder().decode(SyncPayload.self, from: Data(json.utf8))
+        #expect(payload.exercises.count == 1)
+        #expect(payload.exercises[0].name == "Row")
+        // The rest has to land on something usable: zero would mean "no rest" and
+        // the Watch would never run the timer for that exercise.
+        #expect(payload.exercises[0].restSeconds == SyncDefaults.restSeconds)
+        #expect(payload.healthSharingEnabled)
+        // An old phone cannot have the timer on, so off is the only honest reading.
+        #expect(!payload.restTimerEnabled)
+    }
+
+    @Test func restTimesAndTheSwitchSurviveTheRoundTrip() throws {
+        let payload = SyncPayload(
+            workouts: [SyncWorkout(id: "w1", name: "Upper", exerciseOrder: ["e1"])],
+            exercises: [SyncExercise(id: "e1", name: "Row", numberOfSeries: 3,
+                                     lowestWeight: 20, highestWeight: 120,
+                                     weightIncrement: 5, restSeconds: 150)],
+            lastEntries: [:],
+            healthSharingEnabled: false,
+            restTimerEnabled: true)
+        let restored = try JSONDecoder().decode(
+            SyncPayload.self, from: try JSONEncoder().encode(payload))
+        #expect(restored.exercises[0].restSeconds == 150)
+        #expect(restored.restTimerEnabled)
+    }
+
+    @Test func theSyncFallbackMatchesThePhonesDefault() {
+        // Two literals in two files that must not drift: the Watch copy of the
+        // sync contract cannot see RestTimerDefaults.
+        #expect(SyncDefaults.restSeconds == RestTimerDefaults.seconds)
+    }
+
+    // MARK: - The settle acknowledgement
+    //
+    // This used to be animated state: each turn of a wheel reset a three-second
+    // animation, and because the Digital Crown reports every value it passes, one
+    // spin stacked dozens of overlapping animations of one property. SwiftUI
+    // blended them, and the grey took far longer to drain than the rest itself —
+    // on a 0:15 rest the haptic fired while it was still going down. It is now
+    // derived from two dates, and these pin the shape of it, because the failure
+    // was invisible to reading the code.
+
+    private let settleWindow: TimeInterval = 3
+    private let settleNow = Date(timeIntervalSince1970: 1_700_000_000)
+
+    @Test func theAcknowledgementIsFullAtTheMomentOfTheTouch() {
+        let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(settleWindow),
+                                        now: settleNow, window: settleWindow)
+        #expect(abs(fill - 1) < 1e-9)
+    }
+
+    @Test func theAcknowledgementIsHalfwayDownHalfwayThrough() {
+        let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(settleWindow),
+                                        now: settleNow.addingTimeInterval(settleWindow / 2),
+                                        window: settleWindow)
+        #expect(abs(fill - 0.5) < 1e-9)
+    }
+
+    @Test func theAcknowledgementIsGoneWhenTheCoverIsDue() {
+        // The whole complaint in one assertion: at the end of the window there must
+        // be nothing left, however many times the wheel moved on the way there.
+        let coverAt = settleNow.addingTimeInterval(settleWindow)
+        #expect(RestTimer.settleFill(coverAt: coverAt, now: coverAt, window: settleWindow) == 0)
+        #expect(RestTimer.settleFill(coverAt: coverAt,
+                                     now: coverAt.addingTimeInterval(60),
+                                     window: settleWindow) == 0)
+    }
+
+    @Test func aCancelledRestLeavesNothingOnScreen() {
+        // Quitting mid-drain used to leave the grey sliding down over the workout
+        // list, because the animation did not care that it had been called off.
+        #expect(RestTimer.settleFill(coverAt: nil, now: settleNow, window: settleWindow) == 0)
+    }
+
+    @Test func theAcknowledgementNeverExceedsTheScreen() {
+        // A clock that jumped backwards, or a cover date further out than the
+        // window, must not produce a rectangle taller than what it covers.
+        let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(600),
+                                        now: settleNow, window: settleWindow)
+        #expect(fill == 1)
+    }
+
+    // MARK: - V6: aerobic exercises
+    //
+    // V6 is the first version to change WorkoutLog since V2. That class had been
+    // the live one AND the shape V3, V4 and V5 all described, so adding a field to
+    // it would have changed four versions at once — the collision that aborted
+    // staged migration twice before. V2's copy is frozen and the live log is new.
+    // These check that the rows survived that move.
 
     @Test func anExerciseFromBeforeAerobicIsAStrengthExercise() throws {
         let url = temporaryStoreURL()
@@ -529,7 +524,6 @@ struct SchemaMigrationTests {
         #expect(exercise.kind == .strength)
         #expect(exercise.aerobicActivity == nil)
     }
-
     @Test func anAerobicSessionKeepsItsMeasurements() throws {
         let url = temporaryStoreURL()
         defer { removeStore(at: url) }
@@ -559,7 +553,6 @@ struct SchemaMigrationTests {
         #expect(exercise.kind == .aerobic)
         #expect(exercise.aerobicActivity == .rowing)
     }
-
     /// The trap that shaped the design above, kept as a test so the reasoning is
     /// not just a comment: measurements set in `init` must survive, which is what
     /// failed while these lived on a second class also called WorkoutLog.
@@ -582,7 +575,6 @@ struct SchemaMigrationTests {
         #expect(reread.maximumHeartRate == 0)
         #expect(reread.zoneSeconds == [60, 120, 500, 220, 0])
     }
-
     /// The V6 schema must open. It did not, while `AerobicResult` carried optional
     /// `Int?` columns: CoreData threw from `encodeNil` building the entity's
     /// defaults, and every test that opened a container died with it. The heart
@@ -594,7 +586,6 @@ struct SchemaMigrationTests {
             for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
             configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
     }
-
     @Test func propertiesSetInInitActuallyPersist() throws {
         // Does an ExerciseDef built by its initialiser keep what it was built with,
         // once inserted and read back? `ExerciseDefaults.makeExercise` sets every
@@ -618,5 +609,4 @@ struct SchemaMigrationTests {
         #expect(reread.restSeconds == 120)
         #expect(reread.kind == .aerobic)
     }
-
 }

@@ -15,6 +15,10 @@ import SwiftUI
 
 struct MuscleBodyPicker: View {
     @Binding var selection: MuscleGroup?
+    /// Whether the aerobic filter is on. Beside the muscles because that is
+    /// where a user looks for "which sort of exercise", even though aerobic is
+    /// a kind rather than a group.
+    @Binding var aerobic: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -144,6 +148,7 @@ struct MuscleBodyPicker: View {
     /// the two halves sit closer together and the bodies grow.
     private var viewCaptions: some View {
         VStack(spacing: 14) {
+            AerobicFilterButton(isOn: $aerobic, rotated: true)
             Spacer(minLength: 0)
             VStack(spacing: 1) {
                 arrow(pointsLeft: true)
