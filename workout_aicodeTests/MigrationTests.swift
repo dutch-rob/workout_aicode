@@ -898,3 +898,33 @@ private func at(_ seconds: Int) -> Date {
     #expect(tally.secondsBelowZone1 == 25)
     #expect(tally.seconds.allSatisfy { $0 == 0 })
 }
+
+// MARK: - Ready-made aerobic exercises
+//
+// These exist because the AE filter was otherwise an empty room: the activities
+// were only ever choices on an exercise you first had to invent yourself, so
+// there was nothing to find under the filter that advertises them.
+
+@Test func everyIndoorWorkoutIsOfferedReadyMade() {
+    #expect(ExerciseLibrary.aerobic.count == AerobicActivity.allCases.count)
+    #expect(ExerciseLibrary.aerobic.map(\.activity) == AerobicActivity.allCases)
+}
+
+@Test func readyMadeAerobicKeysAreStableAndDistinct() {
+    // The key is what makes the same activity comparable between people
+    // however they rename their copy, so it must not collide with a strength
+    // entry's key either.
+    let aerobicKeys = Set(ExerciseLibrary.aerobic.map(\.key))
+    #expect(aerobicKeys.count == ExerciseLibrary.aerobic.count)
+    let strengthKeys = Set(ExerciseLibrary.all.map(\.key))
+    #expect(aerobicKeys.isDisjoint(with: strengthKeys))
+    #expect(ExerciseLibrary.aerobicEntry(key: "ae-indoorCycle")?.activity == .indoorCycle)
+}
+
+@Test func aReadyMadeAerobicExerciseIsNamedAsAppleNamesIt() {
+    // "Indoor cycle" is what it is called on the Watch and in Fitness; a
+    // private name here would mean the two never look like the same thing.
+    for entry in ExerciseLibrary.aerobic {
+        #expect(entry.name == entry.activity.label)
+    }
+}

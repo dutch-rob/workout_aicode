@@ -111,7 +111,14 @@ struct ExerciseLibraryView: View {
                         }
                     }
                 }
-                if ownExercises.isEmpty && templates.isEmpty {
+                if !aerobicTemplates.isEmpty {
+                    Section("Ready-made") {
+                        ForEach(aerobicTemplates) { entry in
+                            aerobicTemplateRow(entry)
+                        }
+                    }
+                }
+                if ownExercises.isEmpty && templates.isEmpty && aerobicTemplates.isEmpty {
                     ContentUnavailableView("Nothing here",
                                            systemImage: "line.3.horizontal.decrease.circle",
                                            description: Text(emptyExplanation))
@@ -261,6 +268,40 @@ struct ExerciseLibraryView: View {
         }
     }
 
+    private func aerobicTemplateRow(_ entry: AerobicLibraryExercise) -> some View {
+        Button {
+            let exercise = addAerobic(entry)
+            if case .browsing = context_ { pendingExercise = exercise }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle").foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(entry.name).foregroundStyle(.primary)
+                    Text("aerobic").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Takes a ready-made aerobic exercise into the user's own list. Keeps the
+    /// library key, like the strength side, so the same activity logged by
+    /// different people stays comparable however they rename their copy.
+    private func addAerobic(_ entry: AerobicLibraryExercise) -> ExerciseDef {
+        let exercise = ExerciseDefaults.makeExercise(name: entry.name,
+                                                     libraryKey: entry.key)
+        exercise.name = uniqueName(entry.name)
+        exercise.kind = .aerobic
+        exercise.aerobicActivity = entry.activity
+        store.saveExercise(exercise)
+        if let workout = context_.workout {
+            workout.exerciseOrder.append(exercise.id)
+        }
+        return exercise
+    }
+
     private func templateRow(_ entry: LibraryExercise) -> some View {
         Button {
             let exercise = add(entry)
@@ -341,9 +382,17 @@ struct ExerciseLibraryView: View {
     /// Library entries the user has not taken yet. Favourites are a property of
     /// the user's own exercises, so filtering by them hides this section
     /// entirely rather than showing entries that can never match.
+    /// Ready-made aerobic exercises the user has not taken yet — the same
+    /// courtesy the strength side has always had.
+    private var aerobicTemplates: [AerobicLibraryExercise] {
+        guard aerobicOnly, !favouritesOnly else { return [] }
+        let taken = Set(exercises.compactMap(\.libraryKey))
+        return ExerciseLibrary.aerobic.filter { !taken.contains($0.key) }
+    }
+
     private var templates: [LibraryExercise] {
-        // The ready-made catalogue is all strength movements, so it has nothing
-        // to offer while the aerobic filter is on.
+        // The strength catalogue has nothing to offer under the aerobic filter;
+        // aerobicTemplates covers that case instead.
         guard !favouritesOnly, !aerobicOnly else { return [] }
         let taken = Set(exercises.compactMap(\.libraryKey))
         return ExerciseLibrary.forPrimary(filter).filter { !taken.contains($0.key) }

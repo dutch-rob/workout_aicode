@@ -27,7 +27,36 @@ struct LibraryExercise: Identifiable, Hashable {
     static let defaultIncrement = 5
 }
 
+/// A ready-made aerobic exercise: one per Apple indoor workout.
+///
+/// Separate from `LibraryExercise` because the two have nothing in common
+/// beyond a name — a strength entry is defined by the muscles it works, an
+/// aerobic one by the Apple workout it starts, and neither field means anything
+/// on the other.
+struct AerobicLibraryExercise: Identifiable, Hashable {
+    let key: String
+    let name: String
+    let activity: AerobicActivity
+
+    var id: String { key }
+}
+
 enum ExerciseLibrary {
+
+    /// Every indoor workout the Apple Workout app offers, ready to take.
+    ///
+    /// This exists because the AE filter was otherwise an empty room: the
+    /// activities were only ever choices on an exercise you first had to invent
+    /// yourself, so there was nothing to find. Named exactly as the activity is,
+    /// since "Indoor cycle" is what the thing is called on the Watch and in
+    /// Fitness; anyone wanting "Spin bike" can rename their copy.
+    static let aerobic: [AerobicLibraryExercise] = AerobicActivity.allCases.map {
+        AerobicLibraryExercise(key: "ae-\($0.rawValue)", name: $0.label, activity: $0)
+    }
+
+    static func aerobicEntry(key: String) -> AerobicLibraryExercise? {
+        aerobic.first { $0.key == key }
+    }
 
     /// Every primary muscle group is represented at least once, so the filter
     /// never lands on an empty list.
