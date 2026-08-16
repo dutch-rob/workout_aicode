@@ -31,105 +31,7 @@ private func removeStore(at url: URL) {
     }
 }
 
-@Test func storeWrittenByVersion1_2SurvivesTheUpgrade() throws {
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
 
-    let exerciseId = UUID()
-    let workoutId = UUID()
-    let logDate = Date(timeIntervalSince1970: 1_700_000_000)
-
-    // ── Write a store exactly as the shipped version would ────────────────
-    do {
-        let container = try ModelContainer(
-            for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
-            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-        )
-        let context = ModelContext(container)
-        context.insert(WorkoutLogSchemaV1.ExerciseDef(
-            id: exerciseId, name: "Lat pulldown", numberOfSeries: 3,
-            lowestWeight: 20, highestWeight: 120, weightIncrement: 5))
-        context.insert(WorkoutDef(id: workoutId, name: "Upper body",
-                                  exerciseOrder: [exerciseId], sortIndex: 0))
-        context.insert(WorkoutLogSchemaV2.WorkoutLog(
-            date: logDate, workoutId: workoutId, exerciseId: exerciseId,
-            weights: [50, 55], reps: [12, 10]))
-        try context.save()
-    }
-
-    // ── Reopen through the migration plan, as the updated app does ────────
-    let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        migrationPlan: WorkoutMigrationPlan.self,
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-    )
-    let context = ModelContext(container)
-
-    let exercises = try context.fetch(FetchDescriptor<ExerciseDef>())
-    let workouts = try context.fetch(FetchDescriptor<WorkoutDef>())
-    let logs = try context.fetch(FetchDescriptor<WorkoutLog>())
-
-    #expect(exercises.count == 1)
-    #expect(workouts.count == 1)
-    #expect(logs.count == 1)
-
-    let exercise = try #require(exercises.first)
-    #expect(exercise.id == exerciseId)
-    #expect(exercise.name == "Lat pulldown")
-    #expect(exercise.numberOfSeries == 3)
-    #expect(exercise.lowestWeight == 20)
-    #expect(exercise.highestWeight == 120)
-    #expect(exercise.weightIncrement == 5)
-
-    // The new columns must read as "unset" rather than crashing on a NULL —
-    // the trap that the movementType comment in the recovery path warns about.
-    #expect(exercise.primaryMuscle == nil)
-    #expect(exercise.secondaryMuscles.isEmpty)
-    #expect(exercise.libraryKey == nil)
-
-    let log = try #require(logs.first)
-    #expect(log.weights == [50, 55])
-    #expect(log.reps == [12, 10])
-    #expect(log.date == logDate)
-    #expect(log.exerciseId == exerciseId)
-
-    let workout = try #require(workouts.first)
-    #expect(workout.name == "Upper body")
-    #expect(workout.exerciseOrder == [exerciseId])
-}
-
-@Test func migratedExerciseCanBeGivenMuscleGroups() throws {
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
-
-    let exerciseId = UUID()
-    do {
-        let container = try ModelContainer(
-            for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
-            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-        )
-        let context = ModelContext(container)
-        context.insert(WorkoutLogSchemaV1.ExerciseDef(id: exerciseId, name: "Squat"))
-        try context.save()
-    }
-
-    let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        migrationPlan: WorkoutMigrationPlan.self,
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-    )
-    let context = ModelContext(container)
-    let exercise = try #require(try context.fetch(FetchDescriptor<ExerciseDef>()).first)
-
-    exercise.primaryMuscle = .quads
-    exercise.secondaryMuscles = [.glutes, .hamstrings]
-    try context.save()
-
-    let reread = try #require(try ModelContext(container)
-        .fetch(FetchDescriptor<ExerciseDef>()).first)
-    #expect(reread.primaryMuscle == .quads)
-    #expect(reread.secondaryMuscles == [.glutes, .hamstrings])
-}
 
 @Test func secondaryMuscleListIsCappedAtFour() {
     let e = ExerciseDef(name: "Everything")
@@ -179,40 +81,6 @@ private func removeStore(at url: URL) {
     #expect(restored.secondaryMuscles == [.chest])
 }
 
-@Test func favouriteFlagSurvivesTheUpgradeAndDefaultsToOff() throws {
-    // The store is written at V2 (no muscle groups, no favourite flag) and
-    // reopened through both later stages, as a user updating from the shipped
-    // version does.
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
-
-    let exerciseId = UUID()
-    do {
-        let container = try ModelContainer(
-            for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
-            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-        )
-        let context = ModelContext(container)
-        context.insert(WorkoutLogSchemaV1.ExerciseDef(id: exerciseId, name: "Deadlift"))
-        try context.save()
-    }
-
-    let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        migrationPlan: WorkoutMigrationPlan.self,
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-    )
-    let context = ModelContext(container)
-    let exercise = try #require(try context.fetch(FetchDescriptor<ExerciseDef>()).first)
-    #expect(exercise.name == "Deadlift")
-    #expect(exercise.isFavourite == false)
-
-    exercise.isFavourite = true
-    try context.save()
-    let reread = try #require(try ModelContext(container)
-        .fetch(FetchDescriptor<ExerciseDef>()).first)
-    #expect(reread.isFavourite)
-}
 
 @Test func newExerciseUsesTheChosenDefaults() {
     let d = UserDefaults.standard
@@ -241,56 +109,6 @@ private func removeStore(at url: URL) {
 
 // MARK: - The rest timer column
 
-@Test func restSecondsArrivesWithADefaultAndThenPersists() throws {
-    // Written at V2 — the shipped shape before muscle groups, favourites or the
-    // rest timer — and reopened at the current version, walking the whole chain
-    // V2 → V3 → V4 → V5. That is the migration a long-untouched install makes.
-    //
-    // Writing the store at V4 instead would be a closer match to the most
-    // recent release, but a store opened without a migration plan records no
-    // version identifier: the real plan then matches it by shape to its
-    // earliest candidate, and a "V4" store written that way came back as V2
-    // with its later columns stripped. Handing the writing container its own
-    // plan fixes the identification and breaks something else — two migration
-    // plans over the same model classes in one process abort inside CoreData.
-    // So the store is written the way every other test here writes one.
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
-
-    let exerciseId = UUID()
-    do {
-        let container = try ModelContainer(
-            for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
-            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-        )
-        let context = ModelContext(container)
-        let old = WorkoutLogSchemaV1.ExerciseDef(id: exerciseId, name: "Overhead press")
-        old.numberOfSeries = 4
-        context.insert(old)
-        try context.save()
-    }
-
-    let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        migrationPlan: WorkoutMigrationPlan.self,
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-    )
-    let context = ModelContext(container)
-    let exercise = try #require(try context.fetch(FetchDescriptor<ExerciseDef>()).first)
-
-    #expect(exercise.name == "Overhead press")
-    #expect(exercise.numberOfSeries == 4)
-    // An exercise that predates the timer must not arrive with a zero rest.
-    // Zero means "no rest", and the timer would never run for that exercise —
-    // a silent, per-exercise version of the feature not working.
-    #expect(exercise.restSeconds == RestTimerDefaults.seconds)
-
-    exercise.restSeconds = 120
-    try context.save()
-    let reread = try #require(try ModelContext(container)
-        .fetch(FetchDescriptor<ExerciseDef>()).first)
-    #expect(reread.restSeconds == 120)
-}
 
 @Test func restSecondsSurvivesAnExportRoundTrip() throws {
     let original = ExerciseDef(name: "Front squat", restSeconds: 180)
@@ -441,81 +259,8 @@ private let settleNow = Date(timeIntervalSince1970: 1_700_000_000)
 // staged migration twice before. V2's copy is frozen and the live log is new.
 // These check that the rows survived that move.
 
-@Test func anExerciseFromBeforeAerobicIsAStrengthExercise() throws {
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
-    do {
-        let container = try ModelContainer(
-            for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
-            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-        )
-        let context = ModelContext(container)
-        context.insert(WorkoutLogSchemaV1.ExerciseDef(name: "Squat"))
-        try context.save()
-    }
-    let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        migrationPlan: WorkoutMigrationPlan.self,
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-    )
-    let exercise = try #require(try ModelContext(container)
-        .fetch(FetchDescriptor<ExerciseDef>()).first)
-    #expect(exercise.kind == .strength)
-    #expect(exercise.aerobicActivity == nil)
-}
 
-@Test func anAerobicSessionKeepsItsMeasurements() throws {
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
-    let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-    )
-    let context = ModelContext(container)
-    let rower = ExerciseDef(name: "Rower", kind: .aerobic, aerobicActivity: .rowing)
-    context.insert(rower)
-    let log = WorkoutLog(workoutId: UUID(), exerciseId: rower.id, weights: [], reps: [])
-    context.insert(log)
-    context.insert(AerobicResult(logId: log.id, durationSeconds: 1200,
-                                 averageHeartRate: 138, maximumHeartRate: 161,
-                                 zoneSeconds: [120, 300, 600, 180, 0]))
-    try context.save()
 
-    let fresh = ModelContext(container)
-    let result = try #require(try fresh.fetch(FetchDescriptor<AerobicResult>()).first)
-    #expect(result.logId == log.id)
-    #expect(result.durationSeconds == 1200)
-    #expect(result.averageHeartRate == 138)
-    #expect(result.maximumHeartRate == 161)
-    #expect(result.zoneSeconds == [120, 300, 600, 180, 0])
-
-    let exercise = try #require(try fresh.fetch(FetchDescriptor<ExerciseDef>()).first)
-    #expect(exercise.kind == .aerobic)
-    #expect(exercise.aerobicActivity == .rowing)
-}
-
-/// The trap that shaped the design above, kept as a test so the reasoning is
-/// not just a comment: measurements set in `init` must survive, which is what
-/// failed while these lived on a second class also called WorkoutLog.
-@Test func aerobicMeasurementsSetInInitSurvive() throws {
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
-    let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
-    )
-    let context = ModelContext(container)
-    let logId = UUID()
-    context.insert(AerobicResult(logId: logId, durationSeconds: 900,
-                                 averageHeartRate: 121, zoneSeconds: [60, 120, 500, 220, 0]))
-    try context.save()
-    let reread = try #require(try ModelContext(container)
-        .fetch(FetchDescriptor<AerobicResult>()).first)
-    #expect(reread.durationSeconds == 900)
-    #expect(reread.averageHeartRate == 121)
-    #expect(reread.maximumHeartRate == 0)
-    #expect(reread.zoneSeconds == [60, 120, 500, 220, 0])
-}
 
 @Test func anAerobicResultSurvivesAnExportRoundTrip() throws {
     let original = AerobicResult(logId: UUID(), durationSeconds: 1800,
@@ -563,38 +308,315 @@ private let settleNow = Date(timeIntervalSince1970: 1_700_000_000)
     #expect(restored.reps == [10])
 }
 
-/// The V6 schema must open. It did not, while `AerobicResult` carried optional
-/// `Int?` columns: CoreData threw from `encodeNil` building the entity's
-/// defaults, and every test that opened a container died with it. The heart
-/// rates are plain `Int` with zero meaning "not measured" for that reason.
-@Test func theAerobicSchemaOpens() throws {
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
-    _ = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
-}
+// MARK: - Schema and migration
+//
+// Serialized, and that is load-bearing. Swift Testing runs tests in parallel
+// within one process, and SwiftData keeps per-model-class state global to it —
+// so a container opened from the V2 schema, whose frozen ExerciseDef has no
+// `kind` column, races one opened from V6, and the newer columns read back as
+// their defaults. It looks exactly like a persistence bug: the value is set,
+// the save succeeds, and the row returns the default. Two separate hours went
+// into chasing that as a SwiftData bug before the pattern showed itself —
+// every test here opens a container, so they take turns.
+@Suite(.serialized)
+struct SchemaMigrationTests {
 
-@Test func propertiesSetInInitActuallyPersist() throws {
-    // Does an ExerciseDef built by its initialiser keep what it was built with,
-    // once inserted and read back? `ExerciseDefaults.makeExercise` sets every
-    // value that way, so if this fails, the rest a user chose never reaches
-    // their exercises — in the shipped version, not just on this branch.
-    let url = temporaryStoreURL()
-    defer { removeStore(at: url) }
-    let container = try ModelContainer(
-        for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
-        configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
-    let context = ModelContext(container)
-    context.insert(ExerciseDef(name: "Rower", numberOfSeries: 4,
-                               restSeconds: 120,
-                               kind: .aerobic, aerobicActivity: .rowing))
-    try context.save()
+    @Test func storeWrittenByVersion1_2SurvivesTheUpgrade() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
 
-    let reread = try #require(try ModelContext(container)
-        .fetch(FetchDescriptor<ExerciseDef>()).first)
-    #expect(reread.name == "Rower")
-    #expect(reread.numberOfSeries == 4)
-    #expect(reread.restSeconds == 120)
-    #expect(reread.kind == .aerobic)
+        let exerciseId = UUID()
+        let workoutId = UUID()
+        let logDate = Date(timeIntervalSince1970: 1_700_000_000)
+
+        // ── Write a store exactly as the shipped version would ────────────────
+        do {
+            let container = try ModelContainer(
+                for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+                configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+            )
+            let context = ModelContext(container)
+            context.insert(WorkoutLogSchemaV1.ExerciseDef(
+                id: exerciseId, name: "Lat pulldown", numberOfSeries: 3,
+                lowestWeight: 20, highestWeight: 120, weightIncrement: 5))
+            context.insert(WorkoutDef(id: workoutId, name: "Upper body",
+                                      exerciseOrder: [exerciseId], sortIndex: 0))
+            context.insert(WorkoutLogSchemaV2.WorkoutLog(
+                date: logDate, workoutId: workoutId, exerciseId: exerciseId,
+                weights: [50, 55], reps: [12, 10]))
+            try context.save()
+        }
+
+        // ── Reopen through the migration plan, as the updated app does ────────
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+
+        let exercises = try context.fetch(FetchDescriptor<ExerciseDef>())
+        let workouts = try context.fetch(FetchDescriptor<WorkoutDef>())
+        let logs = try context.fetch(FetchDescriptor<WorkoutLog>())
+
+        #expect(exercises.count == 1)
+        #expect(workouts.count == 1)
+        #expect(logs.count == 1)
+
+        let exercise = try #require(exercises.first)
+        #expect(exercise.id == exerciseId)
+        #expect(exercise.name == "Lat pulldown")
+        #expect(exercise.numberOfSeries == 3)
+        #expect(exercise.lowestWeight == 20)
+        #expect(exercise.highestWeight == 120)
+        #expect(exercise.weightIncrement == 5)
+
+        // The new columns must read as "unset" rather than crashing on a NULL —
+        // the trap that the movementType comment in the recovery path warns about.
+        #expect(exercise.primaryMuscle == nil)
+        #expect(exercise.secondaryMuscles.isEmpty)
+        #expect(exercise.libraryKey == nil)
+
+        let log = try #require(logs.first)
+        #expect(log.weights == [50, 55])
+        #expect(log.reps == [12, 10])
+        #expect(log.date == logDate)
+        #expect(log.exerciseId == exerciseId)
+
+        let workout = try #require(workouts.first)
+        #expect(workout.name == "Upper body")
+        #expect(workout.exerciseOrder == [exerciseId])
+    }
+
+    @Test func migratedExerciseCanBeGivenMuscleGroups() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+
+        let exerciseId = UUID()
+        do {
+            let container = try ModelContainer(
+                for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+                configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+            )
+            let context = ModelContext(container)
+            context.insert(WorkoutLogSchemaV1.ExerciseDef(id: exerciseId, name: "Squat"))
+            try context.save()
+        }
+
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        let exercise = try #require(try context.fetch(FetchDescriptor<ExerciseDef>()).first)
+
+        exercise.primaryMuscle = .quads
+        exercise.secondaryMuscles = [.glutes, .hamstrings]
+        try context.save()
+
+        let reread = try #require(try ModelContext(container)
+            .fetch(FetchDescriptor<ExerciseDef>()).first)
+        #expect(reread.primaryMuscle == .quads)
+        #expect(reread.secondaryMuscles == [.glutes, .hamstrings])
+    }
+
+    @Test func favouriteFlagSurvivesTheUpgradeAndDefaultsToOff() throws {
+        // The store is written at V2 (no muscle groups, no favourite flag) and
+        // reopened through both later stages, as a user updating from the shipped
+        // version does.
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+
+        let exerciseId = UUID()
+        do {
+            let container = try ModelContainer(
+                for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+                configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+            )
+            let context = ModelContext(container)
+            context.insert(WorkoutLogSchemaV1.ExerciseDef(id: exerciseId, name: "Deadlift"))
+            try context.save()
+        }
+
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        let exercise = try #require(try context.fetch(FetchDescriptor<ExerciseDef>()).first)
+        #expect(exercise.name == "Deadlift")
+        #expect(exercise.isFavourite == false)
+
+        exercise.isFavourite = true
+        try context.save()
+        let reread = try #require(try ModelContext(container)
+            .fetch(FetchDescriptor<ExerciseDef>()).first)
+        #expect(reread.isFavourite)
+    }
+
+    @Test func restSecondsArrivesWithADefaultAndThenPersists() throws {
+        // Written at V2 — the shipped shape before muscle groups, favourites or the
+        // rest timer — and reopened at the current version, walking the whole chain
+        // V2 → V3 → V4 → V5. That is the migration a long-untouched install makes.
+        //
+        // Writing the store at V4 instead would be a closer match to the most
+        // recent release, but a store opened without a migration plan records no
+        // version identifier: the real plan then matches it by shape to its
+        // earliest candidate, and a "V4" store written that way came back as V2
+        // with its later columns stripped. Handing the writing container its own
+        // plan fixes the identification and breaks something else — two migration
+        // plans over the same model classes in one process abort inside CoreData.
+        // So the store is written the way every other test here writes one.
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+
+        let exerciseId = UUID()
+        do {
+            let container = try ModelContainer(
+                for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+                configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+            )
+            let context = ModelContext(container)
+            let old = WorkoutLogSchemaV1.ExerciseDef(id: exerciseId, name: "Overhead press")
+            old.numberOfSeries = 4
+            context.insert(old)
+            try context.save()
+        }
+
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        let exercise = try #require(try context.fetch(FetchDescriptor<ExerciseDef>()).first)
+
+        #expect(exercise.name == "Overhead press")
+        #expect(exercise.numberOfSeries == 4)
+        // An exercise that predates the timer must not arrive with a zero rest.
+        // Zero means "no rest", and the timer would never run for that exercise —
+        // a silent, per-exercise version of the feature not working.
+        #expect(exercise.restSeconds == RestTimerDefaults.seconds)
+
+        exercise.restSeconds = 120
+        try context.save()
+        let reread = try #require(try ModelContext(container)
+            .fetch(FetchDescriptor<ExerciseDef>()).first)
+        #expect(reread.restSeconds == 120)
+    }
+
+    @Test func anExerciseFromBeforeAerobicIsAStrengthExercise() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+        do {
+            let container = try ModelContainer(
+                for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+                configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+            )
+            let context = ModelContext(container)
+            context.insert(WorkoutLogSchemaV1.ExerciseDef(name: "Squat"))
+            try context.save()
+        }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let exercise = try #require(try ModelContext(container)
+            .fetch(FetchDescriptor<ExerciseDef>()).first)
+        #expect(exercise.kind == .strength)
+        #expect(exercise.aerobicActivity == nil)
+    }
+
+    @Test func anAerobicSessionKeepsItsMeasurements() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        let rower = ExerciseDef(name: "Rower", kind: .aerobic, aerobicActivity: .rowing)
+        context.insert(rower)
+        let log = WorkoutLog(workoutId: UUID(), exerciseId: rower.id, weights: [], reps: [])
+        context.insert(log)
+        context.insert(AerobicResult(logId: log.id, durationSeconds: 1200,
+                                     averageHeartRate: 138, maximumHeartRate: 161,
+                                     zoneSeconds: [120, 300, 600, 180, 0]))
+        try context.save()
+
+        let fresh = ModelContext(container)
+        let result = try #require(try fresh.fetch(FetchDescriptor<AerobicResult>()).first)
+        #expect(result.logId == log.id)
+        #expect(result.durationSeconds == 1200)
+        #expect(result.averageHeartRate == 138)
+        #expect(result.maximumHeartRate == 161)
+        #expect(result.zoneSeconds == [120, 300, 600, 180, 0])
+
+        let exercise = try #require(try fresh.fetch(FetchDescriptor<ExerciseDef>()).first)
+        #expect(exercise.kind == .aerobic)
+        #expect(exercise.aerobicActivity == .rowing)
+    }
+
+    /// The trap that shaped the design above, kept as a test so the reasoning is
+    /// not just a comment: measurements set in `init` must survive, which is what
+    /// failed while these lived on a second class also called WorkoutLog.
+    @Test func aerobicMeasurementsSetInInitSurvive() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none)
+        )
+        let context = ModelContext(container)
+        let logId = UUID()
+        context.insert(AerobicResult(logId: logId, durationSeconds: 900,
+                                     averageHeartRate: 121, zoneSeconds: [60, 120, 500, 220, 0]))
+        try context.save()
+        let reread = try #require(try ModelContext(container)
+            .fetch(FetchDescriptor<AerobicResult>()).first)
+        #expect(reread.durationSeconds == 900)
+        #expect(reread.averageHeartRate == 121)
+        #expect(reread.maximumHeartRate == 0)
+        #expect(reread.zoneSeconds == [60, 120, 500, 220, 0])
+    }
+
+    /// The V6 schema must open. It did not, while `AerobicResult` carried optional
+    /// `Int?` columns: CoreData threw from `encodeNil` building the entity's
+    /// defaults, and every test that opened a container died with it. The heart
+    /// rates are plain `Int` with zero meaning "not measured" for that reason.
+    @Test func theAerobicSchemaOpens() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+        _ = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+    }
+
+    @Test func propertiesSetInInitActuallyPersist() throws {
+        // Does an ExerciseDef built by its initialiser keep what it was built with,
+        // once inserted and read back? `ExerciseDefaults.makeExercise` sets every
+        // value that way, so if this fails, the rest a user chose never reaches
+        // their exercises — in the shipped version, not just on this branch.
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let context = ModelContext(container)
+        context.insert(ExerciseDef(name: "Rower", numberOfSeries: 4,
+                                   restSeconds: 120,
+                                   kind: .aerobic, aerobicActivity: .rowing))
+        try context.save()
+
+        let reread = try #require(try ModelContext(container)
+            .fetch(FetchDescriptor<ExerciseDef>()).first)
+        #expect(reread.name == "Rower")
+        #expect(reread.numberOfSeries == 4)
+        #expect(reread.restSeconds == 120)
+        #expect(reread.kind == .aerobic)
+    }
+
 }
