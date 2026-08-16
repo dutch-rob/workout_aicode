@@ -39,38 +39,91 @@ enum ExerciseKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// Which cardio, named as the Apple Workout app names its indoor workouts, so
-/// what you pick here is what appears in Fitness afterwards.
+/// Which activity, named as the Apple Workout app names its indoor workouts,
+/// so what you pick here is what appears in Fitness afterwards.
 ///
 /// "Indoor" is not a separate HealthKit activity — it is
-/// `HKWorkoutConfiguration.locationType = .indoor` alongside the ordinary
+/// `HKWorkoutConfiguration.locationType = .indoor` alongside an ordinary
 /// activity type, which is exactly why Apple's own list reads this way. The
-/// mapping for each case, for when the Watch starts the session:
+/// HealthKit type each case maps to is named beside it, for when the Watch
+/// starts the session.
 ///
-///   indoorWalk   → .walking       + indoor
-///   indoorRun    → .running       + indoor
-///   indoorCycle  → .cycling       + indoor
-///   elliptical   → .elliptical    + indoor
-///   stairStepper → .stairClimbing + indoor
-///
-/// Deliberately not HKWorkoutActivityType itself: this file describes what is
-/// stored, and storing a framework enum's raw value would tie the database to
-/// HealthKit's numbering. The mapping lives in the HealthKit layer.
+/// Ordered by how likely they are to be wanted rather than alphabetically: the
+/// machines first, then the classes, then the rest. Traditional Strength
+/// Training is deliberately absent — it is an indoor Apple workout, but it is
+/// what this app already writes for a *strength* session, and offering it here
+/// would let one exercise claim to be both kinds at once.
 enum AerobicActivity: String, Codable, CaseIterable, Identifiable {
-    case indoorWalk
-    case indoorRun
-    case indoorCycle
-    case elliptical
-    case stairStepper
+    // Machines and the indoor variants of the outdoor three
+    case indoorWalk         // .walking + indoor
+    case indoorRun          // .running + indoor
+    case indoorCycle        // .cycling + indoor
+    case elliptical         // .elliptical
+    case rower              // .rowing
+    case stairStepper       // .stepTraining
+    case stairs             // .stairs
+    case handCycling        // .handCycling
+    case wheelchairWalkPace // .wheelchairWalkPace
+    case wheelchairRunPace  // .wheelchairRunPace
+
+    // Conditioning
+    case hiit               // .highIntensityIntervalTraining
+    case crossTraining      // .crossTraining
+    case functionalStrength // .functionalStrengthTraining
+    case coreTraining       // .coreTraining
+    case jumpRope           // .jumpRope
+    case mixedCardio        // .mixedCardio
+    case kickboxing         // .kickboxing
+
+    // Classes and low-intensity
+    case dance              // .cardioDance
+    case socialDance        // .socialDance
+    case yoga               // .yoga
+    case pilates            // .pilates
+    case barre              // .barre
+    case taiChi             // .taiChi
+    case mindAndBody        // .mindAndBody
+    case flexibility        // .flexibility
+    case cooldown           // .cooldown
+
+    // Water and everything else indoors
+    case poolSwim           // .swimming + indoor
+    case waterFitness       // .waterFitness
+    case fitnessGaming      // .fitnessGaming
 
     var id: String { rawValue }
+
     var label: String {
         switch self {
-        case .indoorWalk:   return "Indoor walk"
-        case .indoorRun:    return "Indoor run"
-        case .indoorCycle:  return "Indoor cycle"
-        case .elliptical:   return "Elliptical"
-        case .stairStepper: return "Stair stepper"
+        case .indoorWalk:         return "Indoor walk"
+        case .indoorRun:          return "Indoor run"
+        case .indoorCycle:        return "Indoor cycle"
+        case .elliptical:         return "Elliptical"
+        case .rower:              return "Rower"
+        case .stairStepper:       return "Stair stepper"
+        case .stairs:             return "Stairs"
+        case .handCycling:        return "Hand cycling"
+        case .wheelchairWalkPace: return "Wheelchair walk pace"
+        case .wheelchairRunPace:  return "Wheelchair run pace"
+        case .hiit:               return "High intensity interval training"
+        case .crossTraining:      return "Cross training"
+        case .functionalStrength: return "Functional strength training"
+        case .coreTraining:       return "Core training"
+        case .jumpRope:           return "Jump rope"
+        case .mixedCardio:        return "Mixed cardio"
+        case .kickboxing:         return "Kickboxing"
+        case .dance:              return "Dance"
+        case .socialDance:        return "Social dance"
+        case .yoga:               return "Yoga"
+        case .pilates:            return "Pilates"
+        case .barre:              return "Barre"
+        case .taiChi:             return "Tai chi"
+        case .mindAndBody:        return "Mind and body"
+        case .flexibility:        return "Flexibility"
+        case .cooldown:           return "Cooldown"
+        case .poolSwim:           return "Pool swim"
+        case .waterFitness:       return "Water fitness"
+        case .fitnessGaming:      return "Fitness gaming"
         }
     }
 }

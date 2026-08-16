@@ -628,3 +628,49 @@ struct SchemaMigrationTests {
     // because a 75-minute ride shown as "15:00" would be a lie.
     #expect(AerobicDefaults.label(4500) == "75:00")
 }
+
+// MARK: - What each kind of exercise requires
+
+@Test func aStrengthExerciseStillNeedsAMuscleGroup() {
+    let e = ExerciseDef(name: "Bench press")
+    #expect(e.kind == .strength)
+    #expect(e.primaryMuscle == nil)          // so it is not saveable yet
+    e.primaryMuscle = .chest
+    #expect(e.primaryMuscle == .chest)
+}
+
+@Test func anAerobicExerciseCarriesAnActivityInsteadOfMuscles() {
+    let e = ExerciseDef(name: "Exercise bike", kind: .aerobic, aerobicActivity: .indoorCycle)
+    #expect(e.kind == .aerobic)
+    #expect(e.aerobicActivity == .indoorCycle)
+    // Muscle groups are not forbidden on the model — nothing reads them for an
+    // aerobic exercise, and forbidding them would mean destroying what someone
+    // had already set if they switched a strength exercise over by mistake.
+    #expect(e.primaryMuscle == nil)
+}
+
+@Test func bothKindsAreOfferedAndLabelled() {
+    #expect(ExerciseKind.allCases == [.strength, .aerobic])
+    for kind in ExerciseKind.allCases { #expect(!kind.label.isEmpty) }
+}
+
+@Test func theIndoorActivitiesAreNamedAsAppleNamesThem() {
+    // The order is chosen — machines first — and the head of it is pinned so a
+    // case added later cannot quietly push the common ones down the picker.
+    #expect(AerobicActivity.allCases.prefix(5).map(\.label) ==
+            ["Indoor walk", "Indoor run", "Indoor cycle", "Elliptical", "Rower"])
+
+    // Traditional strength training is an indoor Apple workout, but it is what
+    // this app writes for a strength session; offering it here would let one
+    // exercise claim to be both kinds at once.
+    #expect(!AerobicActivity.allCases.contains {
+        $0.label.localizedCaseInsensitiveContains("traditional")
+    })
+
+    for activity in AerobicActivity.allCases {
+        #expect(!activity.label.isEmpty)
+        #expect(AerobicActivity(rawValue: activity.rawValue) == activity)
+    }
+    // Two identical rows in a picker cannot be told apart.
+    #expect(Set(AerobicActivity.allCases.map(\.label)).count == AerobicActivity.allCases.count)
+}
