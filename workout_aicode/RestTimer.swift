@@ -68,6 +68,20 @@ enum RestTimerDefaults {
     /// called when the user turns the timer on, so the prompt arrives attached
     /// to a thing they just asked for.
     static func requestNotificationPermission() {
+        TimerAlerts.requestPermission()
+    }
+}
+
+/// Permission to tell the user a timer has finished.
+///
+/// Shared by the rest timer and the aerobic countdown. It used to belong to the
+/// rest timer alone, which meant an aerobic session run by somebody who had
+/// never switched the rest timer on had no way to announce itself: they could
+/// pocket the phone for twenty minutes and nothing would say the time was up.
+/// Asked when a timer that will need it starts, so the prompt is attached to
+/// something the user just did.
+enum TimerAlerts {
+    static func requestPermission() {
         UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }

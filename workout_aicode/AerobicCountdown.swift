@@ -121,6 +121,10 @@ final class AerobicCountdown: ObservableObject {
         heartRateCount = 0
         tally = ZoneTally(zones: HeartRateZones())
         UIApplication.shared.isIdleTimerDisabled = true
+        // Without this the countdown is silent for anyone who never switched
+        // the rest timer on — which includes anybody using this app only for
+        // cardio, and anybody without a Watch.
+        TimerAlerts.requestPermission()
         scheduleNotification(at: endsAt!)
         // The Watch is what actually measures: it starts a real Apple workout
         // for this activity, which is also what puts the session in Fitness.

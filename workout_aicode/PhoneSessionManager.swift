@@ -359,7 +359,12 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         if let activityRaw { msg["activity"] = activityRaw }
         deliver(msg)
 
-        guard HKHealthStore.isHealthDataAvailable() else { return }
+        // No Watch app to launch, nothing to launch it for. The countdown on
+        // this device runs regardless — it simply has no heart rate in it.
+        guard WCSession.isSupported(),
+              WCSession.default.activationState == .activated,
+              WCSession.default.isWatchAppInstalled,
+              HKHealthStore.isHealthDataAvailable() else { return }
         let configuration = WatchAerobicActivity.configuration(for: activityRaw)
         HKHealthStore().startWatchApp(with: configuration) { _, _ in
             // Nothing to report: a Watch that cannot be launched simply means

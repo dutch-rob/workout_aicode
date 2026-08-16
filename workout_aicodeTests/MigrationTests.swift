@@ -171,6 +171,34 @@ struct SchemaMigrationTests {
     // launch crash — so the check is a real store on disk, written through the old
     // schema and reopened through the migration plan, not a mock.
 
+    @Test func anAerobicSessionWithoutAWatchStillRecordsItsDuration() throws {
+        let url = temporaryStoreURL()
+        defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV6.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let context = ModelContext(container)
+
+        let bike = ExerciseDef(name: "Exercise bike", kind: .aerobic,
+                               aerobicActivity: .indoorCycle)
+        context.insert(bike)
+        let log = WorkoutLog(workoutId: UUID(), exerciseId: bike.id, weights: [], reps: [])
+        context.insert(log)
+        // What the log screen writes when nothing ever reported a heart rate.
+        context.insert(AerobicResult(logId: log.id, durationSeconds: 1200,
+                                     averageHeartRate: 0, maximumHeartRate: 0,
+                                     zoneSeconds: []))
+        try context.save()
+
+        let result = try #require(try ModelContext(container)
+            .fetch(FetchDescriptor<AerobicResult>()).first)
+        #expect(result.durationSeconds == 1200)
+        // Zero and empty are the "not measured" readings, and must stay
+        // distinguishable from a real measurement of nothing.
+        #expect(result.averageHeartRate == 0)
+        #expect(result.zoneSeconds.isEmpty)
+    }
+
     private func temporaryStoreURL() -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("migration-\(UUID().uuidString).sqlite")
@@ -927,4 +955,24 @@ private func at(_ seconds: Int) -> Date {
     for entry in ExerciseLibrary.aerobic {
         #expect(entry.name == entry.activity.label)
     }
+}
+
+// MARK: - Aerobic without a Watch
+//
+// The ordinary case for anyone who does not own one, and it has to be a
+// complete experience rather than a degraded one: the countdown runs, the
+// session is logged, and the only thing missing is the heart rate.
+
+@Test func noHeartRateIsNotTheSameAsNoTimeInAnyZone() {
+    // Five zeroes would claim a session was measured and spent nowhere; an
+    // empty list says nothing was measured at all. The graphs will one day
+    // have to tell those apart.
+    let unmeasured = AerobicResult(logId: UUID(), durationSeconds: 600)
+    #expect(unmeasured.zoneSeconds.isEmpty)
+    #expect(unmeasured.averageHeartRate == 0)
+
+    let measured = AerobicResult(logId: UUID(), durationSeconds: 600,
+                                 averageHeartRate: 120, maximumHeartRate: 140,
+                                 zoneSeconds: [600, 0, 0, 0, 0])
+    #expect(!measured.zoneSeconds.isEmpty)
 }
