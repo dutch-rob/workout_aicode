@@ -78,6 +78,15 @@ final class WatchSessionManager: NSObject, ObservableObject {
             lastEntries = payload.lastEntries
             restTimerEnabled = payload.restTimerEnabled
         }
+        // Left by the phone for a Watch app that was not running when the
+        // aerobic session began — which is the usual way it begins.
+        if let aerobic = context["aerobic"] as? [String: Any] {
+            let exercise = aerobic["exercise"] as? String ?? ""
+            let endsAt = (aerobic["endsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
+            Task { @MainActor in
+                WatchAerobicWorkout.shared.describe(exercise: exercise, endsAt: endsAt)
+            }
+        }
         // The phone stashes its driving snapshot here (nil when it isn't driving).
         remoteSnapshot = decodeSnapshot(context["session"])
     }
@@ -306,7 +315,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
         case "aerobicStart":
             let activity = msg["activity"] as? String
             let exercise = msg["exercise"] as? String ?? ""
+            let endsAt = (msg["endsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
             Task { @MainActor in
+                WatchAerobicWorkout.shared.describe(exercise: exercise, endsAt: endsAt)
                 await WatchAerobicWorkout.shared.start(activityRaw: activity,
                                                        exercise: exercise)
             }
@@ -317,6 +328,13 @@ final class WatchSessionManager: NSObject, ObservableObject {
         default:
             return false
         }
+    }
+
+    /// Stopped on the wrist — the phone's countdown is the same session.
+    func reportAerobicStopped() {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else { return }
+        session.sendMessage(["type": "aerobicStopped"], replyHandler: nil, errorHandler: nil)
     }
 
     /// One heart-rate reading on its way to the phone, with the zone it fell

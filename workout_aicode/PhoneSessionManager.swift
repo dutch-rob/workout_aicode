@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import WatchConnectivity
+import HealthKit
 
 // MARK: - PhoneSessionManager
 //
@@ -52,6 +53,9 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     private var snoozed = false
 
     private var lastPayloadData: Data?
+    /// Details of a running aerobic session, for a Watch app that has not been
+    /// launched yet to pick up when it is.
+    private var aerobicContext: [String: Any]?
 
     // MARK: - Apple Health: open-workout tracking
     //
@@ -160,6 +164,7 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         if role == .driving, let snap = liveSnapshot, let d = try? JSONEncoder().encode(snap) {
             ctx["session"] = d
         }
+        if let aerobicContext { ctx["aerobic"] = aerobicContext }
         guard !ctx.isEmpty else { return }
         try? session.updateApplicationContext(ctx)
     }
@@ -328,13 +333,43 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     // only, never queued: a workout instruction that turns up ten minutes late
     // would start a session for something already finished.
 
-    func startAerobicOnWatch(activityRaw: String?, exercise: String) {
-        var msg: [String: Any] = ["type": "aerobicStart", "exercise": exercise]
+    /// Get the Watch running the workout, whether or not its app is open.
+    ///
+    /// Three routes on purpose, because the obvious one is not enough:
+    ///
+    ///   • `startWatchApp(toHandle:)` is the one that matters. WatchConnectivity
+    ///     messages need "two actively running apps", so with the Watch app
+    ///     closed — the ordinary case — a message goes nowhere: no session, no
+    ///     heart rate, and nothing in Fitness. This launches the Watch app in
+    ///     the background and hands it the configuration.
+    ///   • The application context carries the name and the finishing time,
+    ///     because a workout configuration has nowhere to put them. Context is
+    ///     delivered on the counterpart's next launch even if it was not
+    ///     running, which is exactly the case being served.
+    ///   • The live message is kept for when the Watch app IS already open, so
+    ///     it starts at once rather than waiting on a launch.
+    func startAerobicOnWatch(activityRaw: String?, exercise: String, endsAt: Date) {
+        aerobicContext = ["activity": activityRaw ?? "",
+                          "exercise": exercise,
+                          "endsAt": endsAt.timeIntervalSince1970]
+        sendContext()
+
+        var msg: [String: Any] = ["type": "aerobicStart", "exercise": exercise,
+                                  "endsAt": endsAt.timeIntervalSince1970]
         if let activityRaw { msg["activity"] = activityRaw }
         deliver(msg)
+
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        let configuration = WatchAerobicActivity.configuration(for: activityRaw)
+        HKHealthStore().startWatchApp(with: configuration) { _, _ in
+            // Nothing to report: a Watch that cannot be launched simply means
+            // no heart rate, and the countdown on this device is unaffected.
+        }
     }
 
     func endAerobicOnWatch() {
+        aerobicContext = nil
+        sendContext()
         deliver(["type": "aerobicEnd"])
     }
 
@@ -420,6 +455,11 @@ extension PhoneSessionManager: WCSessionDelegate {
     // Messages WITHOUT a reply handler.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         switch message["type"] as? String {
+        case "aerobicStopped":
+            // Stopped on the wrist. The countdown here is the same session, so
+            // it ends too rather than carrying on counting something nobody is
+            // doing any more.
+            Task { @MainActor in AerobicCountdown.shared.stopFromWatch() }
         case "heartRate":
             guard let bpm = message["bpm"] as? Int else { return }
             let zone = message["zone"] as? Int

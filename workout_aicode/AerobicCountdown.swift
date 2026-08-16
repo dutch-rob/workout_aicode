@@ -125,13 +125,22 @@ final class AerobicCountdown: ObservableObject {
         // The Watch is what actually measures: it starts a real Apple workout
         // for this activity, which is also what puts the session in Fitness.
         PhoneSessionManager.shared.startAerobicOnWatch(activityRaw: activityRaw,
-                                                       exercise: exercise)
+                                                       exercise: exercise,
+                                                       endsAt: endsAt!)
         startTicking()
     }
 
     /// Stopped by hand. Records however long it actually ran.
     func stop() {
         finish(haptic: false)
+    }
+
+    /// Stopped on the Watch. Same session, so it ends here too — and without
+    /// telling the Watch to stop again, which is where a loop would start.
+    func stopFromWatch() {
+        guard endsAt != nil else { return }
+        finishedSeconds = elapsedSeconds
+        clear(tellWatch: false)
     }
 
     /// Ran out on its own.
@@ -152,8 +161,8 @@ final class AerobicCountdown: ObservableObject {
         if haptic { RestTimerHaptics.strong() }
     }
 
-    private func clear() {
-        PhoneSessionManager.shared.endAerobicOnWatch()
+    private func clear(tellWatch: Bool = true) {
+        if tellWatch { PhoneSessionManager.shared.endAerobicOnWatch() }
         ticker?.invalidate()
         ticker = nil
         endsAt = nil

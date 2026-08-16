@@ -40,6 +40,28 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     @Published private(set) var currentZoneFraction: Double = 0
     /// The exercise this session belongs to, for the screen to name.
     @Published private(set) var exerciseName = ""
+    /// When the phone's countdown finishes, so the Watch can show the same one.
+    /// Nil when the Watch has not been told — the session still runs, there is
+    /// simply no number to count down.
+    @Published private(set) var endsAt: Date?
+    @Published private(set) var tick = Date()
+
+    var remainingSeconds: Int? {
+        guard let endsAt else { return nil }
+        return max(0, Int(endsAt.timeIntervalSince(tick).rounded(.up)))
+    }
+
+    var remainingLabel: String? {
+        guard let seconds = remainingSeconds else { return nil }
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    /// Details that could not travel in a workout configuration, arriving
+    /// either live or in the application context the phone left for us.
+    func describe(exercise: String, endsAt date: Date?) {
+        if !exercise.isEmpty { exerciseName = exercise }
+        if let date, date > Date() { endsAt = date }
+    }
 
     private var zones = HeartRateZones()
     private var tally = ZoneTally(zones: HeartRateZones())
@@ -78,8 +100,14 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     // MARK: - Running
 
     func start(activityRaw: String?, exercise: String = "") async {
+        await start(configuration: WatchAerobicActivity.configuration(for: activityRaw),
+                    exercise: exercise)
+    }
+
+    /// The phone launched us with this configuration — see WatchAppDelegate.
+    func start(configuration: HKWorkoutConfiguration, exercise: String = "") async {
         guard !isRunning, HKHealthStore.isHealthDataAvailable() else { return }
-        exerciseName = exercise
+        if !exercise.isEmpty { exerciseName = exercise }
         await requestAuthorization()
 
         zones = await currentZones()
@@ -89,7 +117,6 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
         averageHeartRate = 0
         maximumHeartRate = 0
 
-        let configuration = WatchAerobicActivity.configuration(for: activityRaw)
         do {
             let session = try HKWorkoutSession(healthStore: store,
                                                configuration: configuration)
@@ -107,6 +134,7 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
             self.session = session
             self.builder = builder
             isRunning = true
+            startTicking()
         } catch {
             // A session that will not start is not worth a scene of its own:
             // the countdown carries on and simply has no heart rate in it.
@@ -139,7 +167,34 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
         isRunning = false
         currentHeartRate = nil
         currentZone = nil
+        endsAt = nil
+        stopTicking()
         return summary
+    }
+
+    /// Ends the session here and tells the phone, so stopping on either device
+    /// stops both. The phone does not send an end back, or the two would keep
+    /// ending each other.
+    func stopFromWatch() async {
+        guard isRunning else { return }
+        _ = await finish()
+        WatchSessionManager.shared.reportAerobicStopped()
+    }
+
+    private var ticker: Timer?
+
+    private func startTicking() {
+        stopTicking()
+        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick = Date() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        ticker = t
+    }
+
+    private func stopTicking() {
+        ticker?.invalidate()
+        ticker = nil
     }
 
     // MARK: - Zones

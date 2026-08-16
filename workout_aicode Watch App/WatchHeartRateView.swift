@@ -121,6 +121,14 @@ struct WatchHeartRateView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            // The same countdown the phone is showing. Absent rather than zero
+            // when the Watch was never told the finishing time — the session is
+            // still running, there is simply no number for it.
+            if let remaining = workout.remainingLabel {
+                Text(remaining)
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+            }
 
             WatchHeartRateBand(zone: workout.currentZone,
                                fraction: workout.currentZoneFraction)
@@ -143,6 +151,12 @@ struct WatchHeartRateView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
+
+            Button("stop") {
+                Task { await workout.stopFromWatch() }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
         .padding(.horizontal, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
