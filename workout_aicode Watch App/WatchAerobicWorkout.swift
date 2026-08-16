@@ -169,7 +169,30 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
         currentZone = nil
         endsAt = nil
         stopTicking()
+        lastSummary = summary
         return summary
+    }
+
+    /// Started here on the Watch rather than by the phone. Runs the same
+    /// session, sets its own countdown, and tells the phone so that an open
+    /// phone shows the exercise too.
+    func startHere(activityRaw: String?, exercise: String, seconds: Int) async {
+        guard !isRunning else { return }
+        let end = Date().addingTimeInterval(Double(seconds))
+        describe(exercise: exercise, endsAt: end)
+        await start(activityRaw: activityRaw, exercise: exercise)
+        guard isRunning else { return }
+        WatchSessionManager.shared.reportAerobicStarted(exercise: exercise, endsAt: end)
+    }
+
+    /// What the last finished session measured, for the log message that
+    /// follows it. Taken once and cleared, so a second exercise logged without
+    /// running one cannot inherit the first one's numbers.
+    private var lastSummary: Summary?
+
+    func takeLastSummary() -> Summary? {
+        defer { lastSummary = nil }
+        return lastSummary
     }
 
     /// Ends the session here and tells the phone, so stopping on either device

@@ -36,6 +36,8 @@ struct WatchLogExerciseView: View {
     @State private var startedAt = Date()
     @State private var dragOffsetX: CGFloat = 0
     @State private var isHorizontalDrag: Bool? = nil
+    /// Minutes chosen per exercise, for the aerobic ones.
+    @State private var durations: [Int] = []
 
     // MARK: - Body
 
@@ -142,16 +144,69 @@ struct WatchLogExerciseView: View {
         .offset(x: dragOffsetX)
     }
 
+    @ViewBuilder
     private func currentPage(for exercise: SyncExercise) -> some View {
+        if exercise.isAerobic {
+            aerobicPage(for: exercise)
+        } else {
+            VStack(spacing: 2) {
+                exerciseTitle(exercise)
+                HStack(spacing: 2) {
+                    rowLabel
+                    pickerRow(for: exercise)
+                }
+                .frame(height: wheelHeight())
+                otherMetricLabels(for: exercise, index: currentIndex)
+            }
+        }
+    }
+
+    // MARK: - Aerobic
+    //
+    // One wheel of minutes and a start button, the same shape as the phone's.
+    // Without this the Watch showed weight and repetition wheels for a rowing
+    // machine, which is not something anyone can answer.
+
+    private func aerobicPage(for exercise: SyncExercise) -> some View {
         VStack(spacing: 2) {
             exerciseTitle(exercise)
-            HStack(spacing: 2) {
-                rowLabel
-                pickerRow(for: exercise)
+            Picker("", selection: minutesBinding()) {
+                ForEach(1...120, id: \.self) { Text("\($0)").tag($0) }
             }
+            .labelsHidden()
+            .pickerStyle(.wheel)
+            .frame(maxWidth: .infinity)
             .frame(height: wheelHeight())
-            otherMetricLabels(for: exercise, index: currentIndex)
+
+            Text("minutes").font(.caption2).foregroundStyle(.secondary)
+
+            Button("start") {
+                let seconds = max(60, durationSeconds(at: currentIndex))
+                Task {
+                    await WatchAerobicWorkout.shared.startHere(
+                        activityRaw: exercise.aerobicActivityRaw,
+                        exercise: exercise.name,
+                        seconds: seconds)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
         }
+    }
+
+    private func durationSeconds(at index: Int) -> Int {
+        guard index < durations.count, durations[index] > 0 else { return 20 * 60 }
+        return durations[index]
+    }
+
+    private func minutesBinding() -> Binding<Int> {
+        Binding<Int>(
+            get: { max(1, durationSeconds(at: currentIndex) / 60) },
+            set: { newValue in
+                guard currentIndex < durations.count else { return }
+                durations[currentIndex] = newValue * 60
+            }
+        )
     }
 
     /// While swiping, the incoming page is just the exercise title and empty
@@ -426,10 +481,18 @@ struct WatchLogExerciseView: View {
     }
 
     private func logAndNext(_ exercise: SyncExercise) {
+        // An aerobic exercise reports what the session measured instead of
+        // sets; a strength one sends zero duration and nothing to go with it.
+        let measured = WatchAerobicWorkout.shared.takeLastSummary()
         session.logSet(workoutId: workout.id,
                        exerciseId: exercise.id,
                        weights: weights[safe: currentIndex] ?? [],
-                       reps: reps[safe: currentIndex] ?? [])
+                       reps: reps[safe: currentIndex] ?? [],
+                       aerobic: exercise.isAerobic ? (measured
+                            ?? WatchAerobicWorkout.Summary(
+                                durationSeconds: durationSeconds(at: currentIndex),
+                                averageHeartRate: 0, maximumHeartRate: 0,
+                                zoneSeconds: [])) : nil)
         loggedIndices.insert(currentIndex)
 
         if loggedIndices.count >= workout.exerciseOrder.count {
@@ -497,6 +560,7 @@ struct WatchLogExerciseView: View {
         reps = workout.exerciseOrder.map { exId in
             session.lastEntry(workoutId: workout.id, exerciseId: exId)?.reps ?? []
         }
+        durations = workout.exerciseOrder.map { _ in 20 * 60 }
     }
 
     private func setIndex(_ index: Int) {

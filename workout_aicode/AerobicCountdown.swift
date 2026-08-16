@@ -134,6 +134,25 @@ final class AerobicCountdown: ObservableObject {
         startTicking()
     }
 
+    /// A session the Watch is running. Shown, but not owned: no notification
+    /// is scheduled and the Watch is not asked to start anything, because it
+    /// already is. The Watch logs it too, so this device records nothing.
+    func mirrorFromWatch(exercise: String, endsAt date: Date) {
+        guard !isShowing, date > Date() else { return }
+        exerciseName = exercise
+        totalSeconds = max(1, Int(date.timeIntervalSinceNow.rounded()))
+        startedAt = Date()
+        endsAt = date
+        tick = Date()
+        finishedSeconds = nil
+        isMirroring = true
+        isShowing = true
+        startTicking()
+    }
+
+    /// True while the Watch owns the session and this is only a display.
+    @Published private(set) var isMirroring = false
+
     /// Stopped by hand. Records however long it actually ran.
     func stop() {
         finish(haptic: false)
@@ -160,13 +179,18 @@ final class AerobicCountdown: ObservableObject {
 
     private func finish(haptic: Bool) {
         guard endsAt != nil else { return }
-        finishedSeconds = elapsedSeconds
+        // A mirrored session is logged by the Watch, so this device must not
+        // also write it — two rows for one bike ride.
+        if !isMirroring { finishedSeconds = elapsedSeconds }
         clear()
         if haptic { RestTimerHaptics.strong() }
     }
 
     private func clear(tellWatch: Bool = true) {
-        if tellWatch { PhoneSessionManager.shared.endAerobicOnWatch() }
+        // A mirrored session belongs to the Watch; ending the display here must
+        // not end the workout on the wrist.
+        if tellWatch, !isMirroring { PhoneSessionManager.shared.endAerobicOnWatch() }
+        isMirroring = false
         ticker?.invalidate()
         ticker = nil
         endsAt = nil

@@ -388,8 +388,15 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         let reps    = info["reps"] as? [Int] ?? []
         let date    = (info["date"] as? Double).map { Date(timeIntervalSince1970: $0) } ?? Date()
         let id      = (info["id"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID()
+        // Present only for an aerobic exercise, and the phone stores whatever
+        // the Watch measured rather than measuring again.
+        let duration = info["durationSeconds"] as? Int
         store?.addWatchLog(id: id, date: date, workoutId: wid,
-                           exerciseId: eid, weights: weights, reps: reps)
+                           exerciseId: eid, weights: weights, reps: reps,
+                           durationSeconds: duration,
+                           averageHeartRate: info["averageHeartRate"] as? Int ?? 0,
+                           maximumHeartRate: info["maximumHeartRate"] as? Int ?? 0,
+                           zoneSeconds: info["zoneSeconds"] as? [Int] ?? [])
         noteActivity(at: date)
     }
 
@@ -460,6 +467,17 @@ extension PhoneSessionManager: WCSessionDelegate {
     // Messages WITHOUT a reply handler.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         switch message["type"] as? String {
+        case "aerobicStartedOnWatch":
+            // The Watch is measuring; this device only shows the same countdown
+            // so an open phone is not sitting on wheels for an exercise already
+            // under way.
+            let exercise = message["exercise"] as? String ?? ""
+            let endsAt = (message["endsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
+            Task { @MainActor in
+                if let endsAt {
+                    AerobicCountdown.shared.mirrorFromWatch(exercise: exercise, endsAt: endsAt)
+                }
+            }
         case "aerobicStopped":
             // Stopped on the wrist. The countdown here is the same session, so
             // it ends too rather than carrying on counting something nobody is

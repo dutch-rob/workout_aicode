@@ -101,13 +101,20 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
     // MARK: - Send a completed set
-    func logSet(workoutId: String, exerciseId: String, weights: [Int], reps: [Int]) {
-        let info: [String: Any] = [
+    func logSet(workoutId: String, exerciseId: String, weights: [Int], reps: [Int],
+                aerobic: WatchAerobicWorkout.Summary? = nil) {
+        var info: [String: Any] = [
             "type": "logSet", "id": UUID().uuidString,
             "date": Date().timeIntervalSince1970,
             "workoutId": workoutId, "exerciseId": exerciseId,
             "weights": weights, "reps": reps
         ]
+        if let aerobic {
+            info["durationSeconds"] = aerobic.durationSeconds
+            info["averageHeartRate"] = aerobic.averageHeartRate
+            info["maximumHeartRate"] = aerobic.maximumHeartRate
+            info["zoneSeconds"] = aerobic.zoneSeconds
+        }
         let session = WCSession.default
         guard session.activationState == .activated else { return }
         if session.isReachable {
@@ -328,6 +335,18 @@ final class WatchSessionManager: NSObject, ObservableObject {
         default:
             return false
         }
+    }
+
+    /// Started on the wrist. The phone does not measure anything for this, but
+    /// an open phone should show the same exercise counting down rather than
+    /// its wheels.
+    func reportAerobicStarted(exercise: String, endsAt: Date) {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else { return }
+        session.sendMessage(["type": "aerobicStartedOnWatch",
+                             "exercise": exercise,
+                             "endsAt": endsAt.timeIntervalSince1970],
+                            replyHandler: nil, errorHandler: nil)
     }
 
     /// Stopped on the wrist — the phone's countdown is the same session.

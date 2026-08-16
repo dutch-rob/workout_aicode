@@ -177,7 +177,11 @@ final class AppStore: ObservableObject {
     /// Insert a set logged on the Apple Watch. De-duplicates on the incoming id
     /// so re-delivered messages don't create duplicate rows.
     func addWatchLog(id: UUID, date: Date, workoutId: UUID, exerciseId: UUID,
-                     weights: [Int], reps: [Int]) {
+                     weights: [Int], reps: [Int],
+                     durationSeconds: Int? = nil,
+                     averageHeartRate: Int = 0,
+                     maximumHeartRate: Int = 0,
+                     zoneSeconds: [Int] = []) {
         let targetID = id
         let descriptor = FetchDescriptor<WorkoutLog>(
             predicate: #Predicate<WorkoutLog> { $0.id == targetID }
@@ -187,6 +191,14 @@ final class AppStore: ObservableObject {
         let log = WorkoutLog(id: id, date: date, workoutId: workoutId,
                              exerciseId: exerciseId, weights: weights, reps: reps)
         context.insert(log)
+        // Only for an aerobic session, and only one that actually ran.
+        if let durationSeconds, durationSeconds > 0 {
+            context.insert(AerobicResult(logId: log.id,
+                                         durationSeconds: durationSeconds,
+                                         averageHeartRate: averageHeartRate,
+                                         maximumHeartRate: maximumHeartRate,
+                                         zoneSeconds: zoneSeconds))
+        }
         try? context.save()
         reloadAll()
     }
