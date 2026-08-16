@@ -40,6 +40,27 @@ enum MusclePickerStyle: String, CaseIterable, Identifiable {
     var icon: String { self == .body ? "figure.arms.open" : "square.grid.2x2" }
 }
 
+/// Where an exercise sits in the library list.
+///
+/// What you use floats to the top: starred first, then anything that is in a
+/// workout, then the rest, each alphabetical within its band. A long list is
+/// mostly exercises tried once, and those should not sit between the ones done
+/// every week.
+///
+/// The exception is choosing exercises FOR a workout. There, tapping a row is
+/// what changes its membership, so ranking by membership would move every row
+/// out from under the finger that just tapped it. The order stays still:
+/// starred, then everything else.
+enum LibraryOrder {
+    static func rank(isFavourite: Bool,
+                     isInAnyWorkout: Bool,
+                     choosingForWorkout: Bool) -> Int {
+        if isFavourite { return 0 }
+        guard !choosingForWorkout else { return 1 }
+        return isInAnyWorkout ? 1 : 2
+    }
+}
+
 struct ExerciseLibraryView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.modelContext) private var context
@@ -303,9 +324,18 @@ struct ExerciseLibraryView: View {
             .filter { filter == nil || $0.primaryMuscle == filter }
             .filter { !favouritesOnly || $0.isFavourite }
             .sorted { a, b in
-                if a.isFavourite != b.isFavourite { return a.isFavourite }
+                let ra = libraryRank(a), rb = libraryRank(b)
+                if ra != rb { return ra < rb }
                 return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
             }
+    }
+
+    private func libraryRank(_ exercise: ExerciseDef) -> Int {
+        LibraryOrder.rank(isFavourite: exercise.isFavourite,
+                          isInAnyWorkout: workouts.contains {
+                              $0.exerciseOrder.contains(exercise.id)
+                          },
+                          choosingForWorkout: context_.workout != nil)
     }
 
     /// Library entries the user has not taken yet. Favourites are a property of

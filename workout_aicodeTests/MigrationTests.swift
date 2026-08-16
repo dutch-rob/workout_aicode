@@ -674,3 +674,38 @@ struct SchemaMigrationTests {
     // Two identical rows in a picker cannot be told apart.
     #expect(Set(AerobicActivity.allCases.map(\.label)).count == AerobicActivity.allCases.count)
 }
+
+// MARK: - Library order
+
+@Test func starredAndUsedExercisesComeFirst() {
+    let starred = LibraryOrder.rank(isFavourite: true, isInAnyWorkout: false,
+                                    choosingForWorkout: false)
+    let used = LibraryOrder.rank(isFavourite: false, isInAnyWorkout: true,
+                                 choosingForWorkout: false)
+    let unused = LibraryOrder.rank(isFavourite: false, isInAnyWorkout: false,
+                                   choosingForWorkout: false)
+    #expect(starred < used)
+    #expect(used < unused)
+}
+
+@Test func aStarBeatsBeingInAWorkout() {
+    // Starring is the explicit signal; being in a workout is circumstantial.
+    #expect(LibraryOrder.rank(isFavourite: true, isInAnyWorkout: false,
+                              choosingForWorkout: false)
+            < LibraryOrder.rank(isFavourite: false, isInAnyWorkout: true,
+                                choosingForWorkout: false))
+}
+
+@Test func choosingForAWorkoutDoesNotReorderOnEveryTap() {
+    // Tapping a row is what changes membership here, so membership must not
+    // decide position — otherwise each tick throws the list about under the
+    // finger that made it.
+    let inIt = LibraryOrder.rank(isFavourite: false, isInAnyWorkout: true,
+                                 choosingForWorkout: true)
+    let notInIt = LibraryOrder.rank(isFavourite: false, isInAnyWorkout: false,
+                                    choosingForWorkout: true)
+    #expect(inIt == notInIt)
+    // Stars still float, as they always did.
+    #expect(LibraryOrder.rank(isFavourite: true, isInAnyWorkout: false,
+                              choosingForWorkout: true) < inIt)
+}
