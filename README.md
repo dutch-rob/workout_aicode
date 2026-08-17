@@ -7,13 +7,14 @@ Source: https://github.com/dutch-rob/workout_aicode
 ---
 
 <!-- INFO_SCREEN_START -->
-SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so tracking an exercise is just some flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part-way through. There is an optional rest timer that counts the rest between your sets and taps your wrist when it is over, so you can pocket the phone in between. Once you have some history it estimates how your strength is trending per exercise, and shows you which exercises are moving and which are stuck. Everything stays on your devices unless you turn something on yourself.
+SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so tracking an exercise is just some flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part-way through. There is an optional rest timer that counts the rest between your sets and taps your wrist when it is over, so you can pocket the phone in between. Cardio fits alongside the weights: an aerobic exercise counts down instead of counting sets, and with an Apple Watch it runs as a real Apple workout, showing your heart rate zone and landing in Fitness. Once you have some history it estimates how your strength is trending per exercise, and shows you which exercises are moving and which are stuck. Everything stays on your devices unless you turn something on yourself.
 
 I made this app for myself because I wanted logging to be quicker than in the apps I tried. It is deliberately bare-bones. I hope you find it useful too (though it is probably not the best workout app for everybody).
 
 ## Contents
 - [Getting started](#getting-started) — defining your first workout and exercises
 - [Logging a workout](#logging-a-workout) — the wheels, the buttons, skipping an exercise
+- [Aerobic exercises](#aerobic-exercises) — cardio, with heart rate on the Watch
 - [The rest timer](#the-rest-timer) — optional, off by default
 - [The Apple Watch app](#the-apple-watch-app) — logging at the machine
 - [Handing a workout over](#handing-a-workout-over) — moving between iPhone and Watch
@@ -43,6 +44,24 @@ After finishing a set, tap **log, next** to record the exercise and move to the 
 **quit** ends the workout without logging the exercise that is on screen. Anything you already logged during the workout is kept.
 
 If a machine is busy you can skip ahead: swipe left for the next exercise you have not logged yet, and right for the previous one. Swiping leaves the current exercise without logging it, so you can come back to it later.
+
+## Aerobic exercises
+Not everything in a gym has weights on it. An exercise can be **aerobic** instead of strength: pick it from the heart-shaped **AE** button beside the body picture in the exercise library, where every indoor workout the Apple Workout app offers is waiting ready-made — indoor walk, run and cycle, elliptical, rower, stair stepper, and the rest. Take one, or make your own and choose its activity on the *edit exercise* screen.
+
+An aerobic exercise has no sets, weights or muscle groups, because none of those say anything about twenty minutes on a bike. It has one wheel for how long, and a **start** button.
+
+Starting one runs a countdown. As with the rest timer, the clock keeps the time rather than the screen, so you can pocket the phone: it buzzes and shows a notification when the time is up, and **stop** ends it early. What gets logged is what you actually did — stopping at twelve minutes of a twenty-minute ride records twelve. Logging without starting the countdown records what the wheel says, for when you would rather use the machine's own timer.
+
+The rest timer stays quiet after cardio. You have just done twenty minutes of it, and a ninety-second rest prompt on top would be noise.
+
+### With an Apple Watch
+If you have one, the Watch does the measuring, and it does it as a **real Apple workout**: the session is written to Health as the activity you chose, so it appears in Fitness and counts towards your rings like any other. Starting on the phone wakes the Watch app by itself — you do not have to open it.
+
+While it runs, the Watch shows your heart rate and which of five zones you are in, as a coloured band. You can start on either device and stop on either; whichever you use, the other follows.
+
+The zones are worked out from your resting heart rate and your age, following the method Apple describes for its automatic zones. Expect them to be close to what the Workout app shows rather than identical — Apple uses a maximum heart rate measured from your own history, which no app can read.
+
+Without a Watch everything works except the heart rate: the countdown runs, the session is logged with its duration, and no zones are shown rather than empty ones.
 
 ## The rest timer
 Off unless you switch it on, in Settings. With it off the app behaves exactly as it always has.
@@ -81,6 +100,13 @@ When a workout is running on one device and you open the other, that other devic
 The app can save each finished workout to Apple Health as a **Traditional Strength Training** session. This is **off by default** — turn on *Save workouts to Apple Health* in Settings, and grant permission when iOS asks.
 
 Only the workout itself is recorded: when it started, when it ended, and therefore how long it took. Your sets, weights and repetitions are **not** written to Health. The duration covers the whole workout even if you handed it over between iPhone and Watch part way through, and the workout is written by the iPhone, so it also works if you do not have an Apple Watch.
+
+An **aerobic exercise** is different, and deliberately so: it is recorded by the Apple Watch as a real workout of the activity you chose — an indoor cycle as an indoor cycle — which is what makes it show up properly in Fitness and count towards your rings. That one does need a Watch, and it happens whether or not the setting above is on, because it is the workout itself rather than a copy of your log.
+
+### What is read
+Heart rate is the only thing this app reads from Health, and only on the Apple Watch, and only while an aerobic countdown is running. It is used to show your current rate and zone, and to record the average, the maximum and the minutes in each zone against that session. Your resting heart rate and date of birth are read at the start of a session for the sole purpose of working out where your zones fall.
+
+None of it is sent anywhere. Heart rate never leaves your devices, and it is never included in the anonymous data you can choose to share with the developer — see [Your data and privacy](#your-data-and-privacy).
 
 A workout is recorded when you end it, either with **log, end** or with **quit**. If you forget to end one, it is closed automatically after an hour without activity and recorded as having ended at your last logged set, so a forgotten workout does not turn into an eight-hour one.
 

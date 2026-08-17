@@ -23,6 +23,14 @@ You can opt in to save each finished workout to Apple Health as a **Traditional 
 
 Only the workout itself is recorded: when it started, when it ended, and therefore how long it took. Your sets, weights and repetitions are **not** written to Health.
 
+An aerobic exercise is recorded separately, by the Apple Watch, as a real workout of the activity you chose. That is what makes it appear in Fitness and count towards your rings.
+
+### Heart rate
+
+Heart rate is the only thing this app reads from Apple Health. It is read on the Apple Watch, only while an aerobic countdown is running, and it is used to show your current rate and zone and to record the average, the maximum and the minutes in each zone against that session. Your resting heart rate and date of birth are read at the start of such a session for the single purpose of working out where your heart rate zones fall.
+
+Heart rate data stays on your devices. It is never transmitted to the developer or anyone else, and it is **never** part of the anonymous data you can choose to share — that sharing covers weights, repetitions, dates and muscle groups only. If you have opted into sharing, opting out or deleting your data does not need to reach any heart rate, because none was ever sent.
+
 ## Settings
 The options in the settings screen that affect data leaving your device:
    - **Share data among your iPhones/iPads** — keeps your workouts, exercises and logs in step across your devices through your own iCloud account. Off by default.

@@ -2023,7 +2023,7 @@ struct SettingsView: View {
                     store.reloadAll()
                 }
             } footer: {
-                Text("When on, a finished workout is saved to Apple Health as a Traditional Strength Training session, with its total duration — including time handed over between iPhone and Apple Watch. Only the workout duration is shared; nothing is read from Health.")
+                Text("When on, a finished workout is saved to Apple Health as a Traditional Strength Training session, with its total duration — including time handed over between iPhone and Apple Watch. Aerobic exercises are separate: your Apple Watch records those as real workouts of the activity you chose, whatever this setting says, which is what makes them appear in Fitness. Heart rate is read on the Watch during an aerobic countdown, and never leaves your devices.")
             }
 
             Section {
