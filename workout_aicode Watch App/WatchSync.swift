@@ -103,6 +103,23 @@ struct SyncWorkout: Codable, Identifiable, Hashable {
 struct SyncLastEntry: Codable, Hashable {
     var weights: [Int]
     var reps: [Int]
+    /// How long an aerobic exercise ran last time, so its wheel opens where it
+    /// was left — the same courtesy the weight wheels have always had. Zero for
+    /// a strength exercise, and for a payload written before this existed.
+    var durationSeconds: Int
+
+    enum CodingKeys: String, CodingKey { case weights, reps, durationSeconds }
+    init(weights: [Int], reps: [Int], durationSeconds: Int = 0) {
+        self.weights = weights
+        self.reps = reps
+        self.durationSeconds = durationSeconds
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        weights = try c.decode([Int].self, forKey: .weights)
+        reps = try c.decode([Int].self, forKey: .reps)
+        durationSeconds = try c.decodeIfPresent(Int.self, forKey: .durationSeconds) ?? 0
+    }
 }
 
 /// A live snapshot of an in-progress workout, transferred between devices on

@@ -13,23 +13,6 @@ import SwiftUI
 // underneath. Time in zone and average are deliberately absent — they are
 // interesting afterwards, not while pedalling.
 
-/// The five zone colours, low to high. Blue for easy through to red for the
-/// top, the ordering people expect from every heart rate band they have seen.
-enum ZoneColour {
-    static let all: [Color] = [
-        Color(red: 0.16, green: 0.55, blue: 0.95),   // 1 — blue
-        Color(red: 0.16, green: 0.68, blue: 0.60),   // 2 — teal
-        Color(red: 0.72, green: 0.72, blue: 0.14),   // 3 — yellow-green
-        Color(red: 0.85, green: 0.45, blue: 0.12),   // 4 — orange
-        Color(red: 0.80, green: 0.15, blue: 0.28),   // 5 — red
-    ]
-
-    static func colour(_ zone: Int) -> Color {
-        guard zone >= 1, zone <= all.count else { return .secondary }
-        return all[zone - 1]
-    }
-}
-
 struct WatchHeartRateBand: View {
     /// 1...5, or nil when nothing has arrived yet.
     let zone: Int?
@@ -39,26 +22,42 @@ struct WatchHeartRateBand: View {
     private let activeHeight: CGFloat = 26
     private let restingHeight: CGFloat = 18
 
+    private let spacing: CGFloat = 3
+
     var body: some View {
-        VStack(spacing: 2) {
-            HStack(spacing: 3) {
-                ForEach(1...HeartRateZones.zoneCount, id: \.self) { index in
-                    block(index)
+        GeometryReader { geo in
+            VStack(spacing: 2) {
+                HStack(spacing: spacing) {
+                    ForEach(1...HeartRateZones.zoneCount, id: \.self) { index in
+                        block(index).frame(width: width(for: index, in: geo.size.width))
+                    }
                 }
+                marker(totalWidth: geo.size.width)
             }
-            marker
         }
+        .frame(height: activeHeight + 7)
+    }
+
+    /// Widths worked out rather than left to layout priority.
+    ///
+    /// The lit zone is double width, and the first attempt said so with
+    /// `.layoutPriority(2)` and `maxWidth: .infinity`. That gave it the whole
+    /// row and collapsed the other four to nothing, so the band was a single
+    /// coloured bar with no band around it.
+    private func width(for index: Int, in total: CGFloat) -> CGFloat {
+        let gaps = spacing * CGFloat(HeartRateZones.zoneCount - 1)
+        let usable = max(0, total - gaps)
+        // Six shares: two for the lit zone, one for each of the others.
+        let unit = usable / CGFloat(HeartRateZones.zoneCount + 1)
+        return index == zone ? unit * 2 : unit
     }
 
     private func block(_ index: Int) -> some View {
         let isActive = index == zone
         return RoundedRectangle(cornerRadius: 4)
-            .fill(ZoneColour.colour(index).opacity(isActive ? 1 : 0.32))
+            .fill(ZoneColour.colour(index)
+                .opacity(isActive ? 1 : ZoneColour.restingOpacity))
             .frame(height: isActive ? activeHeight : restingHeight)
-            // The lit zone takes twice the width of the others, which is what
-            // makes it findable at a glance on a moving wrist.
-            .frame(maxWidth: .infinity)
-            .layoutPriority(isActive ? 2 : 1)
             .overlay {
                 if isActive {
                     HStack(spacing: 2) {
@@ -74,27 +73,26 @@ struct WatchHeartRateBand: View {
 
     /// A small pointer under the lit block. Nothing at all when there is no
     /// zone: an arrow with nowhere to point would be worse than no arrow.
-    @ViewBuilder private var marker: some View {
+    @ViewBuilder private func marker(totalWidth: CGFloat) -> some View {
         if let zone {
-            GeometryReader { geo in
+            HStack(spacing: 0) {
                 Triangle()
                     .fill(Color.white)
                     .frame(width: 8, height: 5)
-                    .offset(x: markerX(in: geo.size.width, zone: zone))
+                    .offset(x: markerX(in: totalWidth, zone: zone))
+                Spacer(minLength: 0)
             }
-            .frame(height: 5)
         } else {
             Color.clear.frame(height: 5)
         }
     }
 
-    /// The lit block is double width, so the band is (count + 1) slots wide and
-    /// the lit one occupies two of them.
-    private func markerX(in width: CGFloat, zone: Int) -> CGFloat {
-        let slots = CGFloat(HeartRateZones.zoneCount + 1)
-        let slot = width / slots
-        let start = slot * CGFloat(zone - 1)
-        return start + slot * 2 * CGFloat(min(1, max(0, fraction))) - 4
+    /// Along the lit block, which starts after all the narrower ones to its left.
+    private func markerX(in total: CGFloat, zone: Int) -> CGFloat {
+        let gaps = spacing * CGFloat(HeartRateZones.zoneCount - 1)
+        let unit = max(0, total - gaps) / CGFloat(HeartRateZones.zoneCount + 1)
+        let start = (unit + spacing) * CGFloat(zone - 1)
+        return start + unit * 2 * CGFloat(min(1, max(0, fraction))) - 4
     }
 }
 

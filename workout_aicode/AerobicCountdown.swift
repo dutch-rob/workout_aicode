@@ -134,6 +134,23 @@ final class AerobicCountdown: ObservableObject {
         startTicking()
     }
 
+    #if DEBUG
+    /// Screenshot/demo only: a countdown with a heart rate in it, so the band
+    /// can be seen without a Watch on a wrist.
+    func showDemoCountdown(exercise: String, remaining: Int, bpm: Int) {
+        exerciseName = exercise
+        totalSeconds = remaining + 60
+        startedAt = Date()
+        endsAt = Date().addingTimeInterval(Double(remaining))
+        tick = Date()
+        isShowing = true
+        let zones = HeartRateZones()
+        currentHeartRate = bpm
+        currentZone = zones.zone(for: bpm)
+        startTicking()
+    }
+    #endif
+
     /// A session the Watch is running. Shown, but not owned: no notification
     /// is scheduled and the Watch is not asked to start anything, because it
     /// already is. The Watch logs it too, so this device records nothing.
@@ -264,21 +281,25 @@ struct HeartRateBar: View {
                     Text("\(bpm)").font(.title2).bold().monospacedDigit()
                     Text("bpm").font(.footnote).foregroundStyle(.secondary)
                 }
+                // Each zone in its own colour, the one you are in at full
+                // strength. It used to paint every lit zone red, so zone 1 —
+                // the easy one — arrived looking like the hardest.
                 HStack(spacing: 4) {
                     ForEach(1...HeartRateZones.zoneCount, id: \.self) { index in
                         Capsule()
-                            .fill(index == zone ? Color.red : Color.secondary.opacity(0.2))
-                            .frame(height: 8)
+                            .fill(ZoneColour.colour(index)
+                                .opacity(index == zone ? 1 : ZoneColour.restingOpacity))
+                            .frame(height: index == zone ? 14 : 10)
                             .overlay(alignment: .center) {
                                 if index == zone {
                                     Text("\(index)")
-                                        .font(.system(size: 9, weight: .bold))
+                                        .font(.system(size: 10, weight: .bold))
                                         .foregroundStyle(.white)
                                 }
                             }
                     }
                 }
-                .frame(maxWidth: 220)
+                .frame(maxWidth: 240)
                 Text(zone.map { "zone \($0)" } ?? "")
                     .font(.caption)
                     .foregroundStyle(.secondary)

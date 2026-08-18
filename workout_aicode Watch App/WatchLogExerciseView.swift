@@ -578,7 +578,12 @@ struct WatchLogExerciseView: View {
         reps = workout.exerciseOrder.map { exId in
             session.lastEntry(workoutId: workout.id, exerciseId: exId)?.reps ?? []
         }
-        durations = workout.exerciseOrder.map { _ in 20 * 60 }
+        // Where the last session of this exercise left the wheel, not a flat
+        // twenty minutes for everything.
+        durations = workout.exerciseOrder.map { exId in
+            let last = session.lastEntry(workoutId: workout.id, exerciseId: exId)?.durationSeconds ?? 0
+            return last > 0 ? last : 20 * 60
+        }
     }
 
     private func setIndex(_ index: Int) {

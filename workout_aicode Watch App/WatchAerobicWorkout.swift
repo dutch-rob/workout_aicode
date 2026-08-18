@@ -191,6 +191,23 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     /// running one cannot inherit the first one's numbers.
     private var lastSummary: Summary?
 
+    #if DEBUG
+    /// Screenshot/demo only: the heart rate screen with a rate in it, so the
+    /// band can be looked at without a wrist or a phone.
+    func showDemoHeartRate(exercise: String, bpm: Int, remaining: Int) {
+        exerciseName = exercise
+        endsAt = Date().addingTimeInterval(Double(remaining))
+        tick = Date()
+        let zones = HeartRateZones()
+        let zone = zones.zone(for: bpm)
+        currentHeartRate = bpm
+        currentZone = zone
+        currentZoneFraction = zones.fraction(forBeatsPerMinute: bpm, inZone: zone)
+        isRunning = true
+        startTicking()
+    }
+    #endif
+
     /// True once a session has finished and not yet been logged.
     var hasFinishedSession: Bool { lastSummary != nil }
 

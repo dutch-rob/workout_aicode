@@ -129,13 +129,19 @@ final class AppStore: ObservableObject {
     /// own: all workout + exercise definitions plus the most recent logged
     /// weights/reps per (workout, exercise) so the Watch pickers pre-fill.
     func watchSyncPayloadData() -> Data? {
+        // Aerobic durations, keyed by the log they belong to, so the Watch can
+        // open its wheel where the last session left it.
+        let aerobic = (try? context.fetch(FetchDescriptor<AerobicResult>())) ?? []
+        let durationByLog = Dictionary(aerobic.map { ($0.logId, $0.durationSeconds) },
+                                       uniquingKeysWith: { a, _ in a })
         var lastMap: [String: SyncLastEntry] = [:]
         for workout in workouts {
             let entries = lastEntries(for: workout)
             for (exId, log) in entries {
                 let key = SyncPayload.lastEntryKey(workoutId: workout.id.uuidString,
                                                    exerciseId: exId.uuidString)
-                lastMap[key] = SyncLastEntry(weights: log.weights, reps: log.reps)
+                lastMap[key] = SyncLastEntry(weights: log.weights, reps: log.reps,
+                                             durationSeconds: durationByLog[log.id] ?? 0)
             }
         }
 

@@ -214,12 +214,19 @@ struct ContentView: View {
             }
         }
         .task {
-            guard DemoMode.screen == "log" || DemoMode.screen == "rest",
+            guard DemoMode.screen == "log" || DemoMode.screen == "rest"
+                    || DemoMode.screen == "aerobic",
                   path.isEmpty,
                   let w = workouts.first(where: {
                       !$0.name.trimmingCharacters(in: .whitespaces).isEmpty
                   }) else { return }
             path = [w.id]
+            if DemoMode.screen == "aerobic" {
+                try? await Task.sleep(for: .milliseconds(600))
+                AerobicCountdown.shared.showDemoCountdown(
+                    exercise: DemoMode.restExercise, remaining: 68, bpm: 137)
+                return
+            }
             guard DemoMode.screen == "rest" else { return }
             // After the log screen is on screen, so the countdown covers it
             // rather than being presented from nothing.

@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import SwiftData
 import HealthKit
+import SwiftUI
 @testable import workout_aicode
 
 
@@ -985,4 +986,42 @@ private func at(_ seconds: Int) -> Date {
                                  averageHeartRate: 120, maximumHeartRate: 140,
                                  zoneSeconds: [600, 0, 0, 0, 0])
     #expect(!measured.zoneSeconds.isEmpty)
+}
+
+// MARK: - Zone colours and the remembered duration
+
+@Test func eachZoneHasItsOwnColour() {
+    // The phone painted every lit zone red, so zone 1 — the easy one — arrived
+    // looking like the hardest, and the two devices disagreed about the same
+    // heart rate. One shared table now.
+    #expect(ZoneColour.all.count == HeartRateZones.zoneCount)
+    #expect(Set(ZoneColour.all.map(String.init(describing:))).count == HeartRateZones.zoneCount)
+    for zone in 1...HeartRateZones.zoneCount {
+        #expect(ZoneColour.colour(zone) == ZoneColour.all[zone - 1])
+    }
+}
+
+@Test func anOutOfRangeZoneDoesNotCrashTheBand() {
+    #expect(ZoneColour.colour(0) == .secondary)
+    #expect(ZoneColour.colour(99) == .secondary)
+}
+
+@Test func theWatchIsToldHowLongAnExerciseRanLastTime() throws {
+    // Without this the Watch wheel opened at a flat twenty minutes for every
+    // aerobic exercise, however long it was actually done for.
+    let entry = SyncLastEntry(weights: [], reps: [], durationSeconds: 1080)
+    let restored = try JSONDecoder().decode(
+        SyncLastEntry.self, from: try JSONEncoder().encode(entry))
+    #expect(restored.durationSeconds == 1080)
+}
+
+@Test func aLastEntryFromBeforeDurationsStillDecodes() throws {
+    // The two apps update independently, so an older phone's payload must not
+    // cost the Watch its whole exercise list.
+    let json = """
+    {"weights":[50,55],"reps":[10,8]}
+    """
+    let restored = try JSONDecoder().decode(SyncLastEntry.self, from: Data(json.utf8))
+    #expect(restored.weights == [50, 55])
+    #expect(restored.durationSeconds == 0)   // "not an aerobic exercise"
 }

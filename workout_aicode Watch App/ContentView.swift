@@ -72,6 +72,9 @@ struct ContentView: View {
             switch DemoMode.screen {
             case "log":    path = [DemoMode.workoutId]
             case "paused": session.showDemoPaused()
+            case "heart":
+                WatchAerobicWorkout.shared.showDemoHeartRate(
+                    exercise: "Indoor cycle", bpm: 137, remaining: 1080)
             case "rest":
                 path = [DemoMode.workoutId]
                 // After the log screen exists, so the countdown covers it.
