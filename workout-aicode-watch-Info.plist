@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Lives at the repo root, not inside the Watch folder: that folder is a
+	  synchronized group, so a plist inside it is copied as a resource AND used
+	  as the Info.plist, and the build fails with "multiple commands produce".
+	  The phone plist sits here for the same reason.
+
+	  A real file rather than INFOPLIST_KEY_ build settings. Those only work
+	  for keys on Xcode's allowlist: WKBackgroundModes is not on it, so the
+	  setting was accepted, built without complaint, and never reached the
+	  built app. Without the background mode a workout session is suspended
+	  the moment the wrist drops; without the usage strings watchOS TERMINATES
+	  the app the instant it asks for HealthKit authorisation, which is what
+	  made starting an indoor cycle on the Watch look like a crash.
+	-->
+	<key>WKBackgroundModes</key>
+	<array>
+		<string>workout-processing</string>
+	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>SetsRepsWheels reads your heart rate while an aerobic exercise is running, so it can show your current rate and which heart rate zone you are in. It also reads your resting heart rate and date of birth once at the start, only to work out where your zones fall. These readings stay on your devices and are never sent anywhere.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>SetsRepsWheels saves an aerobic exercise to Apple Health as a workout of the activity you chose, so that it appears in Fitness and counts towards your rings.</string>
+</dict>
+</plist>

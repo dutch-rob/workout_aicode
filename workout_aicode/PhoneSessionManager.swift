@@ -365,10 +365,27 @@ final class PhoneSessionManager: NSObject, ObservableObject {
               WCSession.default.activationState == .activated,
               WCSession.default.isWatchAppInstalled,
               HKHealthStore.isHealthDataAvailable() else { return }
+
+        // Launching the Watch app for a workout needs this app authorised to
+        // share workouts, and that authorisation was previously only ever asked
+        // for by the "Save workouts to Apple Health" switch. Anyone who had
+        // left that off would have had the launch refused with nothing to
+        // explain it. Asked here so the aerobic feature stands on its own.
+        let store = HKHealthStore()
         let configuration = WatchAerobicActivity.configuration(for: activityRaw)
-        HKHealthStore().startWatchApp(with: configuration) { _, _ in
-            // Nothing to report: a Watch that cannot be launched simply means
-            // no heart rate, and the countdown on this device is unaffected.
+        let workoutType = HKObjectType.workoutType()
+        let launch = {
+            store.startWatchApp(with: configuration) { _, _ in
+                // Nothing to report: a Watch that cannot be launched simply
+                // means no heart rate, and the countdown here is unaffected.
+            }
+        }
+        if store.authorizationStatus(for: workoutType) == .notDetermined {
+            store.requestAuthorization(toShare: [workoutType], read: []) { _, _ in
+                DispatchQueue.main.async(execute: launch)
+            }
+        } else {
+            launch()
         }
     }
 

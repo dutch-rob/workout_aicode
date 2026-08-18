@@ -623,7 +623,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SetsRepsWheels;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
+				INFOPLIST_FILE = "workout-aicode-watch-Info.plist";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "robotex.workout-aicode";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -658,7 +658,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SetsRepsWheels;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
+				INFOPLIST_FILE = "workout-aicode-watch-Info.plist";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "robotex.workout-aicode";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
