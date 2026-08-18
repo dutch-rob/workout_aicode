@@ -279,7 +279,7 @@ struct HeartRateBar: View {
                     }
                 }
                 .frame(maxWidth: 220)
-                Text(zone.map { "zone \($0)" } ?? "below zone 1")
+                Text(zone.map { "zone \($0)" } ?? "")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

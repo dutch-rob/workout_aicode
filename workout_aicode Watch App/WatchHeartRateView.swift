@@ -31,7 +31,7 @@ enum ZoneColour {
 }
 
 struct WatchHeartRateBand: View {
-    /// 1...5, or nil when the rate is below zone 1 or nothing has arrived.
+    /// 1...5, or nil when nothing has arrived yet.
     let zone: Int?
     /// Where inside the lit zone the marker sits, 0...1.
     let fraction: Double

@@ -746,27 +746,33 @@ struct SchemaMigrationTests {
 // an empty Health database supplies nonsense, and the boundaries have to stay
 // in order regardless.
 
-@Test func zonesDivideTheReserveFromHalfwayUp() {
-    // Resting 60, max 180 → reserve 120. Boundaries at 50/60/70/80/90%.
+@Test func fourThresholdsDivideTheFiveZones() {
+    // Resting 60, max 180 → reserve 120. Thresholds at 50/60/70/80%.
+    // Four, not five: zone 1 has no floor and zone 5 no ceiling.
     let z = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
-    #expect(z.lowerBounds == [120, 132, 144, 156, 168])
+    #expect(z.boundaries == [120, 132, 144, 156])
+    #expect(z.boundaries.count == HeartRateZones.zoneCount - 1)
 }
 
 @Test func aHeartRateLandsInTheRightZone() {
     let z = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
-    #expect(z.zone(for: 119) == nil)     // not training yet
-    #expect(z.zone(for: 120) == 1)       // exactly on a boundary is in the zone
-    #expect(z.zone(for: 143) == 2)
-    #expect(z.zone(for: 144) == 3)
+    #expect(z.zone(for: 119) == 1)       // below the first threshold IS zone 1
+    #expect(z.zone(for: 120) == 2)       // exactly on a threshold is the zone above
+    #expect(z.zone(for: 131) == 2)
+    #expect(z.zone(for: 143) == 3)
+    #expect(z.zone(for: 144) == 4)
     #expect(z.zone(for: 175) == 5)
     #expect(z.zone(for: 250) == 5)       // above maximum is still the top zone
 }
 
-@Test func belowTheFirstBoundaryIsNoZoneRatherThanZoneZero() {
-    // There is no zone 0. Returning nil makes a caller handle "not training
-    // yet" instead of quietly showing a zone that does not exist.
+@Test func aRestingHeartRateIsInZoneOneNotBelowIt() {
+    // The bug this replaced: sitting on the bike at 69 bpm lit no segment at
+    // all and the phone said "below zone 1". Apple's zone 1 has no floor — it
+    // is described as "under 90", not as a range — so every rate is in a zone.
     let z = HeartRateZones()
-    #expect(z.zone(for: 40) == nil)
+    #expect(z.zone(for: 40) == 1)
+    #expect(z.zone(for: 69) == 1)
+    #expect((1...HeartRateZones.zoneCount).contains(z.zone(for: 1)))
 }
 
 @Test func zoneRangesMeetWithoutOverlapping() {
@@ -774,9 +780,10 @@ struct SchemaMigrationTests {
     for zone in 1..<HeartRateZones.zoneCount {
         let this = z.range(forZone: zone)!
         let next = z.range(forZone: zone + 1)!
-        #expect(this.upper! + 1 == next.lower)
+        #expect(this.upper! + 1 == next.lower!)
     }
-    // The top zone is open-ended: there is always a little more.
+    // Both ends are open: there is always a little less, and a little more.
+    #expect(z.range(forZone: 1)?.lower == nil)
     #expect(z.range(forZone: 5)?.upper == nil)
     #expect(z.range(forZone: 0) == nil)
     #expect(z.range(forZone: 6) == nil)
@@ -787,8 +794,8 @@ struct SchemaMigrationTests {
     // make "which zone" meaningless.
     let z = HeartRateZones(restingHeartRate: 200, maximumHeartRate: 50)
     #expect(z.maximumHeartRate > z.restingHeartRate)
-    #expect(z.lowerBounds == z.lowerBounds.sorted())
-    #expect(Set(z.lowerBounds).count == HeartRateZones.zoneCount)
+    #expect(z.boundaries == z.boundaries.sorted())
+    #expect(Set(z.boundaries).count == HeartRateZones.zoneCount - 1)
 }
 
 @Test func theEstimatedMaximumFollowsAgeButStaysSane() {
@@ -813,11 +820,11 @@ private func at(_ seconds: Int) -> Date {
 @Test func timeIsCreditedToTheZoneItWasSpentIn() {
     let zones = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
     var tally = ZoneTally(zones: zones)
-    tally.add(beatsPerMinute: 130, at: at(0))    // zone 1, from here
-    tally.add(beatsPerMinute: 150, at: at(30))   // 30s credited to zone 1
-    tally.add(beatsPerMinute: 150, at: at(60))   // 30s to zone 3
-    #expect(tally.seconds[0] == 30)
-    #expect(tally.seconds[2] == 30)
+    tally.add(beatsPerMinute: 130, at: at(0))    // zone 2, from here
+    tally.add(beatsPerMinute: 150, at: at(30))   // 30s credited to zone 2
+    tally.add(beatsPerMinute: 150, at: at(60))   // 30s to zone 4
+    #expect(tally.seconds[1] == 30)
+    #expect(tally.seconds[3] == 30)
     #expect(tally.totalCountedSeconds == 60)
 }
 
@@ -829,13 +836,15 @@ private func at(_ seconds: Int) -> Date {
     #expect(tally.totalCountedSeconds == 0)
 }
 
-@Test func timeUnderZoneOneIsCountedSeparatelyNotDropped() {
+@Test func easyEffortIsCountedInZoneOne() {
+    // It used to be set aside as "below zone 1", which meant a gentle warm-up
+    // vanished from the totals.
     let zones = HeartRateZones(restingHeartRate: 60, maximumHeartRate: 180)
     var tally = ZoneTally(zones: zones)
     tally.add(beatsPerMinute: 80, at: at(0))
     tally.add(beatsPerMinute: 80, at: at(45))
-    #expect(tally.secondsBelowZone1 == 45)
-    #expect(tally.seconds.allSatisfy { $0 == 0 })
+    #expect(tally.seconds[0] == 45)
+    #expect(tally.totalCountedSeconds == 45)
 }
 
 @Test func aLongGapInReadingsIsNotGuessedAt() {
@@ -848,7 +857,7 @@ private func at(_ seconds: Int) -> Date {
     #expect(tally.totalCountedSeconds == 0)
     // ...and it picks straight back up afterwards.
     tally.add(beatsPerMinute: 150, at: at(310))
-    #expect(tally.seconds[2] == 10)
+    #expect(tally.totalCountedSeconds == 10)
 }
 
 @Test func totalsDoNotDependOnHowOftenTheWatchSamples() {
@@ -912,19 +921,20 @@ private func at(_ seconds: Int) -> Date {
     byRate.add(beatsPerMinute: 150, at: at(40))
 
     var byZone = ZoneTally(zones: zones)
-    byZone.add(zone: 3, at: at(0))
-    byZone.add(zone: 3, at: at(40))
+    byZone.add(zone: zones.zone(for: 150), at: at(0))
+    byZone.add(zone: zones.zone(for: 150), at: at(40))
 
     #expect(byRate.seconds == byZone.seconds)
-    #expect(byZone.seconds[2] == 40)
+    #expect(byZone.totalCountedSeconds == 40)
 }
 
-@Test func anUnknownZoneFromTheWatchIsCountedAsBelowZoneOne() {
+@Test func aReadingThatNeverArrivedIsCreditedNowhere() {
+    // nil is not a zone, it is the absence of a measurement, and inventing a
+    // home for it would put time in the totals that nobody trained.
     var tally = ZoneTally(zones: HeartRateZones())
     tally.add(zone: nil, at: at(0))
     tally.add(zone: nil, at: at(25))
-    #expect(tally.secondsBelowZone1 == 25)
-    #expect(tally.seconds.allSatisfy { $0 == 0 })
+    #expect(tally.totalCountedSeconds == 0)
 }
 
 // MARK: - Ready-made aerobic exercises

@@ -179,19 +179,13 @@ struct WatchLogExerciseView: View {
             .frame(height: wheelHeight())
 
             Text("minutes").font(.caption2).foregroundStyle(.secondary)
-
-            Button("start") {
-                let seconds = max(60, durationSeconds(at: currentIndex))
-                Task {
-                    await WatchAerobicWorkout.shared.startHere(
-                        activityRaw: exercise.aerobicActivityRaw,
-                        exercise: exercise.name,
-                        seconds: seconds)
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
         }
+    }
+
+    /// Whether an aerobic session has already been run for this exercise, so
+    /// the button can stop offering to start another and offer to log instead.
+    private func hasRun(_ index: Int) -> Bool {
+        WatchAerobicWorkout.shared.hasFinishedSession
     }
 
     private func durationSeconds(at index: Int) -> Int {
@@ -280,20 +274,25 @@ struct WatchLogExerciseView: View {
         return VStack(spacing: 2) {
                 // Toggle sits on the clock's row, left-aligned and width-capped so
                 // it never runs under the time (which is top-right).
-                HStack(spacing: 0) {
-                    Button {
-                        withAnimation { mode = (mode == .reps ? .weights : .reps) }
-                    } label: {
-                        Label(mode == .reps ? "weights" : "reps",
-                              systemImage: "arrow.left.arrow.right")
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity)
+                // No reps/weights toggle for an aerobic exercise: it switches
+                // between two things it does not have, and it was sitting on
+                // top of the exercise name.
+                if exercise?.isAerobic != true {
+                    HStack(spacing: 0) {
+                        Button {
+                            withAnimation { mode = (mode == .reps ? .weights : .reps) }
+                        } label: {
+                            Label(mode == .reps ? "weights" : "reps",
+                                  systemImage: "arrow.left.arrow.right")
+                                .font(.caption2)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .frame(width: toggleWidth)
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .frame(width: toggleWidth)
-                    Spacer(minLength: 0)
                 }
 
                 if let exercise {
@@ -443,6 +442,24 @@ struct WatchLogExerciseView: View {
 
     private func actionButtons(for exercise: SyncExercise) -> some View {
         HStack(spacing: 3) {
+            // For cardio the first button starts the session, and only becomes
+            // "log" once one has been run. A fourth button stacked above this
+            // row is what overlapped it — the watch has room for three.
+            if exercise.isAerobic, !hasRun(currentIndex) {
+                Button {
+                    let seconds = max(60, durationSeconds(at: currentIndex))
+                    Task {
+                        await WatchAerobicWorkout.shared.startHere(
+                            activityRaw: exercise.aerobicActivityRaw,
+                            exercise: exercise.name,
+                            seconds: seconds)
+                    }
+                } label: {
+                    Text("start").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
+            } else {
             Button {
                 logAndNext(exercise)
             } label: {
@@ -450,6 +467,7 @@ struct WatchLogExerciseView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.mini)
+            }
 
             Button("quit") {
                 let endedAt = Date()

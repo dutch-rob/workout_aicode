@@ -38,12 +38,18 @@ enum DemoMode {
                          lowestWeight: 20, highestWeight: 120, weightIncrement: 5),
             SyncExercise(id: "d3", name: "Seated row", numberOfSeries: 2,
                          lowestWeight: 20, highestWeight: 120, weightIncrement: 5),
+            // One aerobic exercise, so the cardio screen can be photographed
+            // and its layout checked without a real phone driving the Watch.
+            SyncExercise(id: "d4", name: "Indoor cycle", numberOfSeries: 1,
+                         lowestWeight: 0, highestWeight: 0, weightIncrement: 1,
+                         kindRaw: SyncDefaults.aerobicKind,
+                         aerobicActivityRaw: "indoorCycle"),
         ]
     }
 
     static var workouts: [SyncWorkout] {
         [
-            SyncWorkout(id: workoutId, name: "Upper body", exerciseOrder: ["d1", "d2", "d3"]),
+            SyncWorkout(id: workoutId, name: "Upper body", exerciseOrder: ["d1", "d2", "d3", "d4"]),
             SyncWorkout(id: "demo-legs", name: "Leg day", exerciseOrder: []),
         ]
     }

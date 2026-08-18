@@ -33,20 +33,25 @@ enum ZoneSource: String {
 }
 
 struct HeartRateZones: Equatable {
-    /// Lower bound of each zone in beats per minute, lowest first. Five zones,
-    /// so five bounds; anything under the first is "below zone 1", which is
-    /// what a warm-up mostly is.
-    let lowerBounds: [Int]
+    /// The four thresholds between the five zones, in beats per minute: the top
+    /// of zone 1, of zone 2, of zone 3 and of zone 4.
+    ///
+    /// Four, not five, and that is the whole shape of it. Zone 1 has no floor —
+    /// it is everything below the zone 2 threshold, which is why the Workout
+    /// app describes it as "under 90" rather than as a range. An earlier
+    /// version here gave zone 1 a bottom too and invented a "below zone 1"
+    /// underneath it, so a resting heart rate at the start of a ride lit
+    /// nothing at all and the band sat empty while the number ticked along.
+    let boundaries: [Int]
     let restingHeartRate: Int
     let maximumHeartRate: Int
     let source: ZoneSource
 
     static let zoneCount = 5
 
-    /// Apple's automatic zones are described as being based on heart rate
-    /// reserve — the room between resting and maximum — divided into fifths
-    /// from 50% upward. Below 50% is not a training zone at all.
-    static let reserveFractions: [Double] = [0.5, 0.6, 0.7, 0.8, 0.9]
+    /// Where the four thresholds fall as fractions of heart rate reserve.
+    /// Everything under the first is zone 1; everything over the last is zone 5.
+    static let reserveFractions: [Double] = [0.5, 0.6, 0.7, 0.8]
 
     /// Rough maximum for someone of this age, the textbook 220 − age.
     ///
@@ -75,20 +80,19 @@ struct HeartRateZones: Equatable {
         self.restingHeartRate = resting
         self.maximumHeartRate = maximum
         self.source = source
-        self.lowerBounds = Self.reserveFractions.map {
+        self.boundaries = Self.reserveFractions.map {
             Int((Double(resting) + reserve * $0).rounded())
         }
     }
 
-    /// Which zone a heart rate falls in: 1...5, or nil for anything below the
-    /// first boundary. Nil rather than "zone 0" because there is no such zone —
-    /// it is simply not training yet, and a caller that forgets to handle it
-    /// should have to notice.
-    func zone(for beatsPerMinute: Int) -> Int? {
-        guard let index = lowerBounds.lastIndex(where: { beatsPerMinute >= $0 }) else {
-            return nil
-        }
-        return index + 1
+    /// Which zone a heart rate falls in: always 1...5.
+    ///
+    /// Never optional. Every heart rate is in a zone — a slow one is in zone 1,
+    /// which is what zone 1 is for.
+    func zone(for beatsPerMinute: Int) -> Int {
+        var zone = 1
+        for boundary in boundaries where beatsPerMinute >= boundary { zone += 1 }
+        return zone
     }
 
     /// Where within its zone a heart rate sits, 0 at the bottom of the zone and
@@ -97,25 +101,33 @@ struct HeartRateZones: Equatable {
     /// The top zone has no ceiling, so its span is taken as the same width as
     /// the one below: an arrow that pinned itself to the left edge for every
     /// rate above the last boundary would say less than nothing.
+    /// Where within its zone a heart rate sits, 0 at the bottom and 1 at the
+    /// top — what the marker under the band points at.
+    ///
+    /// The outer two zones are open-ended, so each is given the width of its
+    /// neighbour: a marker pinned to one edge for every rate outside the middle
+    /// would say less than nothing. Zone 1 is measured from the resting rate,
+    /// which is the lowest it is going to get in practice.
     func fraction(forBeatsPerMinute bpm: Int, inZone zone: Int) -> Double {
         guard let range = range(forZone: zone) else { return 0 }
-        let width: Int
-        if let upper = range.upper {
-            width = upper - range.lower + 1
-        } else {
-            let below = self.range(forZone: zone - 1)
-            width = below.map { ($0.upper ?? $0.lower) - $0.lower + 1 } ?? 20
-        }
-        guard width > 0 else { return 0 }
-        return min(1, max(0, Double(bpm - range.lower) / Double(width)))
+        let lower = range.lower ?? restingHeartRate
+        let upper = range.upper ?? (lower + typicalZoneWidth)
+        let width = max(1, upper - lower + 1)
+        return min(1, max(0, Double(bpm - lower) / Double(width)))
     }
 
-    /// The range shown for a zone. The top zone has no upper bound worth
-    /// printing — there is always a little more.
-    func range(forZone zone: Int) -> (lower: Int, upper: Int?)? {
+    /// How wide a middle zone is, used to give the open-ended ones a size.
+    private var typicalZoneWidth: Int {
+        guard boundaries.count >= 2 else { return 20 }
+        return max(1, boundaries[1] - boundaries[0])
+    }
+
+    /// The range shown for a zone. Zone 1 has no lower bound and zone 5 no
+    /// upper one — there is always a little less, and always a little more.
+    func range(forZone zone: Int) -> (lower: Int?, upper: Int?)? {
         guard zone >= 1, zone <= Self.zoneCount else { return nil }
-        let lower = lowerBounds[zone - 1]
-        let upper = zone < Self.zoneCount ? lowerBounds[zone] - 1 : nil
+        let lower = zone == 1 ? nil : boundaries[zone - 2]
+        let upper = zone == Self.zoneCount ? nil : boundaries[zone - 1] - 1
         return (lower, upper)
     }
 }
@@ -130,11 +142,12 @@ struct HeartRateZones: Equatable {
 /// sparse one of the same duration.
 struct ZoneTally {
     let zones: HeartRateZones
-    /// Seconds in each of the five zones, lowest first. Time under zone 1 is
-    /// counted by `secondsBelowZone1` rather than being silently dropped.
+    /// Seconds in each of the five zones, lowest first. There is nowhere else
+    /// for time to go: every heart rate is in a zone, and a slow one is in
+    /// zone 1.
     private(set) var seconds = [Int](repeating: 0, count: HeartRateZones.zoneCount)
-    private(set) var secondsBelowZone1 = 0
     private var last: (date: Date, zone: Int?)?
+
 
     init(zones: HeartRateZones) {
         self.zones = zones
@@ -162,12 +175,12 @@ struct ZoneTally {
         // down, or the app was asleep. Guessing what happened in between would
         // be inventing data.
         guard elapsed > 0, elapsed <= 60 else { return }
-        if let zone = previous.zone, zone >= 1, zone <= HeartRateZones.zoneCount {
-            seconds[zone - 1] += elapsed
-        } else {
-            secondsBelowZone1 += elapsed
-        }
+        // An unknown zone can only mean a reading that never arrived, so there
+        // is nothing to credit it to.
+        guard let zone = previous.zone,
+              zone >= 1, zone <= HeartRateZones.zoneCount else { return }
+        seconds[zone - 1] += elapsed
     }
 
-    var totalCountedSeconds: Int { seconds.reduce(0, +) + secondsBelowZone1 }
+    var totalCountedSeconds: Int { seconds.reduce(0, +) }
 }

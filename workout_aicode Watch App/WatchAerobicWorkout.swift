@@ -34,7 +34,8 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     @Published private(set) var averageHeartRate: Int = 0
     @Published private(set) var maximumHeartRate: Int = 0
     @Published private(set) var isRunning = false
-    /// Which zone the current rate falls in, 1...5, or nil below zone 1.
+    /// Which zone the current rate falls in, 1...5. Nil only before the first
+    /// reading arrives — every actual heart rate is in a zone.
     @Published private(set) var currentZone: Int?
     /// Where inside that zone, 0...1, for the marker under the band.
     @Published private(set) var currentZoneFraction: Double = 0
@@ -190,6 +191,9 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     /// running one cannot inherit the first one's numbers.
     private var lastSummary: Summary?
 
+    /// True once a session has finished and not yet been logged.
+    var hasFinishedSession: Bool { lastSummary != nil }
+
     func takeLastSummary() -> Summary? {
         defer { lastSummary = nil }
         return lastSummary
@@ -262,9 +266,7 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
             let zone = zones.zone(for: bpm)
             currentHeartRate = bpm
             currentZone = zone
-            currentZoneFraction = zone.map {
-                zones.fraction(forBeatsPerMinute: bpm, inZone: $0)
-            } ?? 0
+            currentZoneFraction = zones.fraction(forBeatsPerMinute: bpm, inZone: zone)
             tally.add(beatsPerMinute: bpm,
                       at: statistics.mostRecentQuantityDateInterval()?.end ?? date)
             // Straight on to the phone, which is where the countdown the user
