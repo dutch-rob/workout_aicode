@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import UIKit
 import UserNotifications
+import HealthKit
 
 // MARK: - The aerobic countdown
 //
@@ -106,6 +107,40 @@ final class AerobicCountdown: ObservableObject {
     /// "no heart rate" and "no time in any zone" are different claims.
     var zoneSeconds: [Int] { heartRateCount > 0 ? tally.seconds : [] }
 
+    /// Why there is no heart rate on screen, when there is not one.
+    ///
+    /// Read authorisation cannot be queried — HealthKit deliberately refuses to
+    /// say whether a read was denied, so that an app cannot infer health facts
+    /// from the answer. So this reports what can actually be observed: whether
+    /// there is a Watch at all, and whether anything has arrived from it yet.
+    enum HeartRateStatus {
+        case measuring
+        /// A Watch is there and the first reading has not landed. Normal for
+        /// the first few seconds of every session.
+        case waiting
+        /// No Watch app, so there is nothing to measure with.
+        case noWatch
+        /// A Watch, but nothing has come from it for long enough that waiting
+        /// is no longer the likeliest explanation.
+        case silent
+    }
+
+    /// How long to call it "waiting" before calling it silent.
+    private static let patience: TimeInterval = 25
+
+    var heartRateStatus: HeartRateStatus {
+        if currentHeartRate != nil { return .measuring }
+        if !watchWasPresent { return .noWatch }
+        return elapsedSeconds < Int(Self.patience) ? .waiting : .silent
+    }
+
+    /// The activity of the running session, so a Watch-less one can be written
+    /// to Health when it ends.
+    private var activityRaw: String?
+    /// Whether a Watch app existed when this session began. Captured at the
+    /// start so the message cannot flip about mid-session.
+    private var watchWasPresent = false
+
     /// A reading from the Watch.
     func receiveHeartRate(_ beatsPerMinute: Int, zone: Int?, at date: Date = Date()) {
         guard endsAt != nil else { return }   // nothing running; ignore stragglers
@@ -153,6 +188,8 @@ final class AerobicCountdown: ObservableObject {
         heartRateSum = 0
         heartRateCount = 0
         tally = ZoneTally(zones: HeartRateZones())
+        watchWasPresent = PhoneSessionManager.shared.hasWatchApp
+        self.activityRaw = activityRaw
         UIApplication.shared.isIdleTimerDisabled = true
         // Without this the countdown is silent for anyone who never switched
         // the rest timer on — which includes anybody using this app only for
@@ -196,6 +233,7 @@ final class AerobicCountdown: ObservableObject {
         tick = Date()
         finishedSeconds = nil
         isMirroring = true
+        watchWasPresent = true          // the Watch is running it
         isShowing = true
         startTicking()
     }
@@ -232,8 +270,20 @@ final class AerobicCountdown: ObservableObject {
         // A mirrored session is logged by the Watch, so this device must not
         // also write it — two rows for one bike ride.
         if !isMirroring { finishedSeconds = elapsedSeconds }
+        writeToHealthIfNoWatch()
         clear()
         if haptic { RestTimerHaptics.strong() }
+    }
+
+    /// With no Watch there is no Apple workout for this session, so the phone
+    /// writes a plain one. With a Watch, the Watch's is the record.
+    private func writeToHealthIfNoWatch() {
+        guard !watchWasPresent, !isMirroring,
+              let startedAt, elapsedSeconds > 0 else { return }
+        HealthWorkoutLogger.shared.saveAerobicWorkout(
+            activityType: WatchAerobicActivity.activityType(for: activityRaw),
+            start: startedAt,
+            end: startedAt.addingTimeInterval(Double(elapsedSeconds)))
     }
 
     private func clear(tellWatch: Bool = true) {
@@ -348,6 +398,10 @@ struct AerobicSummaryView: View {
 struct HeartRateBar: View {
     let bpm: Int?
     let zone: Int?
+    /// Why there is nothing to show, when there is nothing. Silence used to be
+    /// the whole message, which left "my Watch is on my wrist and this is
+    /// blank" indistinguishable from "this phone has no Watch".
+    var status: AerobicCountdown.HeartRateStatus = .waiting
 
     var body: some View {
         if let bpm {
@@ -380,6 +434,34 @@ struct HeartRateBar: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        } else {
+            VStack(spacing: 2) {
+                Label(explanation.headline, systemImage: "heart.slash")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let detail = explanation.detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+            }
+        }
+    }
+
+    /// Says what is true rather than guessing at a cause. HealthKit will not
+    /// reveal whether a read was refused, so "no readings are arriving" is the
+    /// most this can honestly claim — with the likeliest fix named after it.
+    private var explanation: (headline: String, detail: String?) {
+        switch status {
+        case .measuring, .waiting:
+            return ("waiting for your heart rate…", nil)
+        case .noWatch:
+            return ("no heart rate", "Heart rate and zones need an Apple Watch.")
+        case .silent:
+            return ("no heart rate",
+                    "Nothing is arriving from your Watch. Check that the app is allowed to read heart rate in Settings › Health on the Watch.")
         }
     }
 }
@@ -407,7 +489,8 @@ struct AerobicCountdownView: View {
             }
             .frame(width: 240, height: 240)
 
-            HeartRateBar(bpm: session.currentHeartRate, zone: session.currentZone)
+            HeartRateBar(bpm: session.currentHeartRate, zone: session.currentZone,
+                         status: session.heartRateStatus)
 
             Text("You can leave the app — it will buzz when the time is up.")
                 .font(.footnote)

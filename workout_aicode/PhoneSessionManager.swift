@@ -37,6 +37,15 @@ final class PhoneSessionManager: NSObject, ObservableObject {
 
     @Published private(set) var isWatchReachable = false
 
+    /// Whether there is a Watch app to measure anything at all. Distinct from
+    /// reachable: an installed Watch app that happens to be asleep will still
+    /// wake for a workout, whereas no Watch app means no heart rate, ever.
+    var hasWatchApp: Bool {
+        guard WCSession.isSupported() else { return false }
+        let session = WCSession.default
+        return session.activationState == .activated && session.isWatchAppInstalled
+    }
+
     /// Role of THIS device in the shared workout session.
     @Published private(set) var role: HandoverRole = .none
     /// When set, ContentView should navigate into this workout. Cleared on consume.

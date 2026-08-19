@@ -61,7 +61,9 @@ While it runs, the Watch shows your heart rate and which of five zones you are i
 
 The zones are worked out from your resting heart rate and your age, following the method Apple describes for its automatic zones. Expect them to be close to what the Workout app shows rather than identical — Apple uses a maximum heart rate measured from your own history, which no app can read.
 
-Without a Watch everything works except the heart rate: the countdown runs, the session is logged with its duration, and no zones are shown rather than empty ones.
+Without a Watch everything works except the heart rate. The countdown runs, the session is logged with its duration, and the screen says plainly that heart rate needs a Watch rather than leaving a blank space. The session is still written to Apple Health as a workout of the chosen activity — the Fitness app has been on iPhone in its own right since iOS 16, with a Move ring but no Exercise or Stand ring — so it counts for what it can.
+
+If a Watch is there but nothing arrives from it for a while, the screen says that too, and points at Settings › Health on the Watch. It does not claim to know that permission was refused: HealthKit deliberately will not say whether a read was denied, so the app reports what it can actually see — that no readings are coming — and names the likeliest fix.
 
 ## The rest timer
 Off unless you switch it on, in Settings. With it off the app behaves exactly as it always has.

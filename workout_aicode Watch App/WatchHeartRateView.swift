@@ -142,12 +142,23 @@ struct WatchHeartRateView: View {
                         .font(.system(size: 18))
                 }
             } else {
-                // The first reading takes a few seconds every time. Saying so
-                // beats a zero, which would read as a measurement.
-                Text("waiting for your heart rate…")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                // The first reading takes a few seconds every time, so waiting
+                // is said first. Once it has been a while, silence is more
+                // likely to be a refused permission than a slow sensor, and
+                // saying so beats leaving the screen blank — HealthKit will not
+                // reveal whether a read was denied, so this names the likeliest
+                // fix rather than claiming to know.
+                VStack(spacing: 2) {
+                    Text(workout.hasWaitedLongForHeartRate
+                         ? "no heart rate" : "waiting for your heart rate…")
+                        .font(.caption2)
+                    if workout.hasWaitedLongForHeartRate {
+                        Text("Allow heart rate in Settings › Health")
+                            .font(.system(size: 10))
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
             }
 
             Button("stop") {

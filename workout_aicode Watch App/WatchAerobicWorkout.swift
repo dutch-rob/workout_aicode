@@ -67,6 +67,15 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     private var zones = HeartRateZones()
     private var tally = ZoneTally(zones: HeartRateZones())
 
+    /// True once a session has run long enough that a missing heart rate is
+    /// more likely to be a refused permission than a slow first reading.
+    var hasWaitedLongForHeartRate: Bool {
+        guard isRunning, currentHeartRate == nil, let startedAt else { return false }
+        return Date().timeIntervalSince(startedAt) > 25
+    }
+
+    private var startedAt: Date?
+
     /// What a finished session measured, for the log.
     struct Summary {
         let durationSeconds: Int
@@ -129,6 +138,7 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
             builder.delegate = self
 
             let started = Date()
+            startedAt = started
             session.startActivity(with: started)
             try await builder.beginCollection(at: started)
 
@@ -169,6 +179,7 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
         currentHeartRate = nil
         currentZone = nil
         endsAt = nil
+        startedAt = nil
         stopTicking()
         lastSummary = summary
         return summary
