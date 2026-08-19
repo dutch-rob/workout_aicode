@@ -536,6 +536,10 @@ struct LogExerciseView: View {
     @State private var loggedIndices: Set<Int> = []
     /// What the wheel is set to, per exercise: how long you mean to go.
     @State private var durations: [Int] = []
+    /// What each aerobic session came to, per exercise. Held here rather than
+    /// read off the countdown at log time: the countdown keeps only the last
+    /// session, so anything logged out of order would take the wrong numbers.
+    @State private var summaries: [AerobicSummary?] = []
     /// What was actually done, per exercise; 0 until a session has run.
     ///
     /// Kept apart from the wheel deliberately. Folding the two together meant
@@ -631,6 +635,11 @@ struct LogExerciseView: View {
         .onChange(of: aerobic.finishedSeconds) { _, seconds in
             guard let seconds, seconds > 0, currentIndex < actualSeconds.count else { return }
             actualSeconds[currentIndex] = seconds
+            summaries[currentIndex] = AerobicSummary(
+                seconds: seconds,
+                averageHeartRate: aerobic.averageHeartRate,
+                maximumHeartRate: aerobic.maximumHeartRate,
+                zoneSeconds: aerobic.zoneSeconds)
             aerobic.finishedSeconds = nil
         }
     }
@@ -764,6 +773,7 @@ struct LogExerciseView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .disabled(!canLog(exerciseAt(currentIndex)))
 
             // Quitting early still ends the workout, so it is recorded too
             // (finishWorkoutHere skips it when no set was logged).
@@ -839,6 +849,12 @@ struct LogExerciseView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
 
+        // What the session came to, once one has been run: the thing you are
+        // about to log, shown before you log it.
+        if let summary = summaryFor(currentIndex) {
+            AerobicSummaryView(summary: summary)
+        }
+
         Text("minutes").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
         Picker("", selection: minutesBinding()) {
             ForEach(AerobicDefaults.minuteChoices, id: \.self) { Text("\($0)").tag($0) }
@@ -861,17 +877,28 @@ struct LogExerciseView: View {
         .controlSize(.large)
         .padding(.top, 8)
 
-        if currentIndex < actualSeconds.count, actualSeconds[currentIndex] > 0 {
-            Text("done: \(AerobicDefaults.label(actualSeconds[currentIndex]))")
-                .font(.footnote)
-                .bold()
-        } else if let done = lastRecorded(for: exercise) {
+        if let done = lastRecorded(for: exercise), summaryFor(currentIndex) == nil {
             Text("last time: \(AerobicDefaults.label(done))")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
 
         Spacer(minLength: 0)
+    }
+
+    /// The finished session for this exercise, if one has been run.
+    private func summaryFor(_ index: Int) -> AerobicSummary? {
+        guard index < summaries.count else { return nil }
+        return summaries[index]
+    }
+
+    /// Whether the log button has anything to record for an aerobic exercise.
+    ///
+    /// Nothing to log until a session has actually run: logging the wheel's
+    /// number on its own would record a plan as though it were a measurement.
+    private func canLog(_ exercise: ExerciseDef?) -> Bool {
+        guard let exercise, exercise.kind == .aerobic else { return true }
+        return summaryFor(currentIndex) != nil
     }
 
     /// What this exercise came to the last time it was logged, if anything.
@@ -894,6 +921,9 @@ struct LogExerciseView: View {
             set: { newValue in
                 guard currentIndex < durations.count else { return }
                 durations[currentIndex] = newValue * 60
+                if let id = exerciseAt(currentIndex)?.id {
+                    AerobicDefaults.rememberMinutes(newValue, for: id)
+                }
             }
         )
     }
@@ -961,12 +991,7 @@ struct LogExerciseView: View {
         reps = exerciseIds.map { exId in last[exId]?.reps ?? [] }
         // Pre-filled from the last session of each aerobic exercise, so the
         // wheel opens where it was left, exactly like the weight wheels.
-        durations = exerciseIds.map { exId in
-            guard let log = last[exId],
-                  let result = aerobicResults.first(where: { $0.logId == log.id })
-            else { return AerobicDefaults.defaultMinutes * 60 }
-            return result.durationSeconds
-        }
+        durations = exerciseIds.map { AerobicDefaults.lastMinutes(for: $0) * 60 }
     }
 
     /// Guarantee one weights/reps row per exercise. An adopted snapshot can be
@@ -983,6 +1008,8 @@ struct LogExerciseView: View {
         if durations.count > n { durations = Array(durations.prefix(n)) }
         if actualSeconds.count < n { actualSeconds += Array(repeating: 0, count: n - actualSeconds.count) }
         if actualSeconds.count > n { actualSeconds = Array(actualSeconds.prefix(n)) }
+        if summaries.count < n { summaries += Array(repeating: nil, count: n - summaries.count) }
+        if summaries.count > n { summaries = Array(summaries.prefix(n)) }
     }
 
     private func setWeight(_ value: Int, series: Int) {
@@ -1099,22 +1126,16 @@ struct LogExerciseView: View {
         // What was actually done, if a session ran. Otherwise what the wheel
         // says: someone may have used the machine's own timer and only wants
         // it written down, which is no less a record than the rest of this app.
-        let measured = currentIndex < actualSeconds.count ? actualSeconds[currentIndex] : 0
-        let seconds = measured > 0 ? measured : durationSeconds(at: currentIndex)
-        guard seconds > 0 else { return }
 
-        // Heart rate belongs to a session that actually ran, and only to the
-        // exercise that ran it. The countdown keeps its readings until the next
-        // session starts, so a second aerobic exercise logged straight off the
-        // wheel would otherwise inherit the first one's heart rate and claim to
-        // have measured something it never did.
-        let ranASession = measured > 0
+        // From the snapshot taken when that session ended, so the numbers
+        // belong to the exercise that produced them.
+        guard let summary = summaryFor(currentIndex) else { return }
         context.insert(AerobicResult(
             logId: log.id,
-            durationSeconds: seconds,
-            averageHeartRate: ranASession ? aerobic.averageHeartRate : 0,
-            maximumHeartRate: ranASession ? aerobic.maximumHeartRate : 0,
-            zoneSeconds: ranASession ? aerobic.zoneSeconds : []))
+            durationSeconds: summary.seconds,
+            averageHeartRate: summary.averageHeartRate,
+            maximumHeartRate: summary.maximumHeartRate,
+            zoneSeconds: summary.zoneSeconds))
     }
 
     private func goToNextUnlogged() {
@@ -1198,6 +1219,7 @@ struct LogsListView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
     @Query private var workouts: [WorkoutDef]
     @Query private var exercises: [ExerciseDef]
+    @Query private var aerobicResults: [AerobicResult]
 
     var body: some View {
         if logs.isEmpty {
@@ -1286,7 +1308,27 @@ struct LogsListView: View {
         return rows
     }
 
+    /// What a finished aerobic session came to, if this log is one.
+    private func aerobicSummary(for log: WorkoutLog) -> AerobicSummary? {
+        guard let result = aerobicResults.first(where: { $0.logId == log.id }) else { return nil }
+        return AerobicSummary(seconds: result.durationSeconds,
+                              averageHeartRate: result.averageHeartRate,
+                              maximumHeartRate: result.maximumHeartRate,
+                              zoneSeconds: result.zoneSeconds)
+    }
+
+    @ViewBuilder
     private func weightsRepsGrid(for log: WorkoutLog, at date: Date) -> some View {
+        // A ride has no sets, so the w/r grid rendered two empty rows with
+        // nothing in them. Its own numbers instead.
+        if let summary = aerobicSummary(for: log) {
+            AerobicSummaryView(summary: summary, compact: true)
+        } else {
+            weightsRepsColumns(for: log, at: date)
+        }
+    }
+
+    private func weightsRepsColumns(for log: WorkoutLog, at date: Date) -> some View {
         let previous = previousEntry(for: log.exerciseId, before: date)
         let maxCount = max(log.weights.count, log.reps.count)
         return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {

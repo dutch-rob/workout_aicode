@@ -16,6 +16,19 @@ import UserNotifications
 // number would be a wish rather than a measurement, and the statistics have to
 // be about the second one.
 
+/// What one finished aerobic session came to, kept per exercise on the log
+/// screen so the numbers stay put while you look at them and are still there
+/// when you press log.
+struct AerobicSummary: Equatable {
+    let seconds: Int
+    let averageHeartRate: Int
+    let maximumHeartRate: Int
+    /// Five entries when a heart rate was measured, empty when none was.
+    let zoneSeconds: [Int]
+
+    var hasHeartRate: Bool { averageHeartRate > 0 }
+}
+
 enum AerobicDefaults {
     /// Wheel range, in minutes. One minute at the bottom because the wheel is
     /// also how you log a short interval; two hours at the top is past what
@@ -25,6 +38,26 @@ enum AerobicDefaults {
 
     static func label(_ seconds: Int) -> String {
         String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    // MARK: Remembering the length
+    //
+    // The wheel opens on whatever was chosen for THIS exercise last time, which
+    // is what makes it a one-tap start on the second visit. Deliberately the
+    // number that was *chosen*, not the one that was logged: stopping a
+    // twenty-minute ride at twelve should not quietly make it a twelve-minute
+    // ride for ever after.
+
+    private static func key(_ exerciseId: UUID) -> String {
+        "aerobicMinutes-\(exerciseId.uuidString)"
+    }
+
+    static func lastMinutes(for exerciseId: UUID) -> Int {
+        UserDefaults.standard.object(forKey: key(exerciseId)) as? Int ?? defaultMinutes
+    }
+
+    static func rememberMinutes(_ minutes: Int, for exerciseId: UUID) {
+        UserDefaults.standard.set(minutes, forKey: key(exerciseId))
     }
 }
 
@@ -258,6 +291,49 @@ final class AerobicCountdown: ObservableObject {
             content: content,
             trigger: UNTimeIntervalNotificationTrigger(
                 timeInterval: max(1, date.timeIntervalSinceNow), repeats: false)))
+    }
+}
+
+// MARK: - What a finished session came to
+
+/// Total time, average heart rate and time in each zone, for the log screen to
+/// show before you press log and for the logs screen to show afterwards.
+///
+/// Time in zone is omitted entirely when no heart rate was measured — without a
+/// Watch there is nothing to say, and five zeroes would claim a measurement of
+/// nothing rather than the absence of one.
+struct AerobicSummaryView: View {
+    let summary: AerobicSummary
+    var compact = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 2 : 4) {
+            HStack(spacing: 12) {
+                Label(AerobicDefaults.label(summary.seconds), systemImage: "clock")
+                if summary.hasHeartRate {
+                    Label("\(summary.averageHeartRate) bpm avg", systemImage: "heart.fill")
+                        .foregroundStyle(.red)
+                }
+            }
+            .font(compact ? .caption : .subheadline)
+            .monospacedDigit()
+
+            if summary.zoneSeconds.count == HeartRateZones.zoneCount {
+                HStack(spacing: compact ? 6 : 10) {
+                    ForEach(0..<HeartRateZones.zoneCount, id: \.self) { index in
+                        VStack(spacing: 1) {
+                            Text("Z\(index + 1)")
+                                .font(.system(size: compact ? 8 : 10, weight: .bold))
+                                .foregroundStyle(.secondary)
+                            Text(AerobicDefaults.label(summary.zoneSeconds[index]))
+                                .font(.system(size: compact ? 10 : 12))
+                                .monospacedDigit()
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

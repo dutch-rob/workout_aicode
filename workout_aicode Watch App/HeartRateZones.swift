@@ -95,12 +95,6 @@ struct HeartRateZones: Equatable {
         return zone
     }
 
-    /// Where within its zone a heart rate sits, 0 at the bottom of the zone and
-    /// 1 at the top — what the little marker under the band points at.
-    ///
-    /// The top zone has no ceiling, so its span is taken as the same width as
-    /// the one below: an arrow that pinned itself to the left edge for every
-    /// rate above the last boundary would say less than nothing.
     /// Where within its zone a heart rate sits, 0 at the bottom and 1 at the
     /// top — what the marker under the band points at.
     ///
