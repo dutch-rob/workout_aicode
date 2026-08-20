@@ -242,7 +242,7 @@ struct ContentView: View {
 
 #Preview("Home - ContentView") {
     let container = try! ModelContainer(
-        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self,
+        for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     let context = container.mainContext

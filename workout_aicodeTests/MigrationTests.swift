@@ -200,6 +200,161 @@ struct SchemaMigrationTests {
         #expect(result.zoneSeconds.isEmpty)
     }
 
+
+    // MARK: - Draft mode
+    //
+    // Somewhere to try things out, where leaving asks rather than assumes. The
+    // assertions that matter are about what is NOT taken away.
+
+    @Test @MainActor func draftRecordsOnlyWhatWasMadeWhileItWasOn() throws {
+        let url = temporaryStoreURL(); defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let context = ModelContext(container)
+
+        // Made before draft: must never be at risk.
+        let existing = ExerciseDef(name: "Bench press", primaryMuscle: .chest)
+        context.insert(existing)
+        try context.save()
+
+        DraftMode.start(in: context)
+        let sketch = ExerciseDef(name: "Sketch", primaryMuscle: .back)
+        context.insert(sketch)
+        DraftMode.note(exercise: sketch.id, in: context)
+
+        // Editing something that already existed is a real edit, not a draft
+        // creation — leaving draft must not undo it.
+        existing.name = "Bench press (wide)"
+        try context.save()
+
+        DraftMode.discardAll(in: context)
+
+        let left = try context.fetch(FetchDescriptor<ExerciseDef>())
+        #expect(left.count == 1)
+        #expect(left.first?.name == "Bench press (wide)")
+    }
+
+    @Test @MainActor func keepingADraftLeavesEverythingInPlace() throws {
+        let url = temporaryStoreURL(); defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let context = ModelContext(container)
+
+        DraftMode.start(in: context)
+        let exercise = ExerciseDef(name: "Keeper", primaryMuscle: .chest)
+        context.insert(exercise)
+        DraftMode.note(exercise: exercise.id, in: context)
+        DraftMode.keepAll(in: context)
+
+        #expect(try context.fetch(FetchDescriptor<ExerciseDef>()).count == 1)
+        // And draft is off afterwards, with nothing left marked.
+        #expect(!DraftMode.isOn(in: context))
+    }
+
+    @Test @MainActor func discardingTakesTheLogAndItsMeasurementsTogether() throws {
+        let url = temporaryStoreURL(); defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let context = ModelContext(container)
+
+        DraftMode.start(in: context)
+        let log = WorkoutLog(workoutId: UUID(), exerciseId: UUID(), weights: [], reps: [])
+        context.insert(log)
+        context.insert(AerobicResult(logId: log.id, durationSeconds: 900))
+        DraftMode.note(log: log.id, in: context)
+        try context.save()
+
+        DraftMode.discardAll(in: context)
+        #expect(try context.fetch(FetchDescriptor<WorkoutLog>()).isEmpty)
+        // The measurements belong to the log; leaving them would be an orphan
+        // row nothing could ever reach.
+        #expect(try context.fetch(FetchDescriptor<AerobicResult>()).isEmpty)
+    }
+
+    @Test @MainActor func discardingUnpicksADraftExerciseFromAKeptWorkout() throws {
+        // A draft exercise added to a workout that existed before: deleting the
+        // exercise must take it out of that workout too, or the workout is left
+        // pointing at something that is gone.
+        let url = temporaryStoreURL(); defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let context = ModelContext(container)
+
+        let workout = WorkoutDef(name: "Upper body")
+        context.insert(workout)
+        try context.save()
+
+        DraftMode.start(in: context)
+        let sketch = ExerciseDef(name: "Sketch", primaryMuscle: .back)
+        context.insert(sketch)
+        DraftMode.note(exercise: sketch.id, in: context)
+        workout.exerciseOrder.append(sketch.id)
+        try context.save()
+
+        DraftMode.discardAll(in: context)
+        let kept = try #require(try context.fetch(FetchDescriptor<WorkoutDef>()).first)
+        #expect(kept.name == "Upper body")
+        #expect(kept.exerciseOrder.isEmpty)
+    }
+
+    @Test @MainActor func draftSurvivesARelaunch() throws {
+        // Held in the store, not in memory: coming back to find draft quietly
+        // off, with nothing marked any more, is how work gets lost by accident.
+        let url = temporaryStoreURL(); defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        DraftMode.start(in: ModelContext(container))
+        #expect(DraftMode.isOn(in: ModelContext(container)))
+    }
+
+    @Test @MainActor func switchingDraftOnTwiceKeepsOneSession() throws {
+        let url = temporaryStoreURL(); defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let context = ModelContext(container)
+        let first = DraftMode.start(in: context)
+        let second = DraftMode.start(in: context)
+        #expect(first.id == second.id)
+        #expect(try context.fetch(FetchDescriptor<DraftSession>()).count == 1)
+    }
+
+    @Test @MainActor func nothingIsRecordedWhileDraftIsOff() throws {
+        let url = temporaryStoreURL(); defer { removeStore(at: url) }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let context = ModelContext(container)
+        // The call sites are unconditional, so this has to be a safe no-op.
+        DraftMode.note(exercise: UUID(), in: context)
+        #expect(try context.fetch(FetchDescriptor<DraftSession>()).isEmpty)
+    }
+
+    @Test @MainActor func aV6StoreReachesV7WithItsDataIntact() throws {
+        let url = temporaryStoreURL(); defer { removeStore(at: url) }
+        do {
+            let container = try ModelContainer(
+                for: Schema(versionedSchema: WorkoutLogSchemaV2.self),
+                configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+            let context = ModelContext(container)
+            context.insert(WorkoutLogSchemaV1.ExerciseDef(name: "Squat"))
+            try context.save()
+        }
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            migrationPlan: WorkoutMigrationPlan.self,
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        let exercise = try #require(try ModelContext(container)
+            .fetch(FetchDescriptor<ExerciseDef>()).first)
+        #expect(exercise.name == "Squat")
+        #expect(!DraftMode.isOn(in: ModelContext(container)))
+    }
+
     private func temporaryStoreURL() -> URL {
         URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("migration-\(UUID().uuidString).sqlite")

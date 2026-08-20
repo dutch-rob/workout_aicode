@@ -38,7 +38,7 @@ enum DemoMode {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         // swiftlint:disable:next force_try
         let container = try! ModelContainer(
-            for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self,
+            for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self,
             configurations: config
         )
         seed(into: container.mainContext)

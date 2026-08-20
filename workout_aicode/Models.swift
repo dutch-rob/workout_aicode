@@ -643,6 +643,86 @@ final class AerobicResult: Identifiable, Codable {
     }
 }
 
+// V7 adds draft sessions.
+//
+// A separate entity again, and for the same reason AerobicResult is one: not a
+// single existing model changes, so the migration is an added table and nothing
+// else. Marking each exercise, workout and log with an `isDraft` flag instead
+// would have meant altering ExerciseDef, WorkoutDef AND WorkoutLog at once —
+// and WorkoutDef has never changed since V1, so it would have needed freezing
+// across six versions to do it. Recording ids in one place costs a join and
+// buys leaving all of that alone.
+enum WorkoutLogSchemaV7: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(7, 0, 0) }
+    static var models: [any PersistentModel.Type] {
+        [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self,
+         AerobicResult.self, DraftSession.self]
+    }
+}
+
+/// What was made while "draft" was switched on.
+///
+/// Draft is for trying things: invent a workout, sketch a few exercises, log a
+/// session to see how it looks, and then decide. Turning it off asks whether to
+/// keep what was made or throw it away, naming the count of each — it never
+/// discards anything on its own, because the difference between "I was playing"
+/// and "I built my new routine" is not something the app can tell.
+///
+/// Only things CREATED during the session are recorded. Editing an exercise
+/// that already existed is a real edit and is never undone by leaving draft:
+/// otherwise a stray toggle could take away work that had nothing to do with
+/// the experiment.
+@Model
+final class DraftSession {
+    var id: UUID = UUID()
+    var startedAt: Date = Date()
+    /// One session is active at a time; finished ones are deleted, so a
+    /// surviving active row is how draft mode outlives a crash or a relaunch.
+    var isActive: Bool = true
+
+    var exerciseIds: [UUID] = []
+    var workoutIds: [UUID] = []
+    var logIds: [UUID] = []
+
+    init(id: UUID = UUID(), startedAt: Date = Date(), isActive: Bool = true,
+         exerciseIds: [UUID] = [], workoutIds: [UUID] = [], logIds: [UUID] = []) {
+        self.id = id
+        self.startedAt = startedAt
+        self.isActive = isActive
+        self.exerciseIds = exerciseIds
+        self.workoutIds = workoutIds
+        self.logIds = logIds
+    }
+
+    var isEmpty: Bool {
+        exerciseIds.isEmpty && workoutIds.isEmpty && logIds.isEmpty
+    }
+
+    /// How many of each, for the question asked when draft is switched off.
+    var counts: (exercises: Int, workouts: Int, logs: Int) {
+        (exerciseIds.count, workoutIds.count, logIds.count)
+    }
+
+    /// "2 exercises, 1 workout" — only the parts that have anything in them, so
+    /// the question never lists zeroes.
+    var summary: String {
+        var parts: [String] = []
+        if !workoutIds.isEmpty {
+            parts.append("\(workoutIds.count) workout\(workoutIds.count == 1 ? "" : "s")")
+        }
+        if !exerciseIds.isEmpty {
+            parts.append("\(exerciseIds.count) exercise\(exerciseIds.count == 1 ? "" : "s")")
+        }
+        if !logIds.isEmpty {
+            parts.append("\(logIds.count) logged session\(logIds.count == 1 ? "" : "s")")
+        }
+        return parts.isEmpty ? "nothing" : parts.joined(separator: ", ")
+    }
+
+    func contains(exercise id: UUID) -> Bool { exerciseIds.contains(id) }
+    func contains(workout id: UUID) -> Bool { workoutIds.contains(id) }
+}
+
 /// Module-level alias so the rest of the app can keep saying `WorkoutLog`.
 typealias WorkoutLog = WorkoutLogSchemaV2.WorkoutLog
 
@@ -658,9 +738,17 @@ enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self,
          WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self, WorkoutLogSchemaV5.self,
-         WorkoutLogSchemaV6.self]
+         WorkoutLogSchemaV6.self, WorkoutLogSchemaV7.self]
     }
-    static var stages: [MigrationStage] { [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6] }
+    static var stages: [MigrationStage] {
+        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7]
+    }
+
+    /// One new entity, nothing else touched — see WorkoutLogSchemaV7.
+    static let v6toV7 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV6.self,
+        toVersion:   WorkoutLogSchemaV7.self
+    )
 
     /// Additive only — see WorkoutLogSchemaV6.
     static let v5toV6 = MigrationStage.lightweight(
