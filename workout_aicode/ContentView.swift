@@ -224,7 +224,8 @@ struct ContentView: View {
             if DemoMode.screen == "aerobic" {
                 try? await Task.sleep(for: .milliseconds(600))
                 AerobicCountdown.shared.showDemoCountdown(
-                    exercise: DemoMode.restExercise, remaining: 68, bpm: 137)
+                    exercise: DemoMode.aerobicExercise,
+                    remaining: 13 * 60, bpm: 137, total: 20 * 60)
                 return
             }
             guard DemoMode.screen == "rest" else { return }

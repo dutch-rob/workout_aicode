@@ -21,6 +21,8 @@ enum DemoMode {
     // show the same rest, and a remaining time that leaves the ring obviously
     // part-way round rather than nearly full or nearly empty.
     static let restExercise = "Lats pull down"
+    /// The aerobic exercise the demo seeds, for the cardio captures.
+    static let aerobicExercise = "Exercise bike"
     static let restTotal = 90
     static let restRemaining = 68
 

@@ -207,9 +207,15 @@ final class AerobicCountdown: ObservableObject {
     #if DEBUG
     /// Screenshot/demo only: a countdown with a heart rate in it, so the band
     /// can be seen without a Watch on a wrist.
-    func showDemoCountdown(exercise: String, remaining: Int, bpm: Int) {
+    ///
+    /// `total` is given rather than derived, so a capture can show a real
+    /// twenty-minute ride part-way through. The screenshot script waits for two
+    /// identical frames before it shoots, which a running clock never produces,
+    /// so it gives up after twenty seconds — and those twenty seconds come off
+    /// whatever is left. Start high enough that it still reads well.
+    func showDemoCountdown(exercise: String, remaining: Int, bpm: Int, total: Int) {
         exerciseName = exercise
-        totalSeconds = remaining + 60
+        totalSeconds = total
         startedAt = Date()
         endsAt = Date().addingTimeInterval(Double(remaining))
         tick = Date()

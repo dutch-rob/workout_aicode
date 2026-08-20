@@ -47,11 +47,12 @@ udid_of() {   # exact device name -> UDID
 
 # Screens per form factor: "<launch-arg-screen>:<file label>"
 # Order matters: this is the order they appear on the App Store page.
-IOS_SCREENS=("workouts:01_workouts" "log:02_log_exercise" "rest:03_rest_timer"
-             "library:04_library" "graphs:05_graphs" "progress:06_progress"
-             "logs:07_logs" "info:08_info")
+IOS_SCREENS=("workouts:01_workouts" "log:02_log_exercise" "aerobic:03_aerobic"
+             "rest:04_rest_timer" "library:05_library" "graphs:06_graphs"
+             "progress:07_progress" "logs:08_logs" "info:09_info")
 WATCH_SCREENS=("workouts:01_watch_workouts" "log:02_watch_log"
-               "rest:03_watch_rest_timer" "paused:04_watch_handover")
+               "heart:03_watch_heart_rate" "rest:04_watch_rest_timer"
+               "paused:05_watch_handover")
 
 shoot() {   # udid  devlabel  bundle  screen  filelabel  settle  minkb
   local udid="$1" dev="$2" bundle="$3" screen="$4" label="$5"
