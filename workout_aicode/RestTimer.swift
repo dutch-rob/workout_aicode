@@ -44,7 +44,10 @@ enum RestTimerDefaults {
     /// The rest a new exercise gets, and what the first-run question starts on.
     /// Long enough for a working set of a compound lift, short enough not to
     /// feel like a punishment on an isolation movement.
-    static let seconds = 90
+    ///
+    /// Defined beside the model that stores it, so the schema does not have to
+    /// reach into this file — and through it into UIKit — for a number.
+    static let seconds = defaultRestSeconds
 
     /// Selectable rests: 0:15 to 5:00 in quarter minutes.
     static let choices: [Int] = Array(stride(from: 15, through: 300, by: 15))

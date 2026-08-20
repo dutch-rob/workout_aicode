@@ -96,6 +96,7 @@
 		153422952FAD9F5700895019 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		153422972FADA04500895019 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.4.sdk/System/Library/Frameworks/WatchConnectivity.framework; sourceTree = DEVELOPER_DIR; };
 		157B219E301E8F7100A4CF7B /* PRIVACY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRIVACY.md; sourceTree = "<group>"; };
+		15D8AEAA3037BDBD009A6CBC /* workout_aicode_MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = workout_aicode_MacOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD49352F594E7100D778CD /* workout_aicode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = workout_aicode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD49442F594E7600D778CD /* workout_aicodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD494E2F594E7600D778CD /* workout_aicodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -117,6 +118,11 @@
 			path = "workout_aicode Watch AppUITests";
 			sourceTree = "<group>";
 		};
+		15D8AEAB3037BDBD009A6CBC /* workout_aicode_MacOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = workout_aicode_MacOS;
+			sourceTree = "<group>";
+		};
 		15DD49372F594E7100D778CD /* workout_aicode */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = workout_aicode;
@@ -130,6 +136,11 @@
 		15DD49512F594E7600D778CD /* workout_aicodeUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = workout_aicodeUITests;
+			sourceTree = "<group>";
+		};
+		221D23E429084D4197CA186D /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -151,6 +162,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		153422782FAD953D00895019 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15D8AEA73037BDBD009A6CBC /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -203,6 +221,7 @@
 				153422662FAD953800895019 /* workout_aicode Watch App */,
 				153422742FAD953D00895019 /* workout_aicode Watch AppTests */,
 				1534227E2FAD953D00895019 /* workout_aicode Watch AppUITests */,
+				15D8AEAB3037BDBD009A6CBC /* workout_aicode_MacOS */,
 				153422942FAD9F5600895019 /* Frameworks */,
 				15DD49362F594E7100D778CD /* Products */,
 			);
@@ -218,6 +237,7 @@
 				153422622FAD953800895019 /* workout_aicode Watch App-.app */,
 				153422712FAD953D00895019 /* workout_aicode Watch AppTests.xctest */,
 				1534227B2FAD953D00895019 /* workout_aicode Watch AppUITests.xctest */,
+				15D8AEAA3037BDBD009A6CBC /* workout_aicode_MacOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -312,6 +332,29 @@
 			productReference = 1534227B2FAD953D00895019 /* workout_aicode Watch AppUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		15D8AEA93037BDBD009A6CBC /* workout_aicode_MacOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15D8AEB23037BDBD009A6CBC /* Build configuration list for PBXNativeTarget "workout_aicode_MacOS" */;
+			buildPhases = (
+				15D8AEA63037BDBD009A6CBC /* Sources */,
+				15D8AEA73037BDBD009A6CBC /* Frameworks */,
+				15D8AEA83037BDBD009A6CBC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				221D23E429084D4197CA186D /* Shared */,
+				15D8AEAB3037BDBD009A6CBC /* workout_aicode_MacOS */,
+			);
+			name = workout_aicode_MacOS;
+			packageProductDependencies = (
+			);
+			productName = workout_aicode_MacOS;
+			productReference = 15D8AEAA3037BDBD009A6CBC /* workout_aicode_MacOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 		15DD49342F594E7100D778CD /* workout_aicode */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 15DD49582F594E7600D778CD /* Build configuration list for PBXNativeTarget "workout_aicode" */;
@@ -327,6 +370,7 @@
 				EEEE0003EEEE0003EEEE0003 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
+				221D23E429084D4197CA186D /* Shared */,
 				15DD49372F594E7100D778CD /* workout_aicode */,
 			);
 			name = workout_aicode;
@@ -389,7 +433,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2640;
+				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					1534225C2FAD953800895019 = {
@@ -405,6 +449,9 @@
 					1534227A2FAD953D00895019 = {
 						CreatedOnToolsVersion = 26.4.1;
 						TestTargetID = 153422612FAD953800895019;
+					};
+					15D8AEA93037BDBD009A6CBC = {
+						CreatedOnToolsVersion = 26.6;
 					};
 					15DD49342F594E7100D778CD = {
 						CreatedOnToolsVersion = 26.3;
@@ -440,6 +487,7 @@
 				153422612FAD953800895019 /* workout_aicode Watch App- */,
 				153422702FAD953D00895019 /* workout_aicode Watch AppTests */,
 				1534227A2FAD953D00895019 /* workout_aicode Watch AppUITests */,
+				15D8AEA93037BDBD009A6CBC /* workout_aicode_MacOS */,
 			);
 		};
 /* End PBXProject section */
@@ -467,6 +515,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		153422792FAD953D00895019 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15D8AEA83037BDBD009A6CBC /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -515,6 +570,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		153422772FAD953D00895019 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		15D8AEA63037BDBD009A6CBC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -585,7 +647,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 96ND29QYH3;
 				INFOPLIST_KEY_CFBundleDisplayName = SetsRepsWheels;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode-Watch-App";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -601,7 +663,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 96ND29QYH3;
 				INFOPLIST_KEY_CFBundleDisplayName = SetsRepsWheels;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode-Watch-App";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -770,6 +832,96 @@
 			};
 			name = Release;
 		};
+		15D8AEB33037BDBD009A6CBC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = workout_aicode_MacOS/workout_aicode_MacOS.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 96ND29QYH3;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode-MacOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		15D8AEB43037BDBD009A6CBC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = workout_aicode_MacOS/workout_aicode_MacOS.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 96ND29QYH3;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode-MacOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		15DD49562F594E7600D778CD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -907,7 +1059,7 @@
 				CODE_SIGN_ENTITLEMENTS = workout_aicode/workout_aicode.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = workout_aicode/workout_aicode.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 96ND29QYH3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -948,7 +1100,7 @@
 				CODE_SIGN_ENTITLEMENTS = workout_aicode/workout_aicode.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = workout_aicode/workout_aicode.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 96ND29QYH3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1100,6 +1252,15 @@
 			buildConfigurations = (
 				1534228A2FAD953D00895019 /* Debug */,
 				1534228B2FAD953D00895019 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		15D8AEB23037BDBD009A6CBC /* Build configuration list for PBXNativeTarget "workout_aicode_MacOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				15D8AEB33037BDBD009A6CBC /* Debug */,
+				15D8AEB43037BDBD009A6CBC /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

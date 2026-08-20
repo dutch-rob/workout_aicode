@@ -20,6 +20,15 @@ enum MovementType: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// The rest a new exercise starts with, in seconds.
+///
+/// Lives here, with the model that stores it, rather than on RestTimerDefaults
+/// where it began. The dependency used to run the other way — the schema
+/// reaching into the rest timer for a default — which quietly tied Models.swift
+/// to UIKit and kept the whole model layer off any platform without it. The
+/// timer reads this now.
+public let defaultRestSeconds = 90
+
 /// What sort of thing an exercise is. Not a muscle group, despite appearing
 /// next to them in the picker as "AE": a muscle group says which part of you a
 /// movement works, and every strength statistic in this app — estimated 1RM,
@@ -166,7 +175,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     /// Seconds of rest after a set of this exercise. Per exercise, because a
     /// heavy compound needs longer than a light isolation movement. Only used
     /// when the rest timer is switched on in Settings.
-    var restSeconds: Int = RestTimerDefaults.seconds
+    var restSeconds: Int = defaultRestSeconds
 
     var kind: ExerciseKind {
         get { ExerciseKind(rawValue: kindRaw) ?? .strength }
@@ -199,7 +208,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
          secondaryMuscles: [MuscleGroup] = [],
          libraryKey: String? = nil,
          isFavourite: Bool = false,
-         restSeconds: Int = RestTimerDefaults.seconds,
+         restSeconds: Int = defaultRestSeconds,
          kind: ExerciseKind = .strength,
          aerobicActivity: AerobicActivity? = nil) {
         let clampedNumberOfSeries = max(0, numberOfSeries)
@@ -246,7 +255,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
             .compactMap(MuscleGroup.init(rawValue:))
         let libraryKey = try c.decodeIfPresent(String.self, forKey: .libraryKey)
         let favourite = try c.decodeIfPresent(Bool.self, forKey: .isFavourite) ?? false
-        let rest = try c.decodeIfPresent(Int.self, forKey: .restSeconds) ?? RestTimerDefaults.seconds
+        let rest = try c.decodeIfPresent(Int.self, forKey: .restSeconds) ?? defaultRestSeconds
         // An export from before aerobic exercises existed describes a strength
         // exercise, and an unknown kind from a future one is safer read as
         // strength than dropped.
@@ -550,7 +559,7 @@ enum WorkoutLogSchemaV5: VersionedSchema {
         var secondaryMuscleRaw: [String] = []
         var libraryKey: String? = nil
         var isFavourite: Bool = false
-        var restSeconds: Int = RestTimerDefaults.seconds
+        var restSeconds: Int = defaultRestSeconds
 
         init(id: UUID = UUID(), name: String) {
             self.id = id
