@@ -50,7 +50,11 @@ Not everything in a gym has weights on it. An exercise can be **aerobic** instea
 
 An aerobic exercise has no sets, weights or muscle groups, because none of those say anything about twenty minutes on a bike. It has one wheel for how long, and a **start** button.
 
-Starting one runs a countdown. As with the rest timer, the clock keeps the time rather than the screen, so you can pocket the phone: it buzzes and shows a notification when the time is up, and **stop** ends it early. What gets logged is what you actually did — stopping at twelve minutes of a twenty-minute ride records twelve. Logging without starting the countdown records what the wheel says, for when you would rather use the machine's own timer.
+The wheel opens on however many minutes you chose for that exercise last time — twenty to begin with — so a regular session is one tap to start. It remembers what you *chose*, not what you did: stopping a twenty-minute ride early does not quietly turn it into a shorter ride for ever after.
+
+Starting one runs a countdown. As with the rest timer, the clock keeps the time rather than the screen, so you can pocket the phone: it buzzes and shows a notification when the time is up, and **stop** ends it early.
+
+**log, next** stays greyed out until a session has actually run, because a number on a wheel is a plan and this app logs what happened. Once it has, what the session came to appears under the exercise name — the time, your average heart rate, and how long you spent in each zone — and the button comes back. What gets logged is what you actually did: stopping at twelve minutes of a twenty-minute ride records twelve. Those same numbers are what the *logs* tab shows for that session, in place of the weights and repetitions a strength exercise has.
 
 The rest timer stays quiet after cardio. You have just done twenty minutes of it, and a ninety-second rest prompt on top would be noise.
 
