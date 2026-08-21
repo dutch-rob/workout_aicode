@@ -40,27 +40,6 @@ enum MusclePickerStyle: String, CaseIterable, Identifiable {
     var icon: String { self == .body ? "figure.arms.open" : "square.grid.2x2" }
 }
 
-/// Where an exercise sits in the library list.
-///
-/// What you use floats to the top: starred first, then anything that is in a
-/// workout, then the rest, each alphabetical within its band. A long list is
-/// mostly exercises tried once, and those should not sit between the ones done
-/// every week.
-///
-/// The exception is choosing exercises FOR a workout. There, tapping a row is
-/// what changes its membership, so ranking by membership would move every row
-/// out from under the finger that just tapped it. The order stays still:
-/// starred, then everything else.
-enum LibraryOrder {
-    static func rank(isFavourite: Bool,
-                     isInAnyWorkout: Bool,
-                     choosingForWorkout: Bool) -> Int {
-        if isFavourite { return 0 }
-        guard !choosingForWorkout else { return 1 }
-        return isInAnyWorkout ? 1 : 2
-    }
-}
-
 struct ExerciseLibraryView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.modelContext) private var context
@@ -290,11 +269,7 @@ struct ExerciseLibraryView: View {
     /// library key, like the strength side, so the same activity logged by
     /// different people stays comparable however they rename their copy.
     private func addAerobic(_ entry: AerobicLibraryExercise) -> ExerciseDef {
-        let exercise = ExerciseDefaults.makeExercise(name: entry.name,
-                                                     libraryKey: entry.key)
-        exercise.name = uniqueName(entry.name)
-        exercise.kind = .aerobic
-        exercise.aerobicActivity = entry.activity
+        let exercise = ExerciseLibrary.take(entry, existingNames: exercises.map(\.name))
         store.saveExercise(exercise)
         if let workout = context_.workout {
             workout.exerciseOrder.append(exercise.id)
@@ -386,7 +361,7 @@ struct ExerciseLibraryView: View {
     /// courtesy the strength side has always had.
     private var aerobicTemplates: [AerobicLibraryExercise] {
         guard aerobicOnly, !favouritesOnly else { return [] }
-        let taken = Set(exercises.compactMap(\.libraryKey))
+        let taken = ExerciseLibrary.takenKeys(in: exercises)
         return ExerciseLibrary.aerobic.filter { !taken.contains($0.key) }
     }
 
@@ -394,7 +369,7 @@ struct ExerciseLibraryView: View {
         // The strength catalogue has nothing to offer under the aerobic filter;
         // aerobicTemplates covers that case instead.
         guard !favouritesOnly, !aerobicOnly else { return [] }
-        let taken = Set(exercises.compactMap(\.libraryKey))
+        let taken = ExerciseLibrary.takenKeys(in: exercises)
         return ExerciseLibrary.forPrimary(filter).filter { !taken.contains($0.key) }
     }
 
@@ -407,21 +382,9 @@ struct ExerciseLibraryView: View {
     // MARK: Actions
 
     private func add(_ entry: LibraryExercise) -> ExerciseDef {
-        let exercise = ExerciseDefaults.makeExercise(name: entry.name,
-                                                     primary: entry.primary,
-                                                     secondary: entry.secondary,
-                                                     libraryKey: entry.key)
-        exercise.name = uniqueName(entry.name)
+        let exercise = ExerciseLibrary.take(entry, existingNames: exercises.map(\.name))
         store.saveExercise(exercise)
         return exercise
-    }
-
-    private func uniqueName(_ base: String) -> String {
-        let taken = Set(exercises.map { $0.name.lowercased() })
-        guard taken.contains(base.lowercased()) else { return base }
-        var n = 2
-        while taken.contains("\(base) \(n)".lowercased()) { n += 1 }
-        return "\(base) \(n)"
     }
 
     private func toggle(_ exercise: ExerciseDef, in workout: WorkoutDef) {

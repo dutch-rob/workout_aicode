@@ -92,10 +92,11 @@ struct MacWorkoutsView: View {
 // MARK: - One workout
 
 struct MacWorkoutDetail: View {
+    @Environment(\.modelContext) private var context
     @Bindable var workout: WorkoutDef
     let allExercises: [ExerciseDef]
 
-    @State private var filter = ""
+    @State private var sieve = MacExerciseSieve()
 
     private var inWorkout: [ExerciseDef] {
         workout.exerciseOrder.compactMap { id in allExercises.first { $0.id == id } }
@@ -108,11 +109,23 @@ struct MacWorkoutDetail: View {
     /// different set of names for every workout, with nothing on screen saying
     /// why. Showing all of them and ticking the ones already in makes the list
     /// the same everywhere, and answers the question without a sentence.
+    ///
+    /// Order stays put while you click: starred first, then everything else
+    /// alphabetically, with no regard for what is already in. Ranking by
+    /// membership here would move a row out from under the pointer the moment
+    /// it was clicked.
     private var offered: [ExerciseDef] {
-        let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return allExercises }
-        return allExercises.filter { $0.name.lowercased().contains(needle) }
+        sieve.own(allExercises).sorted { a, b in
+            let ra = LibraryOrder.rank(isFavourite: a.isFavourite, isInAnyWorkout: true,
+                                       choosingForWorkout: true)
+            let rb = LibraryOrder.rank(isFavourite: b.isFavourite, isInAnyWorkout: true,
+                                       choosingForWorkout: true)
+            if ra != rb { return ra < rb }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
     }
+
+    private var takenKeys: Set<String> { ExerciseLibrary.takenKeys(in: allExercises) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -155,32 +168,90 @@ struct MacWorkoutDetail: View {
 
     private var library: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("All your exercises — ticked ones are already in")
+            Text("Add an exercise — ticked ones are already in")
                 .font(.caption).foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
-            TextField("Filter", text: $filter)
-                .textFieldStyle(.roundedBorder)
-                .padding(.horizontal, 8)
-            List(offered) { exercise in
-                let already = workout.exerciseOrder.contains(exercise.id)
-                HStack {
-                    Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
-                        .foregroundStyle(already ? .secondary : .primary)
-                    Spacer()
-                    if already {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                            .help("Already in this workout")
-                    } else {
-                        Button {
-                            workout.exerciseOrder.append(exercise.id)
-                        } label: { Image(systemName: "plus.circle") }
-                        .buttonStyle(.plain)
-                        .help("Add to this workout")
+            MacExerciseFilterBar(sieve: $sieve)
+
+            List {
+                if !offered.isEmpty {
+                    Section("Your exercises") {
+                        ForEach(offered) { exercise in
+                            ownRow(exercise)
+                        }
+                    }
+                }
+
+                // The ready-made catalogue, offered here as well as on the
+                // exercises screen. Building a workout is exactly when you
+                // notice a lift you have not defined yet, and sending someone
+                // to another screen and back to fetch it — losing which
+                // workout they were building on the way — is the kind of
+                // errand the Mac has room not to ask for.
+                let strength = sieve.strengthTemplates(taken: takenKeys)
+                let aerobic = sieve.aerobicTemplates(taken: takenKeys)
+
+                if !strength.isEmpty {
+                    Section("Ready-made") {
+                        ForEach(strength) { entry in
+                            MacTemplateRow(name: entry.name,
+                                           detail: entry.muscleSummary) { take(entry) }
+                        }
+                    }
+                }
+                if !aerobic.isEmpty {
+                    Section("Ready-made · aerobic") {
+                        ForEach(aerobic) { entry in
+                            MacTemplateRow(name: entry.name,
+                                           detail: "Aerobic — an Apple workout") { take(entry) }
+                        }
                     }
                 }
             }
         }
-        .frame(minWidth: 200, maxHeight: .infinity)
+        .frame(minWidth: 220, maxHeight: .infinity)
+    }
+
+    private func ownRow(_ exercise: ExerciseDef) -> some View {
+        let already = workout.exerciseOrder.contains(exercise.id)
+        return HStack {
+            Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
+                .foregroundStyle(already ? .secondary : .primary)
+            Spacer()
+            if already {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .help("Already in this workout")
+            } else {
+                Button {
+                    workout.exerciseOrder.append(exercise.id)
+                } label: { Image(systemName: "plus.circle") }
+                .buttonStyle(.plain)
+                .foregroundStyle(.blue)
+                .help("Add to this workout")
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !already else { return }
+            workout.exerciseOrder.append(exercise.id)
+        }
+    }
+
+    // MARK: Taking a ready-made one straight into this workout
+
+    private func take(_ entry: LibraryExercise) {
+        insert(ExerciseLibrary.take(entry, existingNames: allExercises.map(\.name)))
+    }
+
+    private func take(_ entry: AerobicLibraryExercise) {
+        insert(ExerciseLibrary.take(entry, existingNames: allExercises.map(\.name)))
+    }
+
+    private func insert(_ exercise: ExerciseDef) {
+        context.insert(exercise)
+        DraftMode.note(exercise: exercise.id, in: context)
+        workout.exerciseOrder.append(exercise.id)
+        try? context.save()
     }
 }

@@ -17,8 +17,10 @@ import AppKit
 struct MacExercisesView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var exercises: [ExerciseDef]
+    @Query private var workouts: [WorkoutDef]
     @Query private var drafts: [DraftSession]
     @State private var selection: UUID?
+    @State private var sieve = MacExerciseSieve()
 
     private var draft: DraftSession? { drafts.first { $0.isActive } }
 
@@ -26,6 +28,26 @@ struct MacExercisesView: View {
         guard let selection else { return nil }
         return exercises.first { $0.id == selection }
     }
+
+    /// Your own, what you use first: starred, then whatever is in a workout,
+    /// then the rest — the same order the phone's library uses.
+    private var own: [ExerciseDef] {
+        sieve.own(exercises).sorted { a, b in
+            let ra = rank(a), rb = rank(b)
+            if ra != rb { return ra < rb }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+    }
+
+    private func rank(_ exercise: ExerciseDef) -> Int {
+        LibraryOrder.rank(isFavourite: exercise.isFavourite,
+                          isInAnyWorkout: workouts.contains {
+                              $0.exerciseOrder.contains(exercise.id)
+                          },
+                          choosingForWorkout: false)
+    }
+
+    private var takenKeys: Set<String> { ExerciseLibrary.takenKeys(in: exercises) }
 
     var body: some View {
         HSplitView {
@@ -55,33 +77,116 @@ struct MacExercisesView: View {
         }
     }
 
-    @ViewBuilder private var list: some View {
-        if exercises.isEmpty {
+    private var list: some View {
+        VStack(spacing: 0) {
+            MacExerciseFilterBar(sieve: $sieve)
+            Divider()
+            rows
+        }
+    }
+
+    @ViewBuilder private var rows: some View {
+        // "Nothing yet" is about the database, not about the filter: the
+        // ready-made list is never empty, so someone with no exercises of
+        // their own still has something to click.
+        if exercises.isEmpty && sieve.search.isEmpty && sieve.filter == .all {
             MacEmptyState(thing: "exercises", onCreate: create)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(selection: $selection) {
-                ForEach(exercises) { exercise in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
-                            Text(subtitle(exercise))
-                                .font(.caption).foregroundStyle(.secondary)
+                if !own.isEmpty {
+                    Section("Your exercises") {
+                        ForEach(own) { exercise in
+                            ownRow(exercise).tag(exercise.id)
                         }
-                        Spacer()
-                        // Made during the draft in progress: marked so it is
-                        // obvious what is at stake when draft ends.
-                        if draft?.contains(exercise: exercise.id) == true {
-                            Image(systemName: "pencil.and.outline")
-                                .foregroundStyle(.orange)
-                                .help("Made while drafting")
+                        .onDelete(perform: deleteFromOwn)
+                    }
+                }
+
+                let strength = sieve.strengthTemplates(taken: takenKeys)
+                let aerobic = sieve.aerobicTemplates(taken: takenKeys)
+
+                if !strength.isEmpty {
+                    Section("Ready-made") {
+                        ForEach(strength) { entry in
+                            MacTemplateRow(name: entry.name,
+                                           detail: entry.muscleSummary) { take(entry) }
                         }
                     }
-                    .tag(exercise.id)
                 }
-                .onDelete(perform: delete)
+                if !aerobic.isEmpty {
+                    Section("Ready-made · aerobic") {
+                        ForEach(aerobic) { entry in
+                            MacTemplateRow(name: entry.name,
+                                           detail: "Aerobic — an Apple workout") { take(entry) }
+                        }
+                    }
+                }
+
+                if own.isEmpty && strength.isEmpty && aerobic.isEmpty {
+                    // Which filter emptied the list, not just that it is empty:
+                    // otherwise it reads as the app having lost the exercises.
+                    ContentUnavailableView("Nothing matches",
+                                           systemImage: "line.3.horizontal.decrease.circle",
+                                           description: Text(emptyExplanation))
+                }
             }
         }
+    }
+
+    private var emptyExplanation: String {
+        let where_ = sieve.filter == .all ? "" : " under \(sieve.filter.label.lowercased())"
+        if !sieve.search.isEmpty {
+            return "Nothing called “\(sieve.search)”\(where_), and nothing ready-made either."
+        }
+        return "Nothing\(where_) yet, and every ready-made one is already in your list."
+    }
+
+    private func ownRow(_ exercise: ExerciseDef) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                exercise.isFavourite.toggle()
+            } label: {
+                Image(systemName: exercise.isFavourite ? "star.fill" : "star")
+                    .foregroundStyle(exercise.isFavourite ? .yellow : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help(exercise.isFavourite ? "Remove from favourites" : "Mark as a favourite")
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
+                Text(subtitle(exercise))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            // Made during the draft in progress: marked so it is obvious what
+            // is at stake when draft ends.
+            if draft?.contains(exercise: exercise.id) == true {
+                Image(systemName: "pencil.and.outline")
+                    .foregroundStyle(.orange)
+                    .help("Made while drafting")
+            }
+        }
+    }
+
+    // MARK: Taking a ready-made one
+
+    private func take(_ entry: LibraryExercise) {
+        insert(ExerciseLibrary.take(entry, existingNames: exercises.map(\.name)))
+    }
+
+    private func take(_ entry: AerobicLibraryExercise) {
+        insert(ExerciseLibrary.take(entry, existingNames: exercises.map(\.name)))
+    }
+
+    /// Selects what was just taken, so the form on the right opens on it —
+    /// taking a ready-made exercise is usually the first half of setting its
+    /// weights for your own gym.
+    private func insert(_ exercise: ExerciseDef) {
+        context.insert(exercise)
+        DraftMode.note(exercise: exercise.id, in: context)
+        try? context.save()
+        selection = exercise.id
     }
 
     private func subtitle(_ exercise: ExerciseDef) -> String {
@@ -106,9 +211,12 @@ struct MacExercisesView: View {
         selection = exercise.id
     }
 
-    private func delete(_ offsets: IndexSet) {
+    /// Offsets are into the list as shown, which is filtered and re-ordered —
+    /// indexing the unfiltered query here would delete whatever happened to
+    /// sit at that position in a different list.
+    private func deleteFromOwn(_ offsets: IndexSet) {
         for index in offsets {
-            let exercise = exercises[index]
+            let exercise = own[index]
             // Stop offering it back when draft ends, or the count would lie.
             DraftMode.forget(id: exercise.id, in: context)
             context.delete(exercise)

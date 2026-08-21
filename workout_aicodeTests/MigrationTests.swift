@@ -56,29 +56,65 @@ import SwiftUI
 }
 
 
-@Test func newExerciseUsesTheChosenDefaults() {
-    let d = UserDefaults.standard
-    d.set(4, forKey: ExerciseDefaultsKey.sets)
-    d.set(10, forKey: ExerciseDefaultsKey.lowest)
-    d.set(80, forKey: ExerciseDefaultsKey.highest)
-    d.set(2, forKey: ExerciseDefaultsKey.increment)
-    defer {
-        for key in [ExerciseDefaultsKey.sets, ExerciseDefaultsKey.lowest,
-                    ExerciseDefaultsKey.highest, ExerciseDefaultsKey.increment] {
-            d.removeObject(forKey: key)
+// MARK: - The numbers a new exercise starts with
+//
+// Serialized, and it has to be. These write UserDefaults.standard, which is one
+// object shared by the whole process, and Swift Testing runs tests in parallel
+// by default — two of them setting "sets" to different values at the same
+// moment gave a failure that looked like a bug in the code under test and was
+// nothing of the sort. Any test that writes these keys belongs in here.
+
+@Suite(.serialized)
+struct NewExerciseNumberTests {
+
+    /// Put the four number keys back however they were.
+    private func withDefaults(sets: Int, lowest: Int, highest: Int, increment: Int,
+                              _ body: () -> Void) {
+        let d = UserDefaults.standard
+        let keys = [ExerciseDefaultsKey.sets, ExerciseDefaultsKey.lowest,
+                    ExerciseDefaultsKey.highest, ExerciseDefaultsKey.increment]
+        let saved = keys.map { d.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, saved) {
+                if let value { d.set(value, forKey: key) } else { d.removeObject(forKey: key) }
+            }
+        }
+        d.set(sets, forKey: ExerciseDefaultsKey.sets)
+        d.set(lowest, forKey: ExerciseDefaultsKey.lowest)
+        d.set(highest, forKey: ExerciseDefaultsKey.highest)
+        d.set(increment, forKey: ExerciseDefaultsKey.increment)
+        body()
+    }
+
+    @Test func newExerciseUsesTheChosenDefaults() {
+        withDefaults(sets: 4, lowest: 10, highest: 80, increment: 2) {
+            let e = ExerciseDefaults.makeExercise(name: "Curl")
+            #expect(e.numberOfSeries == 4)
+            #expect(e.lowestWeight == 10)
+            #expect(e.highestWeight == 80)
+            #expect(e.weightIncrement == 2)
         }
     }
-    let e = ExerciseDefaults.makeExercise(name: "Curl")
-    #expect(e.numberOfSeries == 4)
-    #expect(e.lowestWeight == 10)
-    #expect(e.highestWeight == 80)
-    #expect(e.weightIncrement == 2)
-}
 
-@Test func defaultsAreNotAskedOfSomeoneWhoAlreadyHasExercises() {
-    UserDefaults.standard.removeObject(forKey: ExerciseDefaultsKey.asked)
-    #expect(ExerciseDefaults.shouldAsk(existingExercises: 0))
-    #expect(!ExerciseDefaults.shouldAsk(existingExercises: 7))
+    @Test func aTakenLibraryExerciseStartsOnTheUsersOwnNumbers() {
+        // The catalogue carries defaults of its own — the same 3 / 0…200 / 5
+        // the app ships with, which is exactly why building a copy from them
+        // looked right and quietly ignored what the user had chosen.
+        withDefaults(sets: 5, lowest: 15, highest: 90, increment: 2) {
+            let taken = ExerciseLibrary.take(ExerciseLibrary.entry(key: "biceps-curl")!,
+                                             existingNames: [])
+            #expect(taken.numberOfSeries == 5)
+            #expect(taken.lowestWeight == 15)
+            #expect(taken.highestWeight == 90)
+            #expect(taken.weightIncrement == 2)
+        }
+    }
+
+    @Test func defaultsAreNotAskedOfSomeoneWhoAlreadyHasExercises() {
+        UserDefaults.standard.removeObject(forKey: ExerciseDefaultsKey.asked)
+        #expect(ExerciseDefaults.shouldAsk(existingExercises: 0))
+        #expect(!ExerciseDefaults.shouldAsk(existingExercises: 7))
+    }
 }
 
 
@@ -893,6 +929,60 @@ struct SchemaMigrationTests {
     // Stars still float, as they always did.
     #expect(LibraryOrder.rank(isFavourite: true, isInAnyWorkout: false,
                               choosingForWorkout: true) < inIt)
+}
+
+// MARK: - Taking a ready-made exercise
+//
+// Both the phone and the Mac take library entries through ExerciseLibrary.take.
+// It replaced a helper that nothing called and that quietly disagreed with what
+// the phone actually did — the sort of thing the second caller finds the hard
+// way.
+
+@Test func takingALibraryEntryKeepsItsKeyAndItsMuscles() {
+    let entry = ExerciseLibrary.entry(key: "bench-press")!
+    let taken = ExerciseLibrary.take(entry, existingNames: [])
+
+    #expect(taken.name == "Bench press")
+    #expect(taken.libraryKey == "bench-press")
+    #expect(taken.primaryMuscle == .chest)
+    #expect(taken.secondaryMuscles.contains(.triceps))
+    #expect(taken.kind == .strength)
+}
+
+@Test func takingAnAerobicEntryCarriesTheAppleWorkout() {
+    let entry = ExerciseLibrary.aerobic.first { $0.activity == .indoorCycle }!
+    let taken = ExerciseLibrary.take(entry, existingNames: [])
+
+    #expect(taken.kind == .aerobic)
+    #expect(taken.aerobicActivity == .indoorCycle)
+    #expect(taken.libraryKey == entry.key)
+}
+
+@Test func aSecondCopyGetsANumberRatherThanTheSameName() {
+    // Two exercises with one name are indistinguishable in every list that
+    // shows them.
+    let entry = ExerciseLibrary.entry(key: "squat")!
+    #expect(ExerciseLibrary.take(entry, existingNames: ["Squat"]).name == "Squat 2")
+    #expect(ExerciseLibrary.take(entry, existingNames: ["Squat", "Squat 2"]).name == "Squat 3")
+    // Case is not what makes two names different to a reader.
+    #expect(ExerciseLibrary.take(entry, existingNames: ["squat"]).name == "Squat 2")
+}
+
+@Test func anEntryAlreadyTakenIsNotOfferedAgain() {
+    let mine = [ExerciseLibrary.take(ExerciseLibrary.entry(key: "deadlift")!,
+                                     existingNames: []),
+                ExerciseDef(name: "Something I invented")]
+    let taken = ExerciseLibrary.takenKeys(in: mine)
+
+    #expect(taken.contains("deadlift"))
+    #expect(taken.count == 1)          // the invented one has no key to clash
+}
+
+@Test func everyLibraryKeyIsUnique() {
+    // The key is what identifies a movement across users; two entries sharing
+    // one would merge two different lifts in any aggregate.
+    let keys = ExerciseLibrary.all.map(\.key) + ExerciseLibrary.aerobic.map(\.key)
+    #expect(Set(keys).count == keys.count)
 }
 
 // MARK: - Heart rate zones

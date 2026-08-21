@@ -151,17 +151,77 @@ enum ExerciseLibrary {
         all.first { $0.key == key }
     }
 
-    /// Build an editable exercise from a library entry. The copy is the user's:
-    /// they can rename it or change its ranges, and `libraryKey` still records
-    /// which movement it started as.
-    static func makeExercise(from entry: LibraryExercise) -> ExerciseDef {
-        ExerciseDef(name: entry.name,
-                    numberOfSeries: LibraryExercise.defaultSeries,
-                    lowestWeight: LibraryExercise.defaultLowest,
-                    highestWeight: LibraryExercise.defaultHighest,
-                    weightIncrement: LibraryExercise.defaultIncrement,
-                    primaryMuscle: entry.primary,
-                    secondaryMuscles: entry.secondary,
-                    libraryKey: entry.key)
+    // MARK: Taking one
+    //
+    // Both platforms come through here. An earlier version of this file had a
+    // `makeExercise(from:)` that built the copy from the constants above, while
+    // the phone's own screen built it from ExerciseDefaults and gave it a
+    // unique name — so the helper that looked like the way to take a library
+    // entry was the one way that did it differently. Nothing called it. The
+    // Mac would have.
+
+    /// Take a ready-made strength exercise into someone's own list.
+    ///
+    /// The copy is theirs: they can rename it or change its ranges, and
+    /// `libraryKey` still records which movement it started as, which is what
+    /// lets the same lift under two people's names be recognised as the same
+    /// lift later.
+    static func take(_ entry: LibraryExercise, existingNames: [String]) -> ExerciseDef {
+        let exercise = ExerciseDefaults.makeExercise(name: entry.name,
+                                                     primary: entry.primary,
+                                                     secondary: entry.secondary,
+                                                     libraryKey: entry.key)
+        exercise.name = uniqueName(entry.name, among: existingNames)
+        return exercise
+    }
+
+    /// The same for an aerobic entry, which carries an Apple workout rather
+    /// than a set of muscles.
+    static func take(_ entry: AerobicLibraryExercise, existingNames: [String]) -> ExerciseDef {
+        let exercise = ExerciseDefaults.makeExercise(name: entry.name,
+                                                     libraryKey: entry.key)
+        exercise.name = uniqueName(entry.name, among: existingNames)
+        exercise.kind = .aerobic
+        exercise.aerobicActivity = entry.activity
+        return exercise
+    }
+
+    /// "Bench press", then "Bench press 2", and so on.
+    ///
+    /// Someone who already has a "Bench press" of their own and takes the
+    /// ready-made one has two different exercises with one name, and no way to
+    /// tell which is which in a list.
+    static func uniqueName(_ base: String, among existing: [String]) -> String {
+        let taken = Set(existing.map { $0.lowercased() })
+        guard taken.contains(base.lowercased()) else { return base }
+        var n = 2
+        while taken.contains("\(base) \(n)".lowercased()) { n += 1 }
+        return "\(base) \(n)"
+    }
+
+    /// Which library entries have already been taken, by key.
+    static func takenKeys(in exercises: [ExerciseDef]) -> Set<String> {
+        Set(exercises.compactMap(\.libraryKey))
+    }
+}
+
+// MARK: - Where an exercise sits in the list
+//
+/// What you use floats to the top: starred first, then anything that is in a
+/// workout, then the rest, each alphabetical within its band. A long list is
+/// mostly exercises tried once, and those should not sit between the ones done
+/// every week.
+///
+/// The exception is choosing exercises FOR a workout. There, clicking a row is
+/// what changes its membership, so ranking by membership would move every row
+/// out from under the pointer that just clicked it. The order stays still:
+/// starred, then everything else.
+enum LibraryOrder {
+    static func rank(isFavourite: Bool,
+                     isInAnyWorkout: Bool,
+                     choosingForWorkout: Bool) -> Int {
+        if isFavourite { return 0 }
+        guard !choosingForWorkout else { return 1 }
+        return isInAnyWorkout ? 1 : 2
     }
 }
