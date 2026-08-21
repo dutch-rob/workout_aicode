@@ -209,6 +209,14 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		15D8AEB63037C258009A6CBC /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				221D23E429084D4197CA186D /* Shared */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		15DD492C2F594E7100D778CD = {
 			isa = PBXGroup;
 			children = (
@@ -224,6 +232,7 @@
 				15D8AEAB3037BDBD009A6CBC /* workout_aicode_MacOS */,
 				153422942FAD9F5600895019 /* Frameworks */,
 				15DD49362F594E7100D778CD /* Products */,
+				15D8AEB63037C258009A6CBC /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -345,8 +354,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				221D23E429084D4197CA186D /* Shared */,
 				15D8AEAB3037BDBD009A6CBC /* workout_aicode_MacOS */,
+				221D23E429084D4197CA186D /* Shared */,
 			);
 			name = workout_aicode_MacOS;
 			packageProductDependencies = (
@@ -370,8 +379,8 @@
 				EEEE0003EEEE0003EEEE0003 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				221D23E429084D4197CA186D /* Shared */,
 				15DD49372F594E7100D778CD /* workout_aicode */,
+				221D23E429084D4197CA186D /* Shared */,
 			);
 			name = workout_aicode;
 			packageProductDependencies = (
