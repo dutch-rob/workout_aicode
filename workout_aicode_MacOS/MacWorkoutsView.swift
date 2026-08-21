@@ -20,7 +20,7 @@ struct MacWorkoutsView: View {
 
     var body: some View {
         HSplitView {
-            list.frame(minWidth: 200, idealWidth: 240)
+            list.frame(minWidth: 200, idealWidth: 240, maxHeight: .infinity)
             Group {
                 if let selected {
                     MacWorkoutDetail(workout: selected, allExercises: exercises)
@@ -28,8 +28,12 @@ struct MacWorkoutsView: View {
                     ContentUnavailableView("No workout selected", systemImage: "hand.point.left")
                 }
             }
-            .frame(minWidth: 340)
+            // See MacExercisesView: without a stated height the split view
+            // sized itself to whichever half was shorter, so the list shrank
+            // whenever nothing was selected.
+            .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("Workouts")
         .toolbar {
             ToolbarItem {
@@ -42,6 +46,7 @@ struct MacWorkoutsView: View {
     @ViewBuilder private var list: some View {
         if workouts.isEmpty {
             MacEmptyState(thing: "workouts", onCreate: create)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(selection: $selection) {
                 ForEach(workouts) { workout in
@@ -84,15 +89,29 @@ struct MacWorkoutsView: View {
     }
 }
 
+// MARK: - One workout
+
 struct MacWorkoutDetail: View {
     @Bindable var workout: WorkoutDef
     let allExercises: [ExerciseDef]
 
+    @State private var filter = ""
+
     private var inWorkout: [ExerciseDef] {
         workout.exerciseOrder.compactMap { id in allExercises.first { $0.id == id } }
     }
-    private var available: [ExerciseDef] {
-        allExercises.filter { !workout.exerciseOrder.contains($0.id) }
+
+    /// Every exercise there is, not only the ones missing from this workout.
+    ///
+    /// It used to hide what was already in, which was tidy and confusing in
+    /// equal measure: the right-hand list was a different length and a
+    /// different set of names for every workout, with nothing on screen saying
+    /// why. Showing all of them and ticking the ones already in makes the list
+    /// the same everywhere, and answers the question without a sentence.
+    private var offered: [ExerciseDef] {
+        let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !needle.isEmpty else { return allExercises }
+        return allExercises.filter { $0.name.lowercased().contains(needle) }
     }
 
     var body: some View {
@@ -103,42 +122,65 @@ struct MacWorkoutDetail: View {
                 .padding()
 
             HSplitView {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("In this workout — drag to reorder")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                    List {
-                        ForEach(inWorkout) { exercise in
-                            Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
-                        }
-                        .onMove { from, to in
-                            workout.exerciseOrder.move(fromOffsets: from, toOffset: to)
-                        }
-                        .onDelete { offsets in
-                            // Taking an exercise out of a workout never deletes
-                            // the exercise itself — it is very likely in others.
-                            for index in offsets.sorted(by: >) {
-                                workout.exerciseOrder.remove(at: index)
-                            }
-                        }
-                    }
+                chosen
+                library
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var chosen: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("In this workout — drag to reorder")
+                .font(.caption).foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+            List {
+                ForEach(inWorkout) { exercise in
+                    Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Add an exercise")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                    List(available) { exercise in
-                        HStack {
-                            Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
-                            Spacer()
-                            Button {
-                                workout.exerciseOrder.append(exercise.id)
-                            } label: { Image(systemName: "plus.circle") }
-                            .buttonStyle(.plain)
-                        }
+                .onMove { from, to in
+                    workout.exerciseOrder.move(fromOffsets: from, toOffset: to)
+                }
+                .onDelete { offsets in
+                    // Taking an exercise out of a workout never deletes the
+                    // exercise itself — it is very likely in others.
+                    for index in offsets.sorted(by: >) {
+                        workout.exerciseOrder.remove(at: index)
                     }
                 }
             }
         }
+        .frame(minWidth: 200, maxHeight: .infinity)
+    }
+
+    private var library: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("All your exercises — ticked ones are already in")
+                .font(.caption).foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+            TextField("Filter", text: $filter)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 8)
+            List(offered) { exercise in
+                let already = workout.exerciseOrder.contains(exercise.id)
+                HStack {
+                    Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
+                        .foregroundStyle(already ? .secondary : .primary)
+                    Spacer()
+                    if already {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .help("Already in this workout")
+                    } else {
+                        Button {
+                            workout.exerciseOrder.append(exercise.id)
+                        } label: { Image(systemName: "plus.circle") }
+                        .buttonStyle(.plain)
+                        .help("Add to this workout")
+                    }
+                }
+            }
+        }
+        .frame(minWidth: 200, maxHeight: .infinity)
     }
 }

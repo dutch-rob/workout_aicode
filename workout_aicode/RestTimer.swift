@@ -33,29 +33,20 @@ import UserNotifications
 // instead. The tick usually gets there a fraction earlier and finishes first;
 // whichever wins, `finish` is idempotent.
 
-enum RestTimerKey {
-    /// Master switch. Off for everyone until they turn it on.
-    static let enabled = "restTimerEnabled"
-    /// What a newly created exercise starts with.
-    static let defaultSeconds = "restTimerDefaultSeconds"
-}
-
 enum RestTimerDefaults {
+    // The keys, the choices and "what does a new exercise start with" moved to
+    // Shared/NewExerciseDefaults.swift when the Mac learned to create
+    // exercises. These forward rather than repeat: two copies of the same rest
+    // would eventually be two different rests.
+
     /// The rest a new exercise gets, and what the first-run question starts on.
-    /// Long enough for a working set of a compound lift, short enough not to
-    /// feel like a punishment on an isolation movement.
-    ///
-    /// Defined beside the model that stores it, so the schema does not have to
-    /// reach into this file — and through it into UIKit — for a number.
     static let seconds = defaultRestSeconds
 
     /// Selectable rests: 0:15 to 5:00 in quarter minutes.
-    static let choices: [Int] = Array(stride(from: 15, through: 300, by: 15))
+    static var choices: [Int] { ExerciseDefaults.restChoices }
 
     /// "1:30", "0:45", "5:00".
-    static func label(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
+    static func label(_ seconds: Int) -> String { ExerciseDefaults.restLabel(seconds) }
 
     static var isEnabled: Bool {
         UserDefaults.standard.bool(forKey: RestTimerKey.enabled)
@@ -63,9 +54,7 @@ enum RestTimerDefaults {
 
     /// The rest a new exercise is created with — the user's answer to the
     /// first-run question, or the built-in default if they never gave one.
-    static var newExerciseSeconds: Int {
-        UserDefaults.standard.object(forKey: RestTimerKey.defaultSeconds) as? Int ?? seconds
-    }
+    static var newExerciseSeconds: Int { ExerciseDefaults.restSeconds }
 
     /// Ask iOS for permission to post the end-of-rest notification. Only ever
     /// called when the user turns the timer on, so the prompt arrives attached

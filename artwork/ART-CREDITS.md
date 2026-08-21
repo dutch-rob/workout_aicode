@@ -21,7 +21,7 @@ Starting from the original single SVG showing both figures on a white page:
 4. the deltoid and back sheets were split so that side delts and lower back
    exist as separate shapes, which the original does not distinguish;
 5. the annotated result (`muscles-annotated.svg`) is converted by
-   `tools/svg-to-bodydiagram.py` into `workout_aicode/BodyDiagram.json`: plain
+   `tools/svg-to-bodydiagram.py` into `Shared/BodyDiagram.json`: plain
    path geometry in normalised coordinates, tagged per muscle group.
 
 The app draws that geometry itself and colours it — muscle groups warm,

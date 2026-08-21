@@ -19,7 +19,7 @@ Each path carries the muscle group it belongs to, taken from its Inkscape label
 or its enclosing group's label. Anything unlabelled is body: drawn, but not
 selectable.
 
-Usage:  tools/svg-to-bodydiagram.py <input.svg> [-o workout_aicode/BodyDiagram.json]
+Usage:  tools/svg-to-bodydiagram.py <input.svg> [-o Shared/BodyDiagram.json]
 """
 import argparse
 import json
@@ -397,7 +397,7 @@ def bounds(paths):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("svg")
-    ap.add_argument("-o", "--out", default="workout_aicode/BodyDiagram.json")
+    ap.add_argument("-o", "--out", default="Shared/BodyDiagram.json")
     args = ap.parse_args()
 
     root = ET.parse(args.svg).getroot()

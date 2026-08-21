@@ -15,10 +15,43 @@ import SwiftUI
 
 struct MuscleBodyPicker: View {
     @Binding var selection: MuscleGroup?
-    /// Whether the aerobic filter is on. Beside the muscles because that is
-    /// where a user looks for "which sort of exercise", even though aerobic is
-    /// a kind rather than a group.
-    @Binding var aerobic: Bool
+
+    /// Groups to show in a second, quieter colour beside the selected one.
+    ///
+    /// Empty when the picker is a filter — a filter has one answer. The Mac's
+    /// exercise form fills it with the secondary muscles, so the drawing shows
+    /// the whole answer at once: what an exercise mainly works, and what it
+    /// also works, on the same body.
+    var secondary: Set<MuscleGroup> = []
+
+    /// Whether the aerobic filter is on, when there is one. Beside the muscles
+    /// because that is where a user looks for "which sort of exercise", even
+    /// though aerobic is a kind rather than a group.
+    ///
+    /// Optional because not every use of this picker is a filter: choosing
+    /// which muscles an exercise works is not a place to offer "aerobic
+    /// instead", and a button that means nothing is worse than no button.
+    var aerobic: Binding<Bool>? = nil
+
+    /// How tall to draw. Height is what limits these — each half is only about
+    /// 0.28 as wide as it is high — so this is the one dial worth having: a Mac
+    /// window has room the phone does not.
+    var height: CGFloat = 400
+
+    /// What a click on a muscle — on the body or on its label — should do.
+    ///
+    /// Left nil, it toggles `selection`, which is what a filter wants. The
+    /// Mac's exercise form supplies one instead, because there a click can mean
+    /// two things: set the primary muscle, or, with Option held, add to the
+    /// secondary ones. The picker stays ignorant of which; it reports the
+    /// muscle and lets the caller decide.
+    var onPick: ((MuscleGroup) -> Void)? = nil
+
+    private func pick(_ group: MuscleGroup) {
+        if let onPick { onPick(group) } else {
+            selection = (selection == group) ? nil : group
+        }
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -31,23 +64,24 @@ struct MuscleBodyPicker: View {
             // was a lot of disturbance for one button.
             figure(isBack: false, labels: Self.frontLabels)
                 .overlay(alignment: .bottomLeading) {
-                    AerobicFilterButton(isOn: $aerobic)
-                        // Clear of the Quads connector, which runs diagonally
-                        // through the corner on its way up to the thigh. Far
-                        // enough right to sit in open space, not so far as to
-                        // touch the foot.
-                        .padding(.leading, 28)
-                        .padding(.bottom, 6)
+                    if let aerobic {
+                        AerobicFilterButton(isOn: aerobic)
+                            // Clear of the Quads connector, which runs
+                            // diagonally through the corner on its way up to
+                            // the thigh. Far enough right to sit in open space,
+                            // not so far as to touch the foot.
+                            .padding(.leading, 28)
+                            .padding(.bottom, 6)
+                    }
                 }
             viewCaptions
             figure(isBack: true, labels: Self.backLabels)
             labelColumn(Self.backLabels, trailing: false)
         }
-        // Height is what limits these: each half is only about 0.28 as wide as
-        // it is high, so the taller the frame the bigger the bodies. The row of
+        // The taller the frame the bigger the bodies. On the phone the row of
         // controls that used to sit above the picture now sits below it beside
         // "all muscle groups", which paid for some of this.
-        .frame(height: 400)
+        .frame(height: height)
     }
 
     // MARK: Which label goes on which side
@@ -209,8 +243,7 @@ struct MuscleBodyPicker: View {
                     for entry in fig.ordered {
                         let path = entry.path.applying(scale)
                             .offsetBy(dx: art.minX, dy: art.minY)
-                        context.fill(path, with: .color(Self.fill(for: entry.muscle,
-                                                                  selected: selection)))
+                        context.fill(path, with: .color(fill(for: entry.muscle)))
                         context.stroke(path, with: .color(.primary.opacity(0.55)),
                                        lineWidth: 0.6)
                     }
@@ -223,9 +256,7 @@ struct MuscleBodyPicker: View {
                         .contentShape(ScaledPath(unitPath: entry.path))
                         .frame(width: art.width, height: art.height)
                         .position(x: art.midX, y: art.midY)
-                        .onTapGesture {
-                            selection = (selection == entry.group) ? nil : entry.group
-                        }
+                        .onTapGesture { pick(entry.group) }
                         .accessibilityLabel(entry.group.label)
                 }
 
@@ -252,15 +283,18 @@ struct MuscleBodyPicker: View {
     /// Muscle groups keep the drawing's warm tone so they read as muscle;
     /// everything else — bone, tendon, outline, and the muscles outside our
     /// fifteen — goes grey, so what can be tapped is what stands out.
-    private static func fill(for muscle: MuscleGroup?, selected: MuscleGroup?) -> Color {
+    private func fill(for muscle: MuscleGroup?) -> Color {
         // A fixed mid grey rather than a semantic colour. `secondary` resolves
         // dark on a dark background, which left these parts of the body far
         // heavier than the muscles beside them; the drawing should read as one
         // body, with colour — not lightness — saying what is selectable.
         guard let muscle else { return Color(white: 0.72) }
-        return muscle == selected
-            ? Color.blue.opacity(0.80)
-            : Color(red: 0.94, green: 0.56, blue: 0.47)
+        if muscle == selection { return Color.blue.opacity(0.80) }
+        // A paler blue for "also worked": near enough the selected colour to
+        // read as the same kind of answer, far enough not to be mistaken for
+        // the primary one.
+        if secondary.contains(muscle) { return Color.blue.opacity(0.34) }
+        return Color(red: 0.94, green: 0.56, blue: 0.47)
     }
 
     /// The rectangle the figure occupies inside `size`, preserving its aspect.
@@ -279,7 +313,7 @@ struct MuscleBodyPicker: View {
                 let y = rowCentre(index: index, count: labels.count,
                                   height: geo.size.height)
                 Button {
-                    selection = (selection == group) ? nil : group
+                    pick(group)
                 } label: {
                     Text(group.shortLabel)
                         .font(.caption)
@@ -290,7 +324,9 @@ struct MuscleBodyPicker: View {
                         .background(
                             Capsule().fill(selection == group
                                            ? Color.blue
-                                           : Color.secondary.opacity(0.15))
+                                           : secondary.contains(group)
+                                             ? Color.blue.opacity(0.28)
+                                             : Color.secondary.opacity(0.15))
                         )
                         .foregroundStyle(selection == group ? Color.white : Color.primary)
                 }

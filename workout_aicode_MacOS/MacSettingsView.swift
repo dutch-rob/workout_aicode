@@ -7,6 +7,16 @@ struct MacSettingsView: View {
     @State private var syncOn = MacAppSetup.syncEnabled
     @State private var askingToEnd = false
 
+    // The same keys the iPhone writes, so the fields read familiarly — but not
+    // the same storage. UserDefaults is per-device, and nothing syncs it, so
+    // what is set here applies to exercises made here. Said plainly below
+    // rather than left for someone to discover.
+    @AppStorage(ExerciseDefaultsKey.sets) private var sets = ExerciseDefaults.sets
+    @AppStorage(ExerciseDefaultsKey.lowest) private var lowest = ExerciseDefaults.lowest
+    @AppStorage(ExerciseDefaultsKey.highest) private var highest = ExerciseDefaults.highest
+    @AppStorage(ExerciseDefaultsKey.increment) private var increment = ExerciseDefaults.increment
+    @AppStorage(RestTimerKey.defaultSeconds) private var restSeconds = defaultRestSeconds
+
     private var draft: DraftSession? { drafts.first { $0.isActive } }
 
     var body: some View {
@@ -18,6 +28,32 @@ struct MacSettingsView: View {
                     }
             } footer: {
                 Text("On by default on the Mac, unlike the iPhone. This app does not log workouts — the iPhone and Watch do — so a Mac keeping its data to itself could never get what you define here to the device you train with.\n\nChanging this takes effect when you next open the app. Your iPhone has its own switch, and both must be on for the two to see each other.")
+            }
+
+            Section {
+                LabeledContent("Sets") {
+                    Stepper(value: $sets, in: 1...10) {
+                        TextField("", value: $sets, format: .number).frame(width: 60)
+                    }
+                }
+                LabeledContent("Lowest weight") {
+                    TextField("", value: $lowest, format: .number).frame(width: 80)
+                }
+                LabeledContent("Highest weight") {
+                    TextField("", value: $highest, format: .number).frame(width: 80)
+                }
+                LabeledContent("Weight increment") {
+                    TextField("", value: $increment, format: .number).frame(width: 80)
+                }
+                Picker("Rest after a set", selection: $restSeconds) {
+                    ForEach(ExerciseDefaults.restChoices, id: \.self) {
+                        Text(ExerciseDefaults.restLabel($0)).tag($0)
+                    }
+                }
+            } header: {
+                Text("Numbers for a new exercise")
+            } footer: {
+                Text("Where a new exercise starts. Every exercise can still be changed on its own afterwards, and changing these leaves existing exercises alone.\n\nThe wheels on the iPhone show weights from the lowest to the highest in steps of the increment — match the increment to your gym, often 5, or 2 for dumbbells.\n\nThis is this Mac's answer. Your iPhone asked the same question when you first used it and keeps its own; the two do not travel through iCloud, because only your workouts and exercises do.")
             }
 
             Section {
