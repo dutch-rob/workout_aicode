@@ -7,12 +7,10 @@ import Charts
 // Four tabs over the same data: the log list, a graph per exercise, the
 // exercises ranked by trend, and the import/export tools that used to sit as a
 // button row above the list.
-
-enum StatsSettingsKey {
-    static let formula   = "oneRMFormula"
-    static let window    = "trendWindow"
-    static let smoothing = "graphSmoothing"
-}
+//
+// What the numbers ARE — the options, the flattening into StatsEngine, the
+// formatting of a trend — moved to Shared/StatsPresentation.swift when the Mac
+// grew the same three screens. Only the phone's presentation is left here.
 
 struct LogsStatsView: View {
 
@@ -55,58 +53,6 @@ struct LogsStatsView: View {
     }
 }
 
-// MARK: - Shared statistics loading
-
-/// Reads the user's options and turns stored logs into `ExerciseStats`.
-/// Kept in one place so the graphs tab and the progress tab can never disagree
-/// about what the numbers are.
-struct StatsInputs {
-    let formula: OneRMFormula
-    let window: Int
-    let smoothing: Int
-
-    init(formulaRaw: String, window: Int, smoothing: Int) {
-        self.formula = OneRMFormula(rawValue: formulaRaw) ?? .epley
-        self.window = max(ExerciseStats.minimumSessions, window)
-        self.smoothing = smoothing
-    }
-
-    func analyze(logs: [WorkoutLog], exercises: [ExerciseDef]) -> [ExerciseStats] {
-        let names = Dictionary(exercises.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-        let inputs = logs.map {
-            StatsEngine.LogInput(id: $0.id, exerciseId: $0.exerciseId, date: $0.date,
-                                 weights: $0.weights, reps: $0.reps)
-        }
-        return StatsEngine.analyze(logs: inputs, names: names,
-                                   formula: formula, window: window, smoothing: smoothing)
-    }
-
-    /// Exercises that are still short of the 8 sessions needed, with how many
-    /// they have — so the UI can say which graphs are still coming.
-    func pending(logs: [WorkoutLog], exercises: [ExerciseDef]) -> [(name: String, count: Int)] {
-        let counts = Dictionary(grouping: logs, by: \.exerciseId).mapValues(\.count)
-        return exercises
-            .compactMap { exercise in
-                let n = counts[exercise.id] ?? 0
-                guard n > 0, n < ExerciseStats.minimumSessions else { return nil }
-                return (name: exercise.name, count: n)
-            }
-            .sorted { $0.count > $1.count }
-    }
-}
-
-/// Formats a trend as a percentage per week, the scale people plan in.
-func formatTrend(_ perWeek: Double?) -> String {
-    guard let perWeek else { return "—" }
-    return String(format: "%+.1f%%/week", perWeek * 100)
-}
-
-func trendColor(_ perWeek: Double?) -> Color {
-    guard let perWeek else { return .secondary }
-    if perWeek > 0.002 { return .green }
-    if perWeek < -0.002 { return .red }
-    return .primary
-}
 
 // MARK: - Graphs tab
 

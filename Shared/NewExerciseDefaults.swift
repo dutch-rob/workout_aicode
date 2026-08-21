@@ -55,9 +55,7 @@ enum ExerciseDefaults {
     static let restChoices: [Int] = Array(stride(from: 15, through: 300, by: 15))
 
     /// "1:30", "0:45", "5:00".
-    static func restLabel(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
+    static func restLabel(_ seconds: Int) -> String { minutesSeconds(seconds) }
 
     /// The rest a new exercise is created with — the user's answer to the
     /// first-run question, or the built-in default if they never gave one.

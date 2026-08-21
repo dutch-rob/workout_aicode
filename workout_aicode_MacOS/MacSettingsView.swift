@@ -57,6 +57,14 @@ struct MacSettingsView: View {
             }
 
             Section {
+                MacStatsOptions()
+            } header: {
+                Text("Statistics and graphs")
+            } footer: {
+                Text("How the graphs and the progress ranking are worked out. The formula turns a set of reps at a weight into an estimated one-rep max, which is the number everything else is built on; the trend is fitted over the last so many sessions of each exercise; smoothing averages neighbouring points to quiet the dots down.\n\nSmoothing changes only how the dots read — the trendline is always fitted to the real sessions, so it never moves when you change it.\n\nThe same options sit in the toolbar of the graphs and progress screens, for trying a value while looking at what it does.")
+            }
+
+            Section {
                 Toggle("Draft", isOn: Binding(
                     get: { draft != nil },
                     set: { on in

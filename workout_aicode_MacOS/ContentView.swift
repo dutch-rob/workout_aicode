@@ -48,10 +48,12 @@ struct ContentView: View {
             switch section ?? .workouts {
             case .workouts:     MacWorkoutsView()
             case .exercises:    MacExercisesView()
+            case .logs:         MacLogsView()
+            case .graphs:       MacGraphsView()
+            case .progress:     MacProgressView()
             case .settings:     MacSettingsView()
             case .info:         MacInfoView()
-            case .logs, .graphs, .progress, .importExport:
-                MacComingSoonView(section: section ?? .logs)
+            case .importExport: MacComingSoonView(section: .importExport)
             }
         }
     }
@@ -59,6 +61,10 @@ struct ContentView: View {
 
 /// Screens not written yet. Named rather than blank, so it is clear the app is
 /// unfinished here rather than that the data is missing.
+///
+/// Only import/export is left. It is last on purpose: it is the one screen
+/// that WRITES, and replace-and-merge deserves more care than a port of the
+/// phone's dialog stack.
 struct MacComingSoonView: View {
     let section: MacSection
 

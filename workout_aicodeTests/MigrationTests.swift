@@ -985,6 +985,109 @@ struct SchemaMigrationTests {
     #expect(Set(keys).count == keys.count)
 }
 
+// MARK: - Reading a log list
+//
+// Grouping and colouring moved to Shared when the Mac grew a logs screen. Both
+// are claims about the user's training rather than decoration, so they are
+// tested rather than eyeballed on one device.
+//
+// Not serialized: nothing here opens a store or writes a default. The suite is
+// a grouping, not a lock.
+
+struct LogListTests {
+
+    private func log(_ minutesAgo: Int, workout: UUID, exercise: UUID,
+                     weights: [Int] = [50], reps: [Int] = [8]) -> WorkoutLog {
+        WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000 - Double(minutesAgo) * 60),
+                   workoutId: workout, exerciseId: exercise,
+                   weights: weights, reps: reps)
+    }
+
+    @Test func exercisesDoneTogetherBecomeOneSession() {
+        let w = UUID(), a = UUID(), b = UUID(), c = UUID()
+        // Newest first, as the screens query them.
+        let logs = [log(0, workout: w, exercise: a),
+                    log(10, workout: w, exercise: b),
+                    log(20, workout: w, exercise: c)]
+        let sessions = LogSessions.group(logs, workoutNames: [w: "Upper"])
+
+        #expect(sessions.count == 1)
+        #expect(sessions[0].logs.count == 3)
+        #expect(sessions[0].workoutName == "Upper")
+    }
+
+    @Test func anHourApartStartsANewSession() {
+        // The same workout twice in a week must not read as one impossibly
+        // long session.
+        let w = UUID(), a = UUID()
+        let logs = [log(0, workout: w, exercise: a),
+                    log(61, workout: w, exercise: a)]
+        #expect(LogSessions.group(logs, workoutNames: [w: "Upper"]).count == 2)
+    }
+
+    @Test func switchingWorkoutStartsANewSessionEvenBackToBack() {
+        let a = UUID(), b = UUID(), e = UUID()
+        let logs = [log(0, workout: a, exercise: e),
+                    log(2, workout: b, exercise: e)]
+        let sessions = LogSessions.group(logs, workoutNames: [a: "Upper", b: "Lower"])
+        #expect(sessions.count == 2)
+        #expect(sessions.map(\.workoutName) == ["Upper", "Lower"])
+    }
+
+    @Test func aWorkoutWithNoNameStillGroups() {
+        // A log whose workout was deleted must not vanish from the list.
+        let w = UUID(), e = UUID()
+        let sessions = LogSessions.group([log(0, workout: w, exercise: e)], workoutNames: [:])
+        #expect(sessions.count == 1)
+        #expect(sessions[0].workoutName == "Workout")
+    }
+
+    @Test func theEarlierEntryIsTheMostRecentOlderOne() {
+        let w = UUID(), mine = UUID(), other = UUID()
+        let newest = log(0, workout: w, exercise: mine, weights: [60])
+        let middle = log(30, workout: w, exercise: other, weights: [40])
+        let older = log(60, workout: w, exercise: mine, weights: [55])
+        let oldest = log(90, workout: w, exercise: mine, weights: [50])
+        let logs = [newest, middle, older, oldest]
+
+        let found = LogComparison.previous(for: mine, before: newest.date, in: logs)
+        #expect(found?.weights == [55])          // not the oldest, not the other exercise
+        #expect(LogComparison.previous(for: mine, before: oldest.date, in: logs) == nil)
+    }
+
+    @Test func moreWeightReadsAsProgressAndLessDoesNot() {
+        #expect(LogComparison.weightColour(current: 60, previous: 55) == .green)
+        #expect(LogComparison.weightColour(current: 50, previous: 55) == .red)
+        #expect(LogComparison.weightColour(current: 55, previous: 55) == .primary)
+        // Nothing to compare against is not progress and not a decline.
+        #expect(LogComparison.weightColour(current: 55, previous: nil) == .primary)
+    }
+
+    @Test func extraRepsBoughtByDroppingTheWeightAreNotProgress() {
+        // Ten reps at 40 after eight at 60 is not a better set, and colouring
+        // it green would be flattery rather than information.
+        #expect(LogComparison.repsColour(current: 10, previous: 8,
+                                         currentWeight: 40, previousWeight: 60) == .primary)
+        #expect(LogComparison.repsColour(current: 10, previous: 8,
+                                         currentWeight: 60, previousWeight: 60) == .green)
+        #expect(LogComparison.repsColour(current: 6, previous: 8,
+                                         currentWeight: 60, previousWeight: 60) == .red)
+        // Fewer reps at more weight is not a decline either.
+        #expect(LogComparison.repsColour(current: 6, previous: 8,
+                                         currentWeight: 70, previousWeight: 60) == .primary)
+    }
+}
+
+// MARK: - Time labels
+
+@Test func minutesAndSecondsDoNotWrapIntoHours() {
+    #expect(minutesSeconds(90) == "1:30")
+    #expect(minutesSeconds(45) == "0:45")
+    #expect(minutesSeconds(0) == "0:00")
+    // Someone timing a two-hour ride means 120 minutes, not "2:00:00".
+    #expect(minutesSeconds(7200) == "120:00")
+}
+
 // MARK: - Heart rate zones
 //
 // A stand-in until the OS 27 SDK, where HealthKit hands over the user's real

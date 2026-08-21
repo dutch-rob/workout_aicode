@@ -1357,29 +1357,22 @@ struct LogsListView: View {
         }
     }
 
+    // The rules themselves live in Shared/StatsPresentation.swift, where the
+    // Mac's log screen reads them too. Green and red here are a claim about
+    // the user's training, and two devices colouring the same two rows
+    // differently would be telling contradictory stories about one workout.
+
     private func previousEntry(for exerciseId: UUID, before date: Date) -> WorkoutLog? {
-        // Search older logs (since logs are reverse sorted)
-        for log in logs.dropFirst() {
-            if log.date < date && log.exerciseId == exerciseId {
-                return log
-            }
-        }
-        return nil
+        LogComparison.previous(for: exerciseId, before: date, in: logs)
     }
 
     private func colorForWeight(current: Int, previous: Int?) -> Color {
-        guard let previous else { return .primary }
-        if current > previous { return .green }
-        if current < previous { return .red }
-        return .primary
+        LogComparison.weightColour(current: current, previous: previous)
     }
 
     private func colorForReps(current: Int, previous: Int?, currentWeight: Int, previousWeight: Int?) -> Color {
-        guard let previous else { return .primary }
-        let prevWeight = previousWeight ?? currentWeight
-        if current > previous && currentWeight >= prevWeight { return .green }
-        if current < previous && currentWeight <= prevWeight { return .red }
-        return .primary
+        LogComparison.repsColour(current: current, previous: previous,
+                                 currentWeight: currentWeight, previousWeight: previousWeight)
     }
 }
 

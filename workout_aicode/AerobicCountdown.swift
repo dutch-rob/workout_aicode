@@ -37,9 +37,7 @@ enum AerobicDefaults {
     static let minuteChoices: [Int] = Array(1...120)
     static let defaultMinutes = 20
 
-    static func label(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
+    static func label(_ seconds: Int) -> String { minutesSeconds(seconds) }
 
     // MARK: Remembering the length
     //
