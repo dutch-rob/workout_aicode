@@ -19,6 +19,9 @@ struct MacLogsView: View {
     @Query private var aerobicResults: [AerobicResult]
 
     @State private var search = ""
+    @Environment(\.modelContext) private var context
+    @State private var editing: LogEditSession?
+    @State private var couldNotOpen: String?
 
     private var exerciseNames: [UUID: String] {
         Dictionary(exercises.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
@@ -66,6 +69,38 @@ struct MacLogsView: View {
             }
         }
         .navigationTitle("Logs")
+        .toolbar {
+            ToolbarItem {
+                Button(action: openEditor) {
+                    Label("Edit logs", systemImage: "square.and.pencil")
+                }
+                .help("Correct a logged row, or add one")
+            }
+        }
+        .sheet(item: $editing) { session in
+            MacEditLogsView(session: session)
+        }
+        .alert("Could not open the log editor",
+               isPresented: Binding(get: { couldNotOpen != nil },
+                                    set: { if !$0 { couldNotOpen = nil } })) {
+            Button("OK", role: .cancel) { couldNotOpen = nil }
+        } message: {
+            Text(couldNotOpen ?? "")
+        }
+    }
+
+    /// The copy is taken BEFORE the screen opens, and the screen does not open
+    /// without one. An editor with no way back is not a thing to offer for the
+    /// only records in this app that cannot be re-made.
+    private func openEditor() {
+        let wasInDraft = DraftMode.isOn(in: context)
+        do {
+            let snapshot = try LogEditing.snapshot(in: context)
+            DraftMode.start(in: context)
+            editing = LogEditSession(wasInDraft: wasInDraft, snapshot: snapshot)
+        } catch {
+            couldNotOpen = "Your logs could not be copied, so there would be no way to undo an edit. \(error.localizedDescription)"
+        }
     }
 
     private var countLine: String {

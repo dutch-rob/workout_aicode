@@ -1,0 +1,337 @@
+import SwiftUI
+import SwiftData
+
+// MARK: - Edit logs
+//
+// The flat table the log list is not: one row per logged exercise, with the
+// workout and the exercise as dropdowns, the date typeable, and the sets in
+// weight/reps pairs across the row. An empty row at the bottom adds one.
+//
+// It opens as a sheet rather than as a sidebar section, and that is deliberate.
+// The rules about draft mode are all about entering and leaving this screen, so
+// leaving has to be one thing the user does on purpose — not something that can
+// happen by clicking "Graphs" in the sidebar while half a row is typed.
+
+/// Everything that has to be remembered from the moment the screen opened.
+struct LogEditSession: Identifiable {
+    let id = UUID()
+    /// Whether draft was already on. Decides what leaving does when nothing
+    /// was changed: a draft the user started stays, one this screen started
+    /// goes.
+    let wasInDraft: Bool
+    let snapshot: LogSnapshot
+}
+
+struct MacEditLogsView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+
+    let session: LogEditSession
+
+    @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
+    @Query(sort: [SortDescriptor(\WorkoutDef.name)]) private var workouts: [WorkoutDef]
+    @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var exercises: [ExerciseDef]
+    @Query private var aerobicResults: [AerobicResult]
+
+    @State private var leaving = false
+    @State private var failure: String?
+
+    // The row at the bottom, before it becomes a log.
+    @State private var newWorkout: UUID?
+    @State private var newExercise: UUID?
+    @State private var newDate = Date()
+    @State private var newWeights: [Int] = [0, 0, 0]
+    @State private var newReps: [Int] = [0, 0, 0]
+
+    /// How many weight/reps pairs the table is wide. At least three, so there
+    /// is somewhere to type, and one spare past the longest row so a set can
+    /// always be added without a control for adding columns.
+    private var setColumns: Int {
+        let longest = logs.map { max($0.weights.count, $0.reps.count) }.max() ?? 0
+        return min(12, max(3, longest + 1))
+    }
+
+    private var changed: Bool { LogEditing.hasChanged(from: session.snapshot, in: context) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            table
+            Divider()
+            footer
+        }
+        .frame(minWidth: 900, idealWidth: 1100, minHeight: 560, idealHeight: 700)
+        .confirmationDialog("Leave the log editor?", isPresented: $leaving,
+                            titleVisibility: .visible) {
+            Button("Keep the changes and leave draft") { keepAndLeave() }
+            Button("Discard the changes made here", role: .destructive) { discardAndLeave() }
+            Button("Continue in draft", role: .cancel) { }
+        } message: {
+            Text("You changed the log. Keeping puts the changes in for good and ends draft. Discarding puts the log back exactly as it was when you opened this screen — it does not touch anything else you made while drafting.")
+        }
+        .alert("Could not put the log back",
+               isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+            Button("OK", role: .cancel) { failure = nil }
+        } message: {
+            Text(failure ?? "")
+        }
+    }
+
+    // MARK: Chrome
+
+    private var header: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Edit logs").font(.title3).bold()
+                Text("Changes are draft changes until you say otherwise.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Label("Draft", systemImage: "pencil.and.outline")
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(Capsule().fill(Color.orange.opacity(0.15)))
+        }
+        .padding(12)
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("\(logs.count) rows")
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer()
+            Button("Done") { finish() }
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(12)
+    }
+
+    // MARK: The table
+
+    private var table: some View {
+        ScrollView([.vertical, .horizontal]) {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                Section {
+                    ForEach(logs) { log in
+                        row(log)
+                        Divider()
+                    }
+                    newRow
+                } header: {
+                    columnTitles
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private var columnTitles: some View {
+        HStack(spacing: 8) {
+            Text("Workout").frame(width: 160, alignment: .leading)
+            Text("Exercise").frame(width: 190, alignment: .leading)
+            Text("Date and time").frame(width: 180, alignment: .leading)
+            ForEach(0..<setColumns, id: \.self) { i in
+                Text("w/r \(i + 1)").frame(width: 74, alignment: .leading)
+            }
+            Text("").frame(width: 26)
+        }
+        .font(.caption).bold()
+        .foregroundStyle(.secondary)
+        .padding(.vertical, 6)
+        .background(.regularMaterial)
+    }
+
+    private func row(_ log: WorkoutLog) -> some View {
+        HStack(spacing: 8) {
+            workoutPicker(selection: Binding(get: { log.workoutId },
+                                             set: { log.workoutId = $0 }))
+            exercisePicker(selection: Binding(get: { log.exerciseId },
+                                              set: { log.exerciseId = $0 }))
+            DatePicker("", selection: Binding(get: { log.date }, set: { log.date = $0 }))
+                .labelsHidden()
+                .frame(width: 180)
+
+            if let result = aerobicResults.first(where: { $0.logId == log.id }) {
+                // A ride has no sets. Showing empty weight boxes would invite
+                // someone to type a number into a row that has no use for one.
+                Text("aerobic · \(minutesSeconds(result.durationSeconds))")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .frame(width: CGFloat(setColumns) * 82, alignment: .leading)
+            } else {
+                ForEach(0..<setColumns, id: \.self) { i in
+                    setPair(weight: weightBinding(log, i), reps: repsBinding(log, i))
+                }
+            }
+
+            Button {
+                delete(log)
+            } label: {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Remove this row")
+            .frame(width: 26)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var newRow: some View {
+        HStack(spacing: 8) {
+            workoutPicker(selection: Binding(get: { newWorkout ?? workouts.first?.id ?? UUID() },
+                                             set: { newWorkout = $0 }))
+            exercisePicker(selection: Binding(get: { newExercise ?? UUID() },
+                                              set: { newExercise = $0 }))
+            DatePicker("", selection: $newDate).labelsHidden().frame(width: 180)
+
+            ForEach(0..<setColumns, id: \.self) { i in
+                setPair(weight: newWeightBinding(i), reps: newRepsBinding(i))
+            }
+
+            Button {
+                add()
+            } label: {
+                Image(systemName: "plus.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(canAdd ? Color.accentColor : .secondary)
+            .disabled(!canAdd)
+            .help(canAdd ? "Add this row" : "Choose an exercise first")
+            .frame(width: 26)
+        }
+        .padding(.vertical, 6)
+        .background(Color.accentColor.opacity(0.06))
+    }
+
+    // MARK: Cells
+
+    private func workoutPicker(selection: Binding<UUID>) -> some View {
+        Picker("", selection: selection) {
+            // A log whose workout was deleted still has to show something, or
+            // the picker would silently pick the first workout in the list and
+            // move the row into it.
+            if !workouts.contains(where: { $0.id == selection.wrappedValue }) {
+                Text("(missing)").tag(selection.wrappedValue)
+            }
+            ForEach(workouts) { Text($0.name.isEmpty ? "(unnamed)" : $0.name).tag($0.id) }
+        }
+        .labelsHidden()
+        .frame(width: 160)
+    }
+
+    private func exercisePicker(selection: Binding<UUID>) -> some View {
+        Picker("", selection: selection) {
+            if !exercises.contains(where: { $0.id == selection.wrappedValue }) {
+                Text("choose…").tag(selection.wrappedValue)
+            }
+            ForEach(exercises) { Text($0.name.isEmpty ? "(unnamed)" : $0.name).tag($0.id) }
+        }
+        .labelsHidden()
+        .frame(width: 190)
+    }
+
+    private func setPair(weight: Binding<Int>, reps: Binding<Int>) -> some View {
+        HStack(spacing: 2) {
+            TextField("", value: weight, format: .number)
+                .frame(width: 34)
+            TextField("", value: reps, format: .number)
+                .frame(width: 34)
+        }
+        .multilineTextAlignment(.trailing)
+        .monospacedDigit()
+        .frame(width: 74, alignment: .leading)
+    }
+
+    private func weightBinding(_ log: WorkoutLog, _ i: Int) -> Binding<Int> {
+        Binding(get: { i < log.weights.count ? log.weights[i] : 0 },
+                set: { LogEditing.extend(log, toSets: i + 1); log.weights[i] = $0 })
+    }
+
+    private func repsBinding(_ log: WorkoutLog, _ i: Int) -> Binding<Int> {
+        Binding(get: { i < log.reps.count ? log.reps[i] : 0 },
+                set: { LogEditing.extend(log, toSets: i + 1); log.reps[i] = $0 })
+    }
+
+    /// The bottom row is not a log yet, so its cells write to state rather
+    /// than to a record. Both arrays grow together, for the same reason a
+    /// log's do.
+    private func newWeightBinding(_ i: Int) -> Binding<Int> {
+        Binding(get: { i < newWeights.count ? newWeights[i] : 0 },
+                set: { value in growNewRow(to: i + 1); newWeights[i] = value })
+    }
+
+    private func newRepsBinding(_ i: Int) -> Binding<Int> {
+        Binding(get: { i < newReps.count ? newReps[i] : 0 },
+                set: { value in growNewRow(to: i + 1); newReps[i] = value })
+    }
+
+    private func growNewRow(to count: Int) {
+        while newWeights.count < count { newWeights.append(0) }
+        while newReps.count < count { newReps.append(0) }
+    }
+
+    // MARK: Adding and removing
+
+    private var canAdd: Bool {
+        newExercise != nil && exercises.contains { $0.id == newExercise }
+    }
+
+    private func add() {
+        guard let exerciseId = newExercise else { return }
+        let workoutId = newWorkout ?? workouts.first?.id ?? UUID()
+        var weights = newWeights, reps = newReps
+        while let w = weights.last, let r = reps.last, w == 0, r == 0 {
+            weights.removeLast(); reps.removeLast()
+        }
+        let log = WorkoutLog(date: newDate, workoutId: workoutId,
+                             exerciseId: exerciseId, weights: weights, reps: reps)
+        context.insert(log)
+        DraftMode.note(log: log.id, in: context)
+        try? context.save()
+
+        newExercise = nil
+        newWeights = [0, 0, 0]
+        newReps = [0, 0, 0]
+    }
+
+    private func delete(_ log: WorkoutLog) {
+        for result in aerobicResults where result.logId == log.id { context.delete(result) }
+        DraftMode.forget(id: log.id, in: context)
+        context.delete(log)
+        try? context.save()
+    }
+
+    // MARK: Leaving
+
+    private func finish() {
+        for log in logs { LogEditing.trimEmptyTrailingSets(log) }
+        try? context.save()
+
+        if changed {
+            leaving = true               // ask; the dialog's buttons do the rest
+        } else if session.wasInDraft {
+            dismiss()                    // their draft, still theirs
+        } else {
+            DraftMode.keepAll(in: context)   // this screen started it; nothing was made
+            dismiss()
+        }
+    }
+
+    private func keepAndLeave() {
+        DraftMode.keepAll(in: context)
+        dismiss()
+    }
+
+    private func discardAndLeave() {
+        do {
+            try LogEditing.restore(session.snapshot, in: context)
+            if !session.wasInDraft { DraftMode.keepAll(in: context) }
+            dismiss()
+        } catch {
+            // Never close on a failed restore: the user asked for their log
+            // back and has not got it, and closing would hide that.
+            failure = error.localizedDescription
+        }
+    }
+}

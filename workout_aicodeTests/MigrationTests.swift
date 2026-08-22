@@ -195,6 +195,178 @@ struct NewExerciseNumberTests {
 @Suite(.serialized)
 struct SchemaMigrationTests {
 
+    // MARK: Editing logs undoably
+    //
+    // In this suite rather than one of their own, and that is not tidiness: two
+    // serialized suites still run in parallel with EACH OTHER, and these open
+    // containers. Put in their own suite they made
+    // storeWrittenByVersion1_2SurvivesTheUpgrade fail — the same
+    // parallelism-versus-SwiftData race described above, reintroduced by a
+    // second @Suite.
+    //
+    // The log is the one thing in this app that cannot be re-made: a workout
+    // can be rebuilt in a minute, but nobody remembers what they lifted in
+    // March. The editor takes a copy first and "discard" puts it back, so the
+    // putting-back is tested against a real store rather than trusted.
+
+
+    @MainActor private func logEditStore() throws -> ModelContext {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("logedit-\(UUID().uuidString).sqlite")
+        let container = try ModelContainer(
+            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
+        return ModelContext(container)
+    }
+
+    @discardableResult
+    private func addLog(_ context: ModelContext, weights: [Int], reps: [Int],
+                        date: Date = Date(timeIntervalSince1970: 1_000_000)) -> WorkoutLog {
+        let log = WorkoutLog(date: date, workoutId: UUID(), exerciseId: UUID(),
+                             weights: weights, reps: reps)
+        context.insert(log)
+        try? context.save()
+        return log
+    }
+
+    @MainActor @Test func anEditedRowGoesBackToWhatItWas() throws {
+        let context = try logEditStore()
+        let log = addLog(context, weights: [60, 60], reps: [10, 8])
+        let snapshot = try LogEditing.snapshot(in: context)
+
+        log.weights = [80, 80]
+        log.reps = [3, 3]
+        try context.save()
+        #expect(LogEditing.hasChanged(from: snapshot, in: context))
+
+        try LogEditing.restore(snapshot, in: context)
+        let after = try #require(try context.fetch(FetchDescriptor<WorkoutLog>()).first)
+        #expect(after.weights == [60, 60])
+        #expect(after.reps == [10, 8])
+        #expect(!LogEditing.hasChanged(from: snapshot, in: context))
+    }
+
+    @MainActor @Test func aRowAddedAfterTheCopyIsRemovedAgain() throws {
+        let context = try logEditStore()
+        addLog(context, weights: [50], reps: [10])
+        let snapshot = try LogEditing.snapshot(in: context)
+
+        addLog(context, weights: [999], reps: [1])
+        #expect(try context.fetch(FetchDescriptor<WorkoutLog>()).count == 2)
+
+        try LogEditing.restore(snapshot, in: context)
+        let after = try context.fetch(FetchDescriptor<WorkoutLog>())
+        #expect(after.count == 1)
+        #expect(after.first?.weights == [50])
+    }
+
+    @MainActor @Test func aRowDeletedAfterTheCopyComesBack() throws {
+        // The half people actually worry about.
+        let context = try logEditStore()
+        let log = addLog(context, weights: [70], reps: [5])
+        let snapshot = try LogEditing.snapshot(in: context)
+
+        context.delete(log)
+        try context.save()
+        #expect(try context.fetch(FetchDescriptor<WorkoutLog>()).isEmpty)
+
+        try LogEditing.restore(snapshot, in: context)
+        let after = try context.fetch(FetchDescriptor<WorkoutLog>())
+        #expect(after.count == 1)
+        #expect(after.first?.weights == [70])
+        #expect(after.first?.reps == [5])
+    }
+
+    @MainActor @Test func movingARowToAnotherExerciseIsUndone() throws {
+        let context = try logEditStore()
+        let log = addLog(context, weights: [40], reps: [12])
+        let original = log.exerciseId
+        let snapshot = try LogEditing.snapshot(in: context)
+
+        log.exerciseId = UUID()
+        log.date = Date(timeIntervalSince1970: 2_000_000)
+        try context.save()
+
+        try LogEditing.restore(snapshot, in: context)
+        let after = try #require(try context.fetch(FetchDescriptor<WorkoutLog>()).first)
+        #expect(after.exerciseId == original)
+        #expect(Int(after.date.timeIntervalSince1970) == 1_000_000)
+    }
+
+    @MainActor @Test func anAerobicMeasurementComesBackWithItsLog() throws {
+        // Deleting an aerobic row takes its measurements with it; putting the
+        // row back has to put those back too, or the log says a ride happened
+        // and can no longer say anything about it.
+        let context = try logEditStore()
+        let log = addLog(context, weights: [], reps: [])
+        context.insert(AerobicResult(logId: log.id, durationSeconds: 1200,
+                                     averageHeartRate: 131, maximumHeartRate: 158,
+                                     zoneSeconds: [60, 300, 600, 240, 0]))
+        try context.save()
+        let snapshot = try LogEditing.snapshot(in: context)
+
+        for result in try context.fetch(FetchDescriptor<AerobicResult>()) { context.delete(result) }
+        context.delete(log)
+        try context.save()
+
+        try LogEditing.restore(snapshot, in: context)
+        let result = try #require(try context.fetch(FetchDescriptor<AerobicResult>()).first)
+        #expect(result.durationSeconds == 1200)
+        #expect(result.averageHeartRate == 131)
+        #expect(result.zoneSeconds == [60, 300, 600, 240, 0])
+        #expect(try context.fetch(FetchDescriptor<WorkoutLog>()).count == 1)
+    }
+
+    @MainActor @Test func nothingTouchedMeansNothingChanged() throws {
+        // The Done button leans on this: if it said "changed" for an untouched
+        // screen, every visit would end in a dialog nobody needs.
+        let context = try logEditStore()
+        addLog(context, weights: [60, 60], reps: [10, 8])
+        addLog(context, weights: [], reps: [])
+        let snapshot = try LogEditing.snapshot(in: context)
+        #expect(!LogEditing.hasChanged(from: snapshot, in: context))
+    }
+
+    @MainActor @Test func restoringTwiceIsTheSameAsRestoringOnce() throws {
+        let context = try logEditStore()
+        let log = addLog(context, weights: [60], reps: [10])
+        let snapshot = try LogEditing.snapshot(in: context)
+        log.weights = [90]
+        try context.save()
+
+        try LogEditing.restore(snapshot, in: context)
+        try LogEditing.restore(snapshot, in: context)
+        let after = try context.fetch(FetchDescriptor<WorkoutLog>())
+        #expect(after.count == 1)
+        #expect(after.first?.weights == [60])
+    }
+
+    @MainActor @Test func emptyTrailingSetsAreTrimmedButRealZeroesAreNot() throws {
+        let context = try logEditStore()
+        // Reaching set 4 to type in it lengthens the arrays; changing your
+        // mind must not leave two sets of nothing behind.
+        let log = addLog(context, weights: [60, 60, 0, 0], reps: [10, 8, 0, 0])
+        LogEditing.trimEmptyTrailingSets(log)
+        #expect(log.weights == [60, 60])
+        #expect(log.reps == [10, 8])
+
+        // A bodyweight set is 0 kg for real reps, and is not an empty set.
+        let bodyweight = addLog(context, weights: [0, 0], reps: [12, 10])
+        LogEditing.trimEmptyTrailingSets(bodyweight)
+        #expect(bodyweight.reps == [12, 10])
+    }
+
+    @MainActor @Test func reachingAnEmptyColumnKeepsWeightsAndRepsTheSameLength() throws {
+        let context = try logEditStore()
+        let log = addLog(context, weights: [60], reps: [10])
+        LogEditing.extend(log, toSets: 4)
+        #expect(log.weights.count == 4)
+        #expect(log.reps.count == 4)
+        // A weight with no reps beside it is a row every reader has to guess at.
+        #expect(log.weights.count == log.reps.count)
+    }
+
+
     // Does a database written by the shipped app still open, with all its data, on
     // the current version?
     //
@@ -1087,6 +1259,15 @@ struct LogListTests {
     // Someone timing a two-hour ride means 120 minutes, not "2:00:00".
     #expect(minutesSeconds(7200) == "120:00")
 }
+
+// MARK: - Editing logs undoably
+//
+// The log is the one thing in this app that cannot be re-made: a workout can be
+// rebuilt in a minute, but nobody remembers what they lifted in March. The
+// editor takes a copy first and "discard" puts it back, so the putting-back is
+// tested against a real store rather than trusted.
+//
+// Serialized with the other container tests, for the reason given above them.
 
 // MARK: - Heart rate zones
 //
