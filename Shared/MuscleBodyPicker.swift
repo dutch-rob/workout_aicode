@@ -16,14 +16,6 @@ import SwiftUI
 struct MuscleBodyPicker: View {
     @Binding var selection: MuscleGroup?
 
-    /// Groups to show in a second, quieter colour beside the selected one.
-    ///
-    /// Empty when the picker is a filter — a filter has one answer. The Mac's
-    /// exercise form fills it with the secondary muscles, so the drawing shows
-    /// the whole answer at once: what an exercise mainly works, and what it
-    /// also works, on the same body.
-    var secondary: Set<MuscleGroup> = []
-
     /// Whether the aerobic filter is on, when there is one. Beside the muscles
     /// because that is where a user looks for "which sort of exercise", even
     /// though aerobic is a kind rather than a group.
@@ -38,19 +30,11 @@ struct MuscleBodyPicker: View {
     /// window has room the phone does not.
     var height: CGFloat = 400
 
-    /// What a click on a muscle — on the body or on its label — should do.
-    ///
-    /// Left nil, it toggles `selection`, which is what a filter wants. The
-    /// Mac's exercise form supplies one instead, because there a click can mean
-    /// two things: set the primary muscle, or, with Option held, add to the
-    /// secondary ones. The picker stays ignorant of which; it reports the
-    /// muscle and lets the caller decide.
-    var onPick: ((MuscleGroup) -> Void)? = nil
-
+    /// One answer at a time: clicking the selected group again clears it.
+    /// This picker is a filter on both platforms — what an exercise's OWN
+    /// muscle groups are is set from a list on its edit screen, not here.
     private func pick(_ group: MuscleGroup) {
-        if let onPick { onPick(group) } else {
-            selection = (selection == group) ? nil : group
-        }
+        selection = (selection == group) ? nil : group
     }
 
     var body: some View {
@@ -290,10 +274,6 @@ struct MuscleBodyPicker: View {
         // body, with colour — not lightness — saying what is selectable.
         guard let muscle else { return Color(white: 0.72) }
         if muscle == selection { return Color.blue.opacity(0.80) }
-        // A paler blue for "also worked": near enough the selected colour to
-        // read as the same kind of answer, far enough not to be mistaken for
-        // the primary one.
-        if secondary.contains(muscle) { return Color.blue.opacity(0.34) }
         return Color(red: 0.94, green: 0.56, blue: 0.47)
     }
 
@@ -324,9 +304,7 @@ struct MuscleBodyPicker: View {
                         .background(
                             Capsule().fill(selection == group
                                            ? Color.blue
-                                           : secondary.contains(group)
-                                             ? Color.blue.opacity(0.28)
-                                             : Color.secondary.opacity(0.15))
+                                           : Color.secondary.opacity(0.15))
                         )
                         .foregroundStyle(selection == group ? Color.white : Color.primary)
                 }

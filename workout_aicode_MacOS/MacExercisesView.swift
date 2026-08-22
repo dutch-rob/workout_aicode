@@ -1,6 +1,6 @@
 import SwiftUI
 import SwiftData
-import AppKit
+
 
 // MARK: - Exercises
 //
@@ -8,11 +8,16 @@ import AppKit
 // rolled: a Mac has no touchscreen, and a picker wheel driven by a trackpad is
 // worse than a text field at everything a text field does.
 //
-// Muscle groups are the exception, and they are why this screen matters. They
-// are the one field nobody fills in on a phone — fifteen names in a picker,
-// once per exercise, standing in a gym — and without them the statistics have
-// nothing to group by. Here there is room for the body diagram itself, so a
-// whole library can be tagged by pointing at it.
+// The body diagram is the filter, exactly as on the phone: it stands in the
+// detail pane until an exercise is chosen, and pointing at a muscle shows the
+// exercises that work it. Selecting an exercise replaces it with the form, the
+// way tapping a row on the phone pushes the edit screen — and "all exercises"
+// brings the body back.
+//
+// An earlier version had the diagram inside the form, setting the exercise's
+// own muscle groups by clicking and Option-clicking. It went the other way
+// round from the phone, and one app should not have two ideas about what a
+// picture of a body is for. The groups are set from a list again.
 
 struct MacExercisesView: View {
     @Environment(\.modelContext) private var context
@@ -55,9 +60,21 @@ struct MacExercisesView: View {
                 .frame(minWidth: 220, idealWidth: 260, maxHeight: .infinity)
             Group {
                 if let selected {
-                    MacExerciseForm(exercise: selected)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Button {
+                            selection = nil
+                        } label: {
+                            Label("All exercises", systemImage: "chevron.left")
+                        }
+                        .buttonStyle(.link)
+                        .padding(.leading, 16)
+                        .padding(.top, 10)
+                        .help("Back to the muscle groups")
+
+                        MacExerciseForm(exercise: selected)
+                    }
                 } else {
-                    ContentUnavailableView("No exercise selected", systemImage: "hand.point.left")
+                    picker
                 }
             }
             // Both halves take the whole height they are given. Without this
@@ -75,6 +92,58 @@ struct MacExercisesView: View {
                     .help("Add an exercise")
             }
         }
+    }
+
+    // MARK: The body, as the filter
+
+    /// What stands in the detail pane until an exercise is chosen.
+    private var picker: some View {
+        VStack(spacing: 10) {
+            Spacer(minLength: 0)
+
+            MuscleBodyPicker(selection: muscleBinding,
+                             aerobic: aerobicBinding,
+                             height: 420)
+                .padding(.horizontal, 12)
+
+            HStack(spacing: 10) {
+                Button("All groups") { sieve.filter = .all }
+                    .disabled(sieve.filter == .all)
+                Text(showingLine)
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
+            Text("Click a muscle, or the heart, to show what works it. Click an exercise in the list to open it.")
+                .font(.footnote).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var showingLine: String {
+        switch sieve.filter {
+        case .all:              return "Showing every exercise"
+        case .aerobic:          return "Showing aerobic exercises"
+        case .muscle(let g):    return "Showing \(g.label)"
+        }
+    }
+
+    /// The diagram speaks in muscle groups and a heart; the list speaks in one
+    /// filter. These two bindings are the join, and they give the phone's rule
+    /// for free: choosing a muscle lets go of aerobic and the other way round,
+    /// because an exercise is one kind or the other and both at once could only
+    /// ever show nothing.
+    private var muscleBinding: Binding<MuscleGroup?> {
+        Binding(get: { sieve.filter.muscle },
+                set: { sieve.filter = $0.map(MacExerciseFilter.muscle) ?? .all })
+    }
+
+    private var aerobicBinding: Binding<Bool> {
+        Binding(get: { sieve.filter.isAerobic },
+                set: { sieve.filter = $0 ? .aerobic : .all })
     }
 
     private var list: some View {
@@ -230,17 +299,9 @@ struct MacExercisesView: View {
 struct MacExerciseForm: View {
     @Bindable var exercise: ExerciseDef
 
-    /// Secondaries as the diagram should draw them. The primary is taken out:
-    /// a muscle is one or the other, and showing it in both colours at once
-    /// would say the app cannot tell.
-    private var alsoWorked: Set<MuscleGroup> {
-        Set(exercise.secondaryMuscles).subtracting([exercise.primaryMuscle].compactMap { $0 })
-    }
-
-    private var unusedMuscles: [MuscleGroup] {
-        MuscleGroup.displayOrder.filter {
-            $0 != exercise.primaryMuscle && !alsoWorked.contains($0)
-        }
+    /// Fifteen names, and how many more may be added.
+    private var secondaryRoom: Int {
+        MuscleGroup.maximumSecondary - exercise.secondaryMuscles.count
     }
 
     var body: some View {
@@ -305,106 +366,80 @@ struct MacExerciseForm: View {
     }
 
     // MARK: Muscle groups
+    //
+    // A picker for the one it mainly works, and a checkable list for the rest —
+    // the same shape as the phone's edit screen, so a person moving between the
+    // two is not learning the field twice.
 
     private var muscleSection: some View {
         Section {
-            MuscleBodyPicker(selection: Binding(
-                                get: { exercise.primaryMuscle },
-                                set: { exercise.primaryMuscle = $0 }),
-                             secondary: alsoWorked,
-                             // No aerobic button: this is not a filter, and
-                             // "aerobic instead" is not an answer to "which
-                             // muscles does this work".
-                             aerobic: nil,
-                             height: 340,
-                             onPick: pick)
-                .frame(maxWidth: .infinity)
+            Picker("Primary", selection: Binding(
+                get: { exercise.primaryMuscle },
+                set: { newValue in
+                    exercise.primaryMuscle = newValue
+                    // A muscle is one or the other. Left in both lists it would
+                    // be counted twice by anything grouping work per muscle.
+                    if let newValue {
+                        setSecondary(exercise.secondaryMuscles.filter { $0 != newValue })
+                    }
+                })) {
+                Text("not set").tag(MuscleGroup?.none)
+                ForEach(MuscleGroup.displayOrder) { group in
+                    Text(group.label).tag(MuscleGroup?.some(group))
+                }
+            }
 
-            chips
+            LabeledContent("Also worked") {
+                Text(secondarySummary).foregroundStyle(.secondary)
+            }
+
+            ForEach(MuscleGroup.displayOrder) { group in
+                secondaryRow(group)
+            }
         } header: {
             Text("Muscle groups")
         } footer: {
-            Text("Click a muscle, or its label, to make it the one this exercise mainly works. Option-click to mark it as also worked — those show in a paler blue. Up to \(MuscleGroup.maximumSecondary) can be also-worked.")
+            Text("Used to group your training by muscle group, and to compare exercises. Up to \(MuscleGroup.maximumSecondary) also-worked groups.\n\nThe body diagram on the exercises screen is a filter — it shows what works a muscle. This is where an exercise's own groups are set.")
         }
     }
 
-    /// The written answer under the drawing.
-    ///
-    /// The diagram alone would be a picture you have to interpret; these say it
-    /// in words, and give a way in for anyone who would rather not hunt for
-    /// "rear delts" on a small figure — or who cannot use a mouse well enough
-    /// to option-click.
-    @ViewBuilder private var chips: some View {
-        FlowLayout(spacing: 6, lineSpacing: 6) {
-            if let primary = exercise.primaryMuscle {
-                chip(primary.shortLabel, tint: .blue, filled: true) {
-                    exercise.primaryMuscle = nil
-                }
-            } else {
-                Text("No muscle group yet")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .padding(.vertical, 3)
-            }
-
-            ForEach(MuscleGroup.displayOrder.filter { alsoWorked.contains($0) }) { group in
-                chip(group.shortLabel, tint: .blue, filled: false) {
-                    setSecondary(exercise.secondaryMuscles.filter { $0 != group })
-                }
-            }
-
-            if alsoWorked.count < MuscleGroup.maximumSecondary {
-                Menu("＋ also worked") {
-                    ForEach(unusedMuscles) { group in
-                        Button(group.label) {
-                            setSecondary(exercise.secondaryMuscles + [group])
-                        }
-                    }
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    private var secondarySummary: String {
+        let s = exercise.secondaryMuscles.filter { $0 != exercise.primaryMuscle }
+        return s.isEmpty ? "none" : s.map(\.shortLabel).joined(separator: ", ")
     }
 
-    private func chip(_ text: String, tint: Color, filled: Bool,
-                      remove: @escaping () -> Void) -> some View {
-        HStack(spacing: 3) {
-            Text(text).font(.caption)
-            Button(action: remove) {
-                Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+    private func secondaryRow(_ group: MuscleGroup) -> some View {
+        let isPrimary = group == exercise.primaryMuscle
+        let isOn = exercise.secondaryMuscles.contains(group)
+        // Full, and this one is not already ticked: there is nothing a click
+        // could do, and a row that silently ignores clicks is worse than one
+        // that says it is unavailable.
+        let blocked = isPrimary || (secondaryRoom <= 0 && !isOn)
+        return Button {
+            toggleSecondary(group)
+        } label: {
+            HStack {
+                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(isOn ? Color.accentColor : .secondary)
+                Text(group.label)
+                    .foregroundStyle(blocked ? .secondary : .primary)
+                Spacer()
+                if isPrimary {
+                    Text("primary").font(.caption).foregroundStyle(.secondary)
+                }
             }
-            .buttonStyle(.plain)
-            .help("Remove")
+            .contentShape(Rectangle())
         }
-        .foregroundStyle(filled ? Color.white : Color.primary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Capsule().fill(filled ? tint : tint.opacity(0.28)))
+        .buttonStyle(.plain)
+        .disabled(blocked)
     }
 
-    // MARK: Clicking a muscle
-
-    /// A plain click sets the primary; Option adds or removes an also-worked.
-    ///
-    /// The modifier is read from AppKit at the moment of the click rather than
-    /// carried through the picker: the picker is shared with the phone, where
-    /// there is no such thing as a held key, and teaching it about modifiers
-    /// would put a Mac idea into a file the phone compiles.
-    private func pick(_ group: MuscleGroup) {
-        if NSEvent.modifierFlags.contains(.option) {
-            if alsoWorked.contains(group) {
-                setSecondary(exercise.secondaryMuscles.filter { $0 != group })
-            } else if alsoWorked.count < MuscleGroup.maximumSecondary {
-                setSecondary(exercise.secondaryMuscles + [group])
-            }
-            return
+    private func toggleSecondary(_ group: MuscleGroup) {
+        if exercise.secondaryMuscles.contains(group) {
+            setSecondary(exercise.secondaryMuscles.filter { $0 != group })
+        } else {
+            setSecondary(exercise.secondaryMuscles + [group])
         }
-        let wasPrimary = exercise.primaryMuscle == group
-        exercise.primaryMuscle = wasPrimary ? nil : group
-        // Promoting a muscle that was already listed as also-worked takes it
-        // out of that list, so it is never claimed twice.
-        if !wasPrimary { setSecondary(exercise.secondaryMuscles.filter { $0 != group }) }
     }
 
     private func setSecondary(_ groups: [MuscleGroup]) {
