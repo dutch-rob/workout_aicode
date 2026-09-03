@@ -1269,6 +1269,72 @@ struct LogListTests {
 //
 // Serialized with the other container tests, for the reason given above them.
 
+// MARK: - When a workout is over
+//
+// The user puts the phone in a pocket and forgets to press quit. Two things
+// follow from that, and both are decided here rather than by whatever the app
+// happens to be doing at the time.
+
+@Test func aForgottenWorkoutEndsAtTheLastSetNotWhenItWasNoticed() {
+    let started = Date(timeIntervalSince1970: 1_000_000)
+    let lastSet = started.addingTimeInterval(45 * 60)      // 45 minutes of training
+    let noticed = started.addingTimeInterval(6 * 3600)     // spotted six hours later
+
+    let end = OpenWorkoutPolicy.endDate(startedAt: started,
+                                        lastActivityAt: lastSet, now: noticed)
+    // Not `noticed`: a forgotten workout must not be recorded as six hours of
+    // strength training, which is what the Move ring would then be told.
+    #expect(end == lastSet)
+}
+
+@Test func aWorkoutStillInProgressIsNotClosed() {
+    let started = Date(timeIntervalSince1970: 1_000_000)
+    let lastSet = started.addingTimeInterval(600)
+    // Ten minutes between sets is a long rest, not the end of a workout.
+    let soon = lastSet.addingTimeInterval(10 * 60)
+    #expect(OpenWorkoutPolicy.endDate(startedAt: started,
+                                      lastActivityAt: lastSet, now: soon) == nil)
+    // An hour and a second is the end of it.
+    let later = lastSet.addingTimeInterval(OpenWorkoutPolicy.idleLimit + 1)
+    #expect(OpenWorkoutPolicy.endDate(startedAt: started,
+                                      lastActivityAt: lastSet, now: later) == lastSet)
+}
+
+@Test func aWorkoutWithNothingLoggedIsNotRecordedAtAll() {
+    // Opened the workout, changed their mind, walked out. Nothing happened,
+    // and Health should not be told that something did.
+    let started = Date(timeIntervalSince1970: 1_000_000)
+    #expect(OpenWorkoutPolicy.closingDate(startedAt: started, lastActivityAt: started) == nil)
+    #expect(OpenWorkoutPolicy.endDate(startedAt: started, lastActivityAt: started,
+                                      now: started.addingTimeInterval(9999)) == nil)
+}
+
+@Test func anInterruptedSessionIsResumableForExactlyAsLongAsItIsOpen() {
+    // One rule for both: a session the app will still resume is one it has not
+    // yet declared finished. If these ever disagreed, there would be a window
+    // where the workout had been written to Health and the app offered to carry
+    // on with it anyway.
+    let touched = Date(timeIntervalSince1970: 1_000_000)
+    let inside = touched.addingTimeInterval(OpenWorkoutPolicy.idleLimit - 1)
+    let outside = touched.addingTimeInterval(OpenWorkoutPolicy.idleLimit + 1)
+
+    #expect(OpenWorkoutPolicy.isResumable(lastActivityAt: touched, now: inside))
+    #expect(!OpenWorkoutPolicy.isResumable(lastActivityAt: touched, now: outside))
+    #expect(OpenWorkoutPolicy.endDate(startedAt: touched.addingTimeInterval(-600),
+                                      lastActivityAt: touched, now: inside) == nil)
+    #expect(OpenWorkoutPolicy.endDate(startedAt: touched.addingTimeInterval(-600),
+                                      lastActivityAt: touched, now: outside) != nil)
+}
+
+@Test func aClockThatWentBackwardsDoesNotThrowTheSessionAway() {
+    // Crossing a timezone, or the phone correcting itself, can leave the saved
+    // moment slightly in the future. Losing a workout in progress over that
+    // would be a poor trade.
+    let touched = Date(timeIntervalSince1970: 1_000_000)
+    let earlier = touched.addingTimeInterval(-120)
+    #expect(OpenWorkoutPolicy.isResumable(lastActivityAt: touched, now: earlier))
+}
+
 // MARK: - Heart rate zones
 //
 // A stand-in until the OS 27 SDK, where HealthKit hands over the user's real

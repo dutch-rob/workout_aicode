@@ -529,6 +529,11 @@ struct LogExerciseView: View {
     @Query private var aerobicResults: [AerobicResult]
 
     @State private var startedAt = Date()
+    /// Set when this screen picked up an interrupted session rather than
+    /// starting a new one. Shown once, because the difference between "your
+    /// three logged exercises are still here" and "you are starting again"
+    /// is not something to leave the user to work out from the wheels.
+    @State private var carriedOn = false
     @State private var currentIndex: Int = 0
     @State private var weights: [[Int]] = []
     @State private var reps: [[Int]] = []
@@ -576,6 +581,21 @@ struct LogExerciseView: View {
                 .offset(x: dragOffsetX)
                 .padding()
                 .modifier(RestSettleAcknowledgement(height: geo.size.height))
+                .overlay(alignment: .top) {
+                    if carriedOn {
+                        Text("Carried on from earlier")
+                            .font(.footnote).bold()
+                            .padding(.horizontal, 14).padding(.vertical, 7)
+                            .background(Capsule().fill(Color.blue))
+                            .foregroundStyle(.white)
+                            .padding(.top, 4)
+                            .transition(.opacity)
+                            // Goes on the first thing the user does. It has
+                            // been read by then, and a badge that stays is a
+                            // badge in the way.
+                            .onTapGesture { carriedOn = false }
+                    }
+                }
                 .onAppear {
                     containerWidth = geo.size.width
                     pickerHeight = max(160, (geo.size.height - 220) / 2)
@@ -592,11 +612,13 @@ struct LogExerciseView: View {
                 // Report state to the handover coordinator so the Watch can take
                 // over from exactly here. Exercise/log boundaries also checkpoint.
                 .onChange(of: currentIndex) { _, _ in
+                    carriedOn = false
                     handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
                 }
                 .onChange(of: weights) { _, _ in handoff.updateLiveSnapshot(currentSnapshot()) }
                 .onChange(of: reps) { _, _ in handoff.updateLiveSnapshot(currentSnapshot()) }
                 .onChange(of: loggedIndices) { _, _ in
+                    carriedOn = false
                     handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
                 }
                 .onDisappear { handoff.leaveSession(); restTimer.cancel(); aerobic.cancel() }
@@ -704,9 +726,20 @@ struct LogExerciseView: View {
             adopt(snap)
             handoff.updateLiveSnapshot(currentSnapshot())
         } else {
-            // Opened by tapping the workout — become the driver, adopting the
-            // other device's state if it was already in this same workout.
-            startedAt = Date()
+            // Opened by tapping the workout. Before becoming the driver, pick
+            // up an interrupted session for this same workout: the app being
+            // killed while the phone sat in a pocket is the ordinary case, and
+            // starting again from zero throws away sets that were logged and
+            // weights that were dialled in.
+            //
+            // startedAt comes back with it, so Apple Health still gets the
+            // whole workout rather than the part after the interruption.
+            if let resumed = handoff.resumableSession(for: workout.id.uuidString) {
+                adopt(resumed)
+                carriedOn = true
+            } else {
+                startedAt = Date()
+            }
             handoff.enterSession(workoutId: workout.id.uuidString,
                                  current: currentSnapshot()) { snap in adopt(snap) }
         }

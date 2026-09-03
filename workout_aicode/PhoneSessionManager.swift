@@ -74,7 +74,10 @@ final class PhoneSessionManager: NSObject, ObservableObject {
 
     private struct OpenWorkout: Codable { var startedAt: Date; var lastActivityAt: Date }
     private let openWorkoutKey = "openHealthWorkout"
-    private let autoEndAfter: TimeInterval = 3600   // 1 hour
+    /// When a forgotten workout counts as over, and how long an interrupted
+    /// session stays resumable — one rule, in OpenWorkoutPolicy, because a
+    /// session the app will still resume is one it has not declared finished.
+    private var autoEndAfter: TimeInterval { OpenWorkoutPolicy.idleLimit }
 
     private var openWorkout: OpenWorkout? {
         get {
@@ -91,6 +94,59 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     }
 
     private var healthEnabled: Bool { UserDefaults.standard.bool(forKey: "healthSharingEnabled") }
+
+    // MARK: - Carrying on after the app is killed
+    //
+    // iOS suspends an app the moment the screen locks, and reclaims suspended
+    // apps whenever it wants the memory. A phone in a gym pocket for ten
+    // minutes is exactly that case, and there is no way to prevent it: the
+    // background modes that keep an app alive are for navigation, audio and
+    // workouts-on-a-Watch, and claiming one under a false pretext is both a
+    // lie to the user about their battery and an App Store rejection.
+    //
+    // So the app stops trying to stay alive and learns to come back instead.
+    // The live session — which workout, which exercise, what is dialled into
+    // every wheel, what has been logged, when it started — is written down as
+    // it changes. Reopening the workout picks it up.
+    //
+    // Written to UserDefaults rather than to the database on purpose: this is
+    // the state of one device's screen, not a fact about the user's training,
+    // and it must never sync to the phone's other devices as though it were.
+
+    private struct UnfinishedSession: Codable {
+        var snapshot: SessionSnapshot
+        /// Last touched, which is what decides whether it is still today's
+        /// workout or yesterday's leftovers.
+        var savedAt: Date
+    }
+    private let unfinishedSessionKey = "unfinishedSession"
+
+    private var unfinishedSession: UnfinishedSession? {
+        get {
+            guard let d = UserDefaults.standard.data(forKey: unfinishedSessionKey) else { return nil }
+            return try? JSONDecoder().decode(UnfinishedSession.self, from: d)
+        }
+        set {
+            if let v = newValue, let d = try? JSONEncoder().encode(v) {
+                UserDefaults.standard.set(d, forKey: unfinishedSessionKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: unfinishedSessionKey)
+            }
+        }
+    }
+
+    /// The session to carry on with when this workout is opened again, or nil
+    /// if there is none, it is a different workout, or it has gone cold.
+    func resumableSession(for workoutId: String) -> SessionSnapshot? {
+        guard let saved = unfinishedSession, saved.snapshot.workoutId == workoutId else { return nil }
+        guard OpenWorkoutPolicy.isResumable(lastActivityAt: saved.savedAt, now: Date()) else {
+            unfinishedSession = nil
+            return nil
+        }
+        return saved.snapshot
+    }
+
+    func forgetUnfinishedSession() { unfinishedSession = nil }
 
     /// A workout began (on either device). Finalizes any stale prior one first.
     func noteWorkoutStarted(at date: Date) {
@@ -114,6 +170,9 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     func finishWorkoutHere(startedAt: Date, endedAt: Date) {
         let hadActivity = openWorkout.map { $0.lastActivityAt > $0.startedAt } ?? false
         openWorkout = nil
+        // Said "done" or "quit": this is the one ending that means it. Anything
+        // else that closes the screen leaves the session resumable.
+        forgetUnfinishedSession()
         guard healthEnabled, hadActivity, endedAt > startedAt else { return }
         // Deferred on purpose: HealthKit may put its permission sheet on screen,
         // and must never block the log screen from closing first.
@@ -126,16 +185,22 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     /// its last activity, then forget it.
     private func finalizeAbandonedOpenWorkout() {
         guard let w = openWorkout else { return }
-        if healthEnabled, w.lastActivityAt > w.startedAt {
-            HealthWorkoutLogger.shared.saveStrengthWorkout(start: w.startedAt, end: w.lastActivityAt)
+        if healthEnabled,
+           let end = OpenWorkoutPolicy.closingDate(startedAt: w.startedAt,
+                                                   lastActivityAt: w.lastActivityAt) {
+            HealthWorkoutLogger.shared.saveStrengthWorkout(start: w.startedAt, end: end)
         }
         openWorkout = nil
+        // The workout is closed, so there is nothing left to carry on from.
+        forgetUnfinishedSession()
     }
 
     /// Called on launch / foreground: finalize a workout left un-ended for > 1h.
     func checkAutoEnd() {
         guard let w = openWorkout else { return }
-        if Date().timeIntervalSince(w.lastActivityAt) > autoEndAfter {
+        if OpenWorkoutPolicy.endDate(startedAt: w.startedAt,
+                                     lastActivityAt: w.lastActivityAt,
+                                     now: Date()) != nil {
             finalizeAbandonedOpenWorkout()
         }
     }
@@ -184,7 +249,7 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     /// other device's state if it was already in the same workout.
     func enterSession(workoutId: String, current: SessionSnapshot,
                       adopt: @escaping (SessionSnapshot) -> Void) {
-        liveSnapshot = current
+        updateLiveSnapshot(current)
         adoptSnapshot = nil
         routeWorkoutId = nil
         role = .driving
@@ -203,7 +268,13 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         sendContext()
     }
 
-    func updateLiveSnapshot(_ snapshot: SessionSnapshot) { liveSnapshot = snapshot }
+    func updateLiveSnapshot(_ snapshot: SessionSnapshot) {
+        liveSnapshot = snapshot
+        // Every change, not only the checkpoints. What is dialled into a wheel
+        // before the phone goes into a pocket is exactly what gets lost, and it
+        // is the part the user has to remember to type again.
+        unfinishedSession = UnfinishedSession(snapshot: snapshot, savedAt: Date())
+    }
     func checkpoint() { if role == .driving { sendContext() } }
 
     /// The local log view went away (quit/finished) — ends the session for both.
