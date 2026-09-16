@@ -25,6 +25,8 @@ struct ContentView: View {
     // are looked up only where they are about to be drawn.
     @State private var path: [UUID] = []
     @State private var askDefaults = false
+    /// Once per launch. See the resume in `.task`.
+    @State private var triedResume = false
 
     /// A row on the start screen, as plain values — see `path`.
     private struct WorkoutRow: Identifiable, Hashable {
@@ -44,6 +46,15 @@ struct ContentView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date)]) private var allLogs: [WorkoutLog]
     @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
     @AppStorage(StatsSettingsKey.formula) private var formulaRaw = OneRMFormula.epley.rawValue
+
+    /// A screenshot run seeds its own data and drives its own navigation.
+    private var isDemoRun: Bool {
+        #if DEBUG
+        return DemoMode.isEnabled
+        #else
+        return false
+        #endif
+    }
 
     private func uploadSharedDataIfConsented() {
         guard shareWithDevelopers else { return }
@@ -169,6 +180,22 @@ struct ContentView: View {
         // Asked once, on a fresh install, before there is anything to set up.
         .sheet(isPresented: $askDefaults) { ExerciseDefaultsView() }
         .task {
+            // Straight back into an interrupted workout. A launch that finds an
+            // unfinished session is almost always iOS having killed the app
+            // while the phone was in a pocket: the person was on the log
+            // screen, and making them find the workout again to get back to it
+            // was the complaint. Only on launch — an app that was merely
+            // backgrounded comes back where it was without help, and yanking
+            // someone out of logs/stats on every return would be its own
+            // complaint.
+            if !triedResume {
+                triedResume = true
+                if path.isEmpty, handoff.role != .paused, !isDemoRun,
+                   let id = handoff.workoutToResume(),
+                   let workout = workouts.first(where: { $0.id.uuidString == id }) {
+                    path = [workout.id]
+                }
+            }
             #if DEBUG
             DeveloperDataSync.sendTestSurveyIfRequested()
             #endif

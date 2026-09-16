@@ -148,6 +148,18 @@ final class PhoneSessionManager: NSObject, ObservableObject {
 
     func forgetUnfinishedSession() { unfinishedSession = nil }
 
+    /// The workout to open straight into when the app launches, if one was
+    /// interrupted and is still inside the idle limit.
+    ///
+    /// Settles the auto-end first, so a workout that has already gone cold is
+    /// written to Health and forgotten rather than reopened.
+    func workoutToResume() -> String? {
+        checkAutoEnd()
+        guard let saved = unfinishedSession else { return nil }
+        let id = saved.snapshot.workoutId
+        return resumableSession(for: id) != nil ? id : nil
+    }
+
     /// A workout began (on either device). Finalizes any stale prior one first.
     func noteWorkoutStarted(at date: Date) {
         if let w = openWorkout, abs(w.startedAt.timeIntervalSince(date)) < 1 { return }

@@ -558,6 +558,8 @@ struct LogExerciseView: View {
     private enum DragDirection { case horizontal, vertical }
     @State private var dragDirection: DragDirection? = nil
     @State private var isPaging: Bool = false
+    /// True while an exercise is sliding off and the next one in.
+    @State private var isSliding = false
 
     /// The workout's exercises that still exist. A workout can retain a
     /// reference to a deleted exercise; including it produced a blank "phantom"
@@ -580,19 +582,24 @@ struct LogExerciseView: View {
                 .contentShape(Rectangle())
                 .offset(x: dragOffsetX)
                 .padding()
-                .modifier(RestSettleAcknowledgement(height: geo.size.height))
-                .overlay(alignment: .top) {
+                .modifier(RestDrain(height: geo.size.height))
+                // At the bottom, in the space under the wheels. At the top it
+                // sat over "log" and "quit", where a tap meant for a button
+                // would land on the badge instead.
+                .overlay(alignment: .bottom) {
                     if carriedOn {
                         Text("Carried on from earlier")
                             .font(.footnote).bold()
                             .padding(.horizontal, 14).padding(.vertical, 7)
                             .background(Capsule().fill(Color.blue))
                             .foregroundStyle(.white)
-                            .padding(.top, 4)
+                            .padding(.bottom, 8)
                             .transition(.opacity)
-                            // Goes on the first thing the user does. It has
-                            // been read by then, and a badge that stays is a
-                            // badge in the way.
+                            // Goes on the first thing the user does: a tap on
+                            // it, a wheel, a swipe, a log, the list. Hooked to
+                            // those actions rather than to the index changing,
+                            // because restoring the session changes the index
+                            // itself — and hid the badge before it was seen.
                             .onTapGesture { carriedOn = false }
                     }
                 }
@@ -612,13 +619,11 @@ struct LogExerciseView: View {
                 // Report state to the handover coordinator so the Watch can take
                 // over from exactly here. Exercise/log boundaries also checkpoint.
                 .onChange(of: currentIndex) { _, _ in
-                    carriedOn = false
                     handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
                 }
                 .onChange(of: weights) { _, _ in handoff.updateLiveSnapshot(currentSnapshot()) }
                 .onChange(of: reps) { _, _ in handoff.updateLiveSnapshot(currentSnapshot()) }
                 .onChange(of: loggedIndices) { _, _ in
-                    carriedOn = false
                     handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
                 }
                 .onDisappear { handoff.leaveSession(); restTimer.cancel(); aerobic.cancel() }
@@ -633,17 +638,25 @@ struct LogExerciseView: View {
         }
         .navigationTitle("log exercise")
         .navigationBarBackButtonHidden(true)
+        .toolbar {
+            // The title with a slot either side of equal width, so it stays
+            // centred whether or not a rest is counting down beside it.
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) {
+                    Color.clear.frame(width: 86, height: 1)
+                    Text("log exercise").font(.headline).fixedSize()
+                    // The slot holds its width with nothing in it. A frame on
+                    // the counter alone collapsed when no rest was running,
+                    // and the title slid off centre.
+                    ZStack(alignment: .leading) {
+                        Color.clear.frame(width: 86, height: 1)
+                        RestCounter()
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showAllLoggedAlert) {
             allLoggedSheet
-        }
-        // Covers the whole screen on purpose: during a rest there is nothing to
-        // do here, and a countdown squeezed in beside the wheels is the kind of
-        // thing you stop noticing. "skip rest" is the way out.
-        .fullScreenCover(isPresented: Binding(
-            get: { restTimer.isShowing },
-            set: { shown in if !shown, restTimer.isShowing { restTimer.skip() } }
-        )) {
-            RestCountdownView()
         }
         .fullScreenCover(isPresented: Binding(
             get: { aerobic.isShowing },
@@ -685,6 +698,7 @@ struct LogExerciseView: View {
     /// Only wheels, not the whole screen: a tap anywhere would fire on the log,
     /// quit and list buttons, which are not the end of anything.
     private func wheelTouchEnded(_ translation: CGSize) {
+        carriedOn = false
         // A horizontal fling is the page swipe to another exercise, not a set.
         if abs(translation.width) > 40, abs(translation.width) > abs(translation.height) {
             return
@@ -806,7 +820,7 @@ struct LogExerciseView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(!canLog(exerciseAt(currentIndex)))
+            .disabled(!canLog(exerciseAt(currentIndex)) || isSliding)
 
             // Quitting early still ends the workout, so it is recorded too
             // (finishWorkoutHere skips it when no set was logged).
@@ -822,7 +836,7 @@ struct LogExerciseView: View {
             Menu("list") {
                 ForEach(exerciseIds.indices, id: \.self) { idx in
                     let exercise = exerciseAt(idx)
-                    Button(exercise?.name ?? "") { currentIndex = idx }
+                    Button(exercise?.name ?? "") { carriedOn = false; currentIndex = idx }
                 }
             }
             .buttonStyle(.bordered)
@@ -987,18 +1001,10 @@ struct LogExerciseView: View {
                 let threshold: CGFloat = 80
                 let horizontal = value.translation.width
 
-                // Swiping to another exercise is still working, not resting:
-                // push the cover out so it does not land mid-swipe.
-                if abs(horizontal) >= threshold { restTimer.stillBusy() }
-
                 if horizontal <= -threshold {
-                    withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = -containerWidth }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                        goToNextUnlogged()
-                        dragOffsetX = containerWidth
-                        withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = 0 }
-                    }
+                    slideToNext()
                 } else if horizontal >= threshold {
+                    carriedOn = false
                     withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = containerWidth }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
                         goToPrevUnlogged()
@@ -1089,6 +1095,7 @@ struct LogExerciseView: View {
     }
 
     private func logAndNext() {
+        carriedOn = false
         guard let ex = exerciseAt(currentIndex) else {
             // The exercise was deleted but the workout still references it, so
             // there is nothing to log. Never dead-end the button: treat it as
@@ -1145,9 +1152,31 @@ struct LogExerciseView: View {
         let restAfter = ex.restSeconds
         let restName = ex.name
         let wasAerobic = ex.kind == .aerobic
-        goToNextUnlogged()
+        // The same slide as a swipe, so the change of exercise is seen rather
+        // than having to be noticed: the wheels of two exercises look alike,
+        // and a title changing in place was easy to miss.
+        slideToNext()
         if !wasAerobic {
             restTimer.setFinished(exercise: restName, seconds: restAfter)
+        }
+    }
+
+    /// Slides the current exercise off to the left and the next unlogged one
+    /// in from the right. Used by a left swipe and by "log, next".
+    ///
+    /// The log button is disabled for the length of the slide: a second tap
+    /// inside it would land before `currentIndex` moves, and log the exercise
+    /// just logged a second time.
+    private func slideToNext() {
+        carriedOn = false
+        guard !isSliding else { return }
+        isSliding = true
+        withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = -containerWidth }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            goToNextUnlogged()
+            dragOffsetX = containerWidth
+            withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = 0 }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { isSliding = false }
         }
     }
 

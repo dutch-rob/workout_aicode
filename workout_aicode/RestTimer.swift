@@ -93,81 +93,59 @@ final class RestTimer: ObservableObject {
     /// source of truth, deliberately a date rather than a countdown so that
     /// backgrounding, locking, or being killed cannot make it drift.
     @Published private(set) var endsAt: Date?
-    /// Whether the countdown screen is up. Separate from `endsAt` because of
-    /// the settle delay below.
-    @Published private(set) var isShowing = false
-    /// Name of the exercise just finished, shown on the countdown screen.
+    /// Name of the exercise just finished, for the notification.
     @Published private(set) var exerciseName = ""
-    /// Length of this rest, for the progress ring.
+    /// Length of this rest, which the grey drains across.
     @Published private(set) var totalSeconds = 0
     /// Bumped by the tick so the countdown redraws.
     @Published private(set) var tick = Date()
 
-    /// When the countdown is due, or nil when nothing is settling. The
-    /// acknowledgement is computed from this rather than animated — see
-    /// `settleFill`.
-    @Published private(set) var coverAt: Date?
+    var isRunning: Bool { endsAt != nil }
 
     var remainingSeconds: Int {
         guard let endsAt else { return 0 }
         return max(0, Int(endsAt.timeIntervalSince(tick).rounded(.up)))
     }
 
-    /// Fraction of the rest still to go, for the ring.
-    var remainingFraction: Double {
-        guard totalSeconds > 0 else { return 0 }
-        return min(1, max(0, Double(remainingSeconds) / Double(totalSeconds)))
+    // MARK: - The rest, drawn on the log screen
+    //
+    // There used to be a separate countdown screen, arriving three seconds
+    // after the last wheel touch. In use it was fussy: the screen you needed
+    // for the next set was taken away and had to be skipped to get back. So
+    // the rest now happens where you are. A grey wash fills the log screen the
+    // moment a set ends and drains down across the whole rest; the seconds sit
+    // small beside the title; the wheels stay usable underneath throughout.
+    //
+    // Touching a wheel again restarts the rest, as it did during the old
+    // settle window: a wheel moved is a set just finished, and your rest
+    // begins from the end of that set, not the one before.
+
+    /// How much of the log screen is grey: 1 when the rest starts, 0 when it
+    /// is over.
+    var restFill: CGFloat {
+        Self.restFill(endsAt: endsAt, now: tick, total: TimeInterval(totalSeconds))
     }
 
-    /// A set finishes with several separate touches — the weight wheel, then
-    /// the reps wheel — and covering the screen after the first one would take
-    /// the second wheel away mid-edit. So the countdown waits this long after
-    /// the last touch before appearing, and each further touch pushes it out
-    /// again.
-    ///
-    /// The delay only postpones the *cover*, never the rest: your rest began
-    /// when the set ended, so the countdown opens already that many seconds
-    /// down rather than starting over at the full time.
-    private let settleDelay: TimeInterval = 3
-
-    /// How much of the log screen the acknowledgement should cover, 1 at the
-    /// moment of the touch and 0 when the countdown is due.
-    ///
-    /// Computed from the clock rather than held as animated state. A wheel
-    /// dragged slowly reports every value it passes, and restarting a
-    /// three-second animation on each of them leaves SwiftUI blending a stack
-    /// of overlapping animations of one property — which on the Watch, where
-    /// the Digital Crown reports far more of them, dragged the grey out to
-    /// longer than the rest itself. A number derived from two dates cannot
-    /// pile up, and cannot outlive being cancelled either.
-    var settleFill: CGFloat {
-        Self.settleFill(coverAt: coverAt, now: tick, window: settleDelay)
-    }
-
-    /// Pulled out as a pure function so the shape of the drain can be pinned by
-    /// a test. The bug it is guarding against was invisible to inspection —
-    /// the code read as a three-second linear fade and behaved as a
-    /// thirty-second one — so "it looks right" is not evidence here.
-    nonisolated static func settleFill(coverAt: Date?, now: Date,
-                                       window: TimeInterval) -> CGFloat {
-        guard let coverAt, window > 0 else { return 0 }
-        return max(0, min(1, CGFloat(coverAt.timeIntervalSince(now) / window)))
+    /// Computed from the clock rather than held as animated state, for the
+    /// reason the Watch's settle wash taught: a wheel dragged slowly reports
+    /// every value it passes, and restarting an animation on each one leaves
+    /// SwiftUI blending a stack of them. A number derived from two dates cannot
+    /// pile up, and cannot outlive being cancelled.
+    nonisolated static func restFill(endsAt: Date?, now: Date,
+                                     total: TimeInterval) -> CGFloat {
+        guard let endsAt, total > 0 else { return 0 }
+        return max(0, min(1, CGFloat(endsAt.timeIntervalSince(now) / total)))
     }
 
     private var ticker: Timer?
-    private var tickerIsFast = false
-    private var presentWork: DispatchWorkItem?
 
     // MARK: - Starting
 
-    /// A set was finished, or an exercise was logged. Starts (or restarts) the
-    /// rest. Does nothing at all when the feature is off.
-    ///
-    /// Once the countdown screen is up, further activity is ignored: the user
-    /// is resting, not logging, and anything reaching here would be a stray
-    /// gesture rather than the end of another set.
+    /// A set was finished, or an exercise was logged. Starts the rest, or
+    /// starts it again from the top. Does nothing at all when the feature is
+    /// off.
     func setFinished(exercise: String, seconds: Int) {
-        guard RestTimerDefaults.isEnabled, seconds > 0, !isShowing else { return }
+        guard RestTimerDefaults.isEnabled, seconds > 0 else { return }
 
         exerciseName = exercise
         totalSeconds = seconds
@@ -177,54 +155,30 @@ final class RestTimer: ObservableObject {
 
         scheduleNotification(at: end)
         PhoneSessionManager.shared.sendRestTimer(endsAt: end, exercise: exercise)
-        postponeCover()
-    }
-
-    /// The user is still working rather than resting — swiping to another
-    /// exercise, say. Pushes the cover out again without moving the rest
-    /// itself, which stays where the finished set put it.
-    func stillBusy() {
-        guard endsAt != nil, !isShowing else { return }
-        postponeCover()
-    }
-
-    private func postponeCover() {
-        coverAt = Date().addingTimeInterval(settleDelay)
-        tick = Date()
-        startTicking(fast: true)
-        presentWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, let endsAt = self.endsAt, endsAt > Date() else { return }
-            self.coverAt = nil
-            self.isShowing = true
-            self.startTicking(fast: false)
-            // Resting with the phone on the bench should not mean unlocking it
-            // again to see the countdown.
-            UIApplication.shared.isIdleTimerDisabled = true
-        }
-        presentWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay, execute: work)
+        startTicking()
+        // Resting with the phone on the bench should not mean unlocking it
+        // again to see how long is left.
+        UIApplication.shared.isIdleTimerDisabled = true
     }
 
     #if DEBUG
-    /// Screenshot demo mode only (see DemoMode.swift): put the countdown on
-    /// screen at a chosen time. Deliberately not `setFinished` — that would
-    /// schedule a notification and message the Watch, and a screenshot run
-    /// should not buzz anything or leave a pending alert behind.
+    /// Screenshot demo mode only (see DemoMode.swift): put a rest on screen at
+    /// a chosen point. Deliberately not `setFinished` — that would schedule a
+    /// notification and message the Watch, and a screenshot run should not
+    /// buzz anything or leave a pending alert behind.
     func showDemoCountdown(exercise: String, total: Int, remaining: Int) {
         exerciseName = exercise
         totalSeconds = total
         endsAt = Date().addingTimeInterval(Double(remaining))
         tick = Date()
-        coverAt = nil
-        isShowing = true
     }
     #endif
 
     // MARK: - Ending
 
-    /// The user tapped "skip rest".
+    /// The user tapped the countdown to end the rest early.
     func skip() {
+        guard endsAt != nil else { return }
         PhoneSessionManager.shared.cancelRestTimerOnWatch()
         finish(haptic: false)
     }
@@ -251,9 +205,8 @@ final class RestTimer: ObservableObject {
             finish(haptic: false)
         } else {
             // Timers do not fire while backgrounded, so whatever was ticking
-            // has stopped. Pick it back up at whichever rate the current state
-            // wants — the acknowledgement needs the fast one.
-            startTicking(fast: coverAt != nil)
+            // has stopped.
+            startTicking()
         }
     }
 
@@ -265,34 +218,28 @@ final class RestTimer: ObservableObject {
     }
 
     private func finish(haptic: Bool) {
-        presentWork?.cancel()
-        presentWork = nil
-        coverAt = nil
         stopTicking()
         cancelNotification()
         endsAt = nil
-        isShowing = false
         UIApplication.shared.isIdleTimerDisabled = false
         if haptic { RestTimerHaptics.strong() }
     }
 
     // MARK: - Ticking (display only)
 
-    /// `fast` only while the acknowledgement is on screen: it is drawn from the
-    /// clock, so its smoothness is this interval. A countdown of whole seconds
-    /// needs nothing like that rate.
-    private func startTicking(fast: Bool) {
-        if ticker != nil, tickerIsFast == fast { return }
-        stopTicking()
-        tickerIsFast = fast
-        let t = Timer(timeInterval: fast ? 1.0 / 30 : 0.2, repeats: true) { [weak self] _ in
+    /// Twenty times a second. The grey is drawn from the clock, so this is its
+    /// smoothness: a two-minute rest over a phone-height screen moves a few
+    /// points a second, and twenty steps of that read as continuous.
+    private func startTicking() {
+        guard ticker == nil else { return }
+        let t = Timer(timeInterval: 1.0 / 20, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let endsAt = self.endsAt else { return }
                 self.tick = Date()
                 if endsAt <= self.tick { self.complete() }
             }
         }
-        // .common so the countdown keeps running while a scroll view is being
+        // .common so the countdown keeps running while a wheel is being
         // dragged.
         RunLoop.main.add(t, forMode: .common)
         ticker = t
@@ -378,21 +325,15 @@ final class RestTimerNotificationDelegate: NSObject, UNUserNotificationCenterDel
     }
 }
 
-// MARK: - Settle acknowledgement
+// MARK: - The rest on the log screen
 
-/// Greys the log screen the instant a rest starts, then drains that grey away
-/// over the settle window.
-///
-/// The settle delay exists so that setting the weight does not snatch the reps
-/// wheel away, but three silent seconds after a touch read as the app having
-/// missed it — the one thing a timer must never do. So the acknowledgement is
-/// immediate, and it recedes rather than merely fading: how much grey is left
-/// is how much time is left to correct a wheel before the countdown covers it.
+/// Greys the log screen the instant a rest starts, then drains that grey
+/// downwards over the whole rest. How much grey is left is how much rest is
+/// left, readable at a glance from across a bench.
 ///
 /// Lives here, and as a modifier rather than inline, because the log screen's
-/// modifier chain is long enough that adding four more defeated the
-/// type-checker outright.
-struct RestSettleAcknowledgement: ViewModifier {
+/// modifier chain is long enough that adding more defeated the type-checker.
+struct RestDrain: ViewModifier {
     /// Height to drain across — the log screen's own, not the window's.
     let height: CGFloat
 
@@ -401,17 +342,11 @@ struct RestSettleAcknowledgement: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .bottom) {
-                // No @State and no animation on purpose — see `settleFill`.
-                // Anything the countdown or a quit calls off has to vanish with
-                // it, and an animation in flight does not care that the thing
-                // it was describing is over.
-                // A Canvas, for the reason spelled out in the Watch's copy:
-                // an animated frame height is exactly what a picker's own
-                // animated transaction latches onto. The phone never showed
-                // the symptom, but it has the same wheels and there is no
-                // reason for the two to be built differently.
+                // No @State and no animation on purpose — see `restFill`.
+                // A Canvas because an animated frame height is exactly what a
+                // picker's own animated transaction latches onto.
                 Canvas { context, size in
-                    let filled = size.height * timer.settleFill
+                    let filled = size.height * timer.restFill
                     guard filled > 0 else { return }
                     context.fill(
                         Path(CGRect(x: 0, y: size.height - filled,
@@ -419,64 +354,33 @@ struct RestSettleAcknowledgement: ViewModifier {
                         with: .color(.secondary.opacity(0.28)))
                 }
                 .frame(height: height)
+                // The wheels stay usable through the whole rest.
                 .allowsHitTesting(false)
             }
     }
 }
 
-// MARK: - Countdown screen
-
-struct RestCountdownView: View {
+/// The seconds left, small, beside "log exercise". Tapping it ends the rest —
+/// the one control the old countdown screen had, kept where it is findable.
+struct RestCounter: View {
     @ObservedObject private var timer = RestTimer.shared
 
     var body: some View {
-        VStack(spacing: 28) {
-            Spacer()
-
-            Text("rest")
-                .font(.largeTitle).bold()
-            if !timer.exerciseName.isEmpty {
-                Text("after \(timer.exerciseName)")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-            }
-
-            ZStack {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.25), lineWidth: 14)
-                Circle()
-                    .trim(from: 0, to: timer.remainingFraction)
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 14, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Text(RestTimerDefaults.label(timer.remainingSeconds))
-                    .font(.system(size: 64, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-            }
-            .frame(width: 240, height: 240)
-            .padding(.vertical, 8)
-
-            Text("You can leave the app — it will buzz when the rest is over.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-            Spacer()
-
+        if timer.isRunning {
             Button {
                 timer.skip()
             } label: {
-                Text("skip rest")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                HStack(spacing: 3) {
+                    Text(RestTimerDefaults.label(timer.remainingSeconds))
+                        .monospacedDigit()
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.subheadline.weight(.semibold))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Rest, \(timer.remainingSeconds) seconds left. Tap to end the rest.")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
     }
 }
 

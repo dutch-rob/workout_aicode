@@ -837,53 +837,51 @@ struct SchemaMigrationTests {
         #expect(SyncDefaults.restSeconds == RestTimerDefaults.seconds)
     }
 
-    // MARK: - The settle acknowledgement
+    // MARK: - The rest, drained across the log screen
     //
-    // This used to be animated state: each turn of a wheel reset a three-second
-    // animation, and because the Digital Crown reports every value it passes, one
-    // spin stacked dozens of overlapping animations of one property. SwiftUI
-    // blended them, and the grey took far longer to drain than the rest itself —
-    // on a 0:15 rest the haptic fired while it was still going down. It is now
-    // derived from two dates, and these pin the shape of it, because the failure
-    // was invisible to reading the code.
+    // The grey used to be a three-second settle before a separate countdown
+    // screen; it is now the whole rest, on the log screen. It is still derived
+    // from two dates rather than animated — each turn of a wheel once reset an
+    // animation, and SwiftUI blended the stack of them into a drain far longer
+    // than the rest itself. These pin the shape, because that failure was
+    // invisible to reading the code.
 
-    private let settleWindow: TimeInterval = 3
-    private let settleNow = Date(timeIntervalSince1970: 1_700_000_000)
+    private let restTotal: TimeInterval = 90
+    private let restStart = Date(timeIntervalSince1970: 1_700_000_000)
 
-    @Test func theAcknowledgementIsFullAtTheMomentOfTheTouch() {
-        let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(settleWindow),
-                                        now: settleNow, window: settleWindow)
+    @Test func theGreyIsFullWhenTheRestStarts() {
+        let fill = RestTimer.restFill(endsAt: restStart.addingTimeInterval(restTotal),
+                                      now: restStart, total: restTotal)
         #expect(abs(fill - 1) < 1e-9)
     }
 
-    @Test func theAcknowledgementIsHalfwayDownHalfwayThrough() {
-        let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(settleWindow),
-                                        now: settleNow.addingTimeInterval(settleWindow / 2),
-                                        window: settleWindow)
+    @Test func theGreyIsHalfwayDownHalfwayThroughTheRest() {
+        let fill = RestTimer.restFill(endsAt: restStart.addingTimeInterval(restTotal),
+                                      now: restStart.addingTimeInterval(restTotal / 2),
+                                      total: restTotal)
         #expect(abs(fill - 0.5) < 1e-9)
     }
 
-    @Test func theAcknowledgementIsGoneWhenTheCoverIsDue() {
-        // The whole complaint in one assertion: at the end of the window there must
-        // be nothing left, however many times the wheel moved on the way there.
-        let coverAt = settleNow.addingTimeInterval(settleWindow)
-        #expect(RestTimer.settleFill(coverAt: coverAt, now: coverAt, window: settleWindow) == 0)
-        #expect(RestTimer.settleFill(coverAt: coverAt,
-                                     now: coverAt.addingTimeInterval(60),
-                                     window: settleWindow) == 0)
+    @Test func theGreyIsGoneWhenTheRestIsOver() {
+        // However many times a wheel moved on the way: at the end there must be
+        // nothing left, and nothing after it either.
+        let end = restStart.addingTimeInterval(restTotal)
+        #expect(RestTimer.restFill(endsAt: end, now: end, total: restTotal) == 0)
+        #expect(RestTimer.restFill(endsAt: end, now: end.addingTimeInterval(60),
+                                   total: restTotal) == 0)
     }
 
-    @Test func aCancelledRestLeavesNothingOnScreen() {
-        // Quitting mid-drain used to leave the grey sliding down over the workout
-        // list, because the animation did not care that it had been called off.
-        #expect(RestTimer.settleFill(coverAt: nil, now: settleNow, window: settleWindow) == 0)
+    @Test func noRestLeavesNothingOnScreen() {
+        // Quitting mid-rest must not leave grey over the workout list.
+        #expect(RestTimer.restFill(endsAt: nil, now: restStart, total: restTotal) == 0)
+        #expect(RestTimer.restFill(endsAt: restStart, now: restStart, total: 0) == 0)
     }
 
-    @Test func theAcknowledgementNeverExceedsTheScreen() {
-        // A clock that jumped backwards, or a cover date further out than the
-        // window, must not produce a rectangle taller than what it covers.
-        let fill = RestTimer.settleFill(coverAt: settleNow.addingTimeInterval(600),
-                                        now: settleNow, window: settleWindow)
+    @Test func theGreyNeverExceedsTheScreen() {
+        // A clock that jumped backwards must not produce a rectangle taller than
+        // the screen it covers.
+        let fill = RestTimer.restFill(endsAt: restStart.addingTimeInterval(600),
+                                      now: restStart, total: restTotal)
         #expect(fill == 1)
     }
 
