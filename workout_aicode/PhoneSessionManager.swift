@@ -139,7 +139,15 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     /// if there is none, it is a different workout, or it has gone cold.
     func resumableSession(for workoutId: String) -> SessionSnapshot? {
         guard let saved = unfinishedSession, saved.snapshot.workoutId == workoutId else { return nil }
-        guard OpenWorkoutPolicy.isResumable(lastActivityAt: saved.savedAt, now: Date()) else {
+        // Measured from the last LOGGED exercise — the same moment, and the
+        // same hour, that decides when a forgotten workout is written to
+        // Health. It used to be measured from the last wheel touch, which
+        // could only ever be later, so the two limits agreed in practice but
+        // were two clocks. One clock means one rule to explain: a workout the
+        // app still picks up is one it has not yet reported as finished.
+        guard let open = openWorkout,
+              OpenWorkoutPolicy.isResumable(lastActivityAt: open.lastActivityAt, now: Date())
+        else {
             unfinishedSession = nil
             return nil
         }
