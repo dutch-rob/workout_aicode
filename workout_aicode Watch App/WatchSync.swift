@@ -134,18 +134,53 @@ struct SessionSnapshot: Codable, Equatable {
     /// When the workout began (epoch seconds), preserved across hand-overs so
     /// Apple Health gets the full duration regardless of which device finishes.
     var startedAt: Double
+    /// The rest in progress, if any, so the device taking over carries on with
+    /// it rather than starting from nothing. Moving from phone to Watch is most
+    /// likely exactly during a rest — that is when the hands are free — and it
+    /// takes long enough that a rest which began again at the top would be
+    /// noticeably wrong. An end DATE rather than seconds left, so the time the
+    /// hand-over itself takes comes off the rest instead of being added to it.
+    var restEndsAt: Double?
+    /// Full length of that rest, for how much of the screen to grey.
+    var restTotal: Int?
+    /// When this snapshot was last written (epoch seconds). Lets a device that
+    /// finds one lying in the application context tell a workout in progress
+    /// from one abandoned yesterday.
+    var updatedAt: Double?
+
+    /// How old a snapshot may be and still be offered for taking over. Same
+    /// hour as the phone's OpenWorkoutPolicy.idleLimit — a test holds the two
+    /// together, since the Watch cannot see Shared/.
+    static let staleAfter: TimeInterval = 3600
+
+    func isFresh(now: Date = Date()) -> Bool {
+        guard let updatedAt else { return false }
+        return now.timeIntervalSince1970 - updatedAt <= Self.staleAfter
+    }
+
+    /// The rest still to run, if there is one.
+    func pendingRest(now: Date = Date()) -> (endsAt: Date, total: Int)? {
+        guard let restEndsAt, let restTotal, restTotal > 0 else { return nil }
+        let end = Date(timeIntervalSince1970: restEndsAt)
+        return end > now ? (end, restTotal) : nil
+    }
 
     enum CodingKeys: String, CodingKey {
         case workoutId, currentIndex, weights, reps, loggedIndices, startedAt
+        case restEndsAt, restTotal, updatedAt
     }
     init(workoutId: String, currentIndex: Int, weights: [[Int]], reps: [[Int]],
-         loggedIndices: [Int], startedAt: Double) {
+         loggedIndices: [Int], startedAt: Double,
+         restEndsAt: Double? = nil, restTotal: Int? = nil, updatedAt: Double? = nil) {
         self.workoutId = workoutId
         self.currentIndex = currentIndex
         self.weights = weights
         self.reps = reps
         self.loggedIndices = loggedIndices
         self.startedAt = startedAt
+        self.restEndsAt = restEndsAt
+        self.restTotal = restTotal
+        self.updatedAt = updatedAt
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -156,6 +191,11 @@ struct SessionSnapshot: Codable, Equatable {
         loggedIndices = try c.decode([Int].self, forKey: .loggedIndices)
         startedAt = try c.decodeIfPresent(Double.self, forKey: .startedAt)
             ?? Date().timeIntervalSince1970
+        // Absent from anything written before rests travelled with the
+        // snapshot, which then simply has none.
+        restEndsAt = try c.decodeIfPresent(Double.self, forKey: .restEndsAt)
+        restTotal = try c.decodeIfPresent(Int.self, forKey: .restTotal)
+        updatedAt = try c.decodeIfPresent(Double.self, forKey: .updatedAt)
     }
 }
 

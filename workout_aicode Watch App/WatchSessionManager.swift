@@ -87,8 +87,11 @@ final class WatchSessionManager: NSObject, ObservableObject {
                 WatchAerobicWorkout.shared.describe(exercise: exercise, endsAt: endsAt)
             }
         }
-        // The phone stashes its driving snapshot here (nil when it isn't driving).
-        remoteSnapshot = decodeSnapshot(context["session"])
+        // The phone stashes its driving snapshot here (nil when it isn't
+        // driving). Only believed while fresh: a phone reclaimed by iOS never
+        // gets to clear it, and a workout abandoned yesterday must not be
+        // offered for taking over today.
+        remoteSnapshot = decodeSnapshot(context["session"]).flatMap { $0.isFresh() ? $0 : nil }
     }
 
     // MARK: - Pull definitions
@@ -148,6 +151,18 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
     func updateLiveSnapshot(_ snapshot: SessionSnapshot) { liveSnapshot = snapshot }
+
+    /// A snapshot as it leaves the Watch: the rest as it stands this moment,
+    /// and when. Stamped on the way out, because skipping a rest moves no
+    /// wheel — the last recorded snapshot would still say it was running.
+    private func outgoing(_ snap: SessionSnapshot) -> SessionSnapshot {
+        var s = snap
+        let rest = WatchRestTimer.shared
+        s.restEndsAt = rest.endsAt?.timeIntervalSince1970
+        s.restTotal = rest.endsAt == nil ? nil : rest.totalSeconds
+        s.updatedAt = Date().timeIntervalSince1970
+        return s
+    }
     func checkpoint() { if role == .driving { sendSessionContext() } }
 
     /// The workout was completed on the Watch: tell the phone the times so it
@@ -213,11 +228,34 @@ final class WatchSessionManager: NSObject, ObservableObject {
     /// whether the phone is driving, showing the Paused screen if so.
     func onForeground() {
         requestSync()
+        checkForDriver()
+    }
+
+    /// Is the phone in the middle of a workout? If so, show the Paused screen
+    /// with "Continue here".
+    ///
+    /// Asked from two places. Coming back to the foreground, as before — and
+    /// when the connection to the phone has finished setting up. The second is
+    /// what a cold launch needed: `onChange(of: scenePhase)` does not fire for
+    /// the phase an app STARTS in, and before activation the question cannot
+    /// be sent anyway. So opening the Watch app from scratch mid-workout went
+    /// straight to the workout list, and the session was only picked up once
+    /// the workout was tapped.
+    ///
+    /// If the phone cannot be asked, the snapshot it last left in the
+    /// application context stands in — provided it is fresh.
+    func checkForDriver() {
         guard role == .none, !snoozed else { return }
         queryDriver { [weak self] isDriving, snap in
-            guard let self, isDriving else { return }
-            self.remoteSnapshot = snap
-            self.role = .paused
+            guard let self, self.role == .none, !self.snoozed else { return }
+            if isDriving {
+                self.remoteSnapshot = snap ?? self.remoteSnapshot
+                self.role = .paused
+            } else if snap == nil, let stashed = self.remoteSnapshot, stashed.isFresh() {
+                // No answer (as opposed to "no, I am not driving"): go by what
+                // the phone last said.
+                self.role = .paused
+            }
         }
     }
 
@@ -237,6 +275,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
         })
     }
 
+    /// Calls back with (driving, snapshot). A phone that ANSWERED "not
+    /// driving" clears the stashed snapshot, so only a phone that could not be
+    /// reached leaves the stash standing for `checkForDriver` to fall back on.
     private func queryDriver(_ completion: @escaping (Bool, SessionSnapshot?) -> Void) {
         let session = WCSession.default
         guard session.activationState == .activated, session.isReachable else {
@@ -246,7 +287,10 @@ final class WatchSessionManager: NSObject, ObservableObject {
             let driving = reply["isDriving"] as? Bool ?? false
             let snap = (reply["snapshot"] as? Data)
                 .flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
-            DispatchQueue.main.async { completion(driving, snap) }
+            DispatchQueue.main.async {
+                if !driving { self.remoteSnapshot = nil }
+                completion(driving, snap)
+            }
         }, errorHandler: { _ in
             DispatchQueue.main.async { completion(false, nil) }
         })
@@ -256,7 +300,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
         let session = WCSession.default
         guard session.activationState == .activated, session.isReachable else { return }
         var msg: [String: Any] = ["type": "driverActive"]
-        if let snap = liveSnapshot, let d = try? JSONEncoder().encode(snap) { msg["snapshot"] = d }
+        if let snap = liveSnapshot, let d = try? JSONEncoder().encode(outgoing(snap)) { msg["snapshot"] = d }
         session.sendMessage(msg, replyHandler: nil, errorHandler: nil)
     }
 
@@ -270,7 +314,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
         let session = WCSession.default
         guard session.activationState == .activated else { return }
         var ctx: [String: Any] = ["ts": Date().timeIntervalSince1970]
-        if role == .driving, let snap = liveSnapshot, let d = try? JSONEncoder().encode(snap) {
+        if role == .driving, let snap = liveSnapshot, let d = try? JSONEncoder().encode(outgoing(snap)) {
             ctx["session"] = d
         }
         try? session.updateApplicationContext(ctx)
@@ -287,10 +331,11 @@ final class WatchSessionManager: NSObject, ObservableObject {
         case "restTimer":
             guard let ends = msg["endsAt"] as? Double else { return true }
             let name = msg["exercise"] as? String ?? ""
+            let total = msg["total"] as? Int
             Task { @MainActor in
                 WatchRestTimer.shared.requestNotificationPermission()
                 WatchRestTimer.shared.mirror(endsAt: Date(timeIntervalSince1970: ends),
-                                             exercise: name)
+                                             total: total, exercise: name)
             }
             return true
         case "restTimerCancelled":
@@ -381,6 +426,8 @@ extension WatchSessionManager: WCSessionDelegate {
         DispatchQueue.main.async {
             self.ingest(context: context)
             self.requestSync()
+            // The cold-launch half of the Paused check — see checkForDriver.
+            self.checkForDriver()
         }
     }
 
@@ -400,13 +447,18 @@ extension WatchSessionManager: WCSessionDelegate {
             DispatchQueue.main.async {
                 var reply: [String: Any] = ["isDriving": self.role == .driving]
                 if self.role == .driving, let snap = self.liveSnapshot,
-                   let d = try? JSONEncoder().encode(snap) { reply["snapshot"] = d }
+                   let d = try? JSONEncoder().encode(self.outgoing(snap)) { reply["snapshot"] = d }
                 replyHandler(reply)
             }
         case "takeOver":
             DispatchQueue.main.async {
-                let snap = self.liveSnapshot
+                // Stamped before the rest is let go, so it travels as it was.
+                let snap = self.liveSnapshot.map(self.outgoing)
                 if self.role == .driving { self.role = .paused }
+                // The phone carries the rest on from here. cancel() is local —
+                // it tells the phone nothing, which is the point: a message
+                // now would end the rest the phone has just picked up.
+                WatchRestTimer.shared.cancel()
                 var reply: [String: Any] = [:]
                 if let snap, let d = try? JSONEncoder().encode(snap) { reply["snapshot"] = d }
                 replyHandler(reply)

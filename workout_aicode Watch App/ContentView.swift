@@ -77,7 +77,7 @@ struct ContentView: View {
                     exercise: "Indoor cycle", bpm: 137, remaining: 1080)
             case "rest":
                 path = [DemoMode.workoutId]
-                // After the log screen exists, so the countdown covers it.
+                // After the log screen exists, so the rest lands on it.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     WatchRestTimer.shared.showDemoCountdown(
                         exercise: DemoMode.restExercise,
@@ -101,20 +101,13 @@ struct ContentView: View {
                                 onDismiss: { session.dismissPaused() })
             }
         }
-        // Applied before the countdown overlay, so the countdown lands on top
-        // of the grey rather than under it.
-        .modifier(WatchRestSettleAcknowledgement())
-        // Mirrors the rest the phone is counting. Only visible if the user
-        // happens to be looking at the watch — the buzz at the end comes from
-        // a scheduled notification, not from this view being on screen.
-        .overlay {
-            if restTimer.isShowing {
-                WatchRestCountdownView()
-            }
-        }
+        // The rest, as a grey draining down whatever screen is up — the log
+        // screen, or the Paused screen while the phone rests. No screen of its
+        // own any more. The buzz at the end comes from a scheduled
+        // notification, not from this being on screen.
+        .modifier(WatchRestDrain())
     }
 
-    @ObservedObject private var restTimer = WatchRestTimer.shared
     @ObservedObject private var aerobic = WatchAerobicWorkout.shared
 
     private var emptyState: some View {

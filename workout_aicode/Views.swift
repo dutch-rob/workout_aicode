@@ -732,6 +732,14 @@ struct LogExerciseView: View {
         // Clamp: a stale snapshot may point past the current exercise list.
         currentIndex  = min(max(0, snap.currentIndex),
                             max(0, exerciseIds.count - 1))
+        // A rest in progress on the other device — or here, before iOS
+        // reclaimed the app — carries on from where it is, not from the top.
+        // No exercise name: the rest belongs to the one just finished, which
+        // the snapshot does not say, and a notification naming the wrong one
+        // is worse than one naming none.
+        if let rest = snap.pendingRest() {
+            restTimer.resume(endsAt: rest.endsAt, total: rest.total, exercise: "")
+        }
     }
 
     private func startOrAdoptSession() {

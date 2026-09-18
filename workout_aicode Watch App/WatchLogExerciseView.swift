@@ -94,11 +94,8 @@ struct WatchLogExerciseView: View {
                 let width = WKInterfaceDevice.current().screenBounds.width
                 let dx = value.translation.width
                 if dx <= -swipeThreshold {
-                    // Swiping is still working, not resting: put the cover off.
-                    WatchRestTimer.shared.stillBusy()
                     settle(to: -width, landingOn: nextUnloggedIndex)
                 } else if dx >= swipeThreshold {
-                    WatchRestTimer.shared.stillBusy()
                     settle(to: width, landingOn: prevUnloggedIndex)
                 } else {
                     // Not far enough — spring back.
@@ -150,7 +147,7 @@ struct WatchLogExerciseView: View {
             aerobicPage(for: exercise)
         } else {
             VStack(spacing: 2) {
-                exerciseTitle(exercise)
+                exerciseTitle(exercise, showRest: true)
                 HStack(spacing: 2) {
                     rowLabel
                     pickerRow(for: exercise)
@@ -233,12 +230,18 @@ struct WatchLogExerciseView: View {
         }
     }
 
-    private func exerciseTitle(_ exercise: SyncExercise) -> some View {
-        Text(exercise.name)
-            .font(.caption).bold()
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    private func exerciseTitle(_ exercise: SyncExercise, showRest: Bool = false) -> some View {
+        HStack(spacing: 4) {
+            Text(exercise.name)
+                .font(.caption).bold()
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // The rest's seconds sit beside the name, as they sit beside
+            // "log exercise" on the phone. Only on the page in view, never on
+            // the neighbour sliding in during a swipe.
+            if showRest { WatchRestCounter() }
+        }
     }
 
     private var rowLabel: some View {
@@ -365,6 +368,11 @@ struct WatchLogExerciseView: View {
         loggedIndices = Set(snap.loggedIndices)
         startedAt = Date(timeIntervalSince1970: snap.startedAt)
         setIndex(snap.currentIndex)
+        // Taken over mid-rest: carry on with it from where it is. Only if the
+        // phone says the timer is on — a Watch never invents a rest.
+        if session.restTimerEnabled, let rest = snap.pendingRest() {
+            WatchRestTimer.shared.resume(endsAt: rest.endsAt, total: rest.total, exercise: "")
+        }
     }
 
     private func startOrAdoptSession() {
@@ -659,6 +667,10 @@ struct WatchPausedView: View {
                 Text("Active on iPhone")
                     .font(.headline)
                     .multilineTextAlignment(.center)
+                // The phone's rest, if one is running: this is the screen most
+                // likely to be up while deciding whether to switch to the wrist,
+                // and "Continue here" carries the rest over as it stands.
+                WatchRestCounter()
                 Button("Continue here", action: onContinue)
                     .buttonStyle(.borderedProminent)
                 Button("Not now", action: onDismiss)

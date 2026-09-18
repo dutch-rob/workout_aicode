@@ -156,6 +156,37 @@ final class PhoneSessionManager: NSObject, ObservableObject {
 
     func forgetUnfinishedSession() { unfinishedSession = nil }
 
+    /// A snapshot as it should leave this device: with the rest as it stands
+    /// right now and the moment it was sent.
+    ///
+    /// Stamped here, on the way out, rather than whenever the log screen
+    /// happens to record one. A rest skipped a second ago has not changed any
+    /// wheel, so the last recorded snapshot still says it is running — and the
+    /// Watch would carry on with a rest the user had just ended.
+    private func outgoing(_ snap: SessionSnapshot) -> SessionSnapshot {
+        var s = snap
+        let rest = RestTimer.shared
+        s.restEndsAt = rest.endsAt?.timeIntervalSince1970
+        s.restTotal = rest.endsAt == nil ? nil : rest.totalSeconds
+        s.updatedAt = Date().timeIntervalSince1970
+        return s
+    }
+
+    /// What to tell the Watch about the workout in progress on this phone.
+    ///
+    /// Either the live one, or — when iOS has reclaimed the app since — the
+    /// unfinished session it wrote down. That second case is the ordinary one:
+    /// the phone went into a pocket, the app was killed, and the Watch is
+    /// opened. The phone app is then woken in the background to answer, knows
+    /// nothing live, and used to say "not driving". So the Watch showed its
+    /// workout list instead of offering to carry on.
+    private var sessionToOffer: SessionSnapshot? {
+        if role == .driving, let snap = liveSnapshot { return outgoing(snap) }
+        guard role == .none, let saved = unfinishedSession,
+              resumableSession(for: saved.snapshot.workoutId) != nil else { return nil }
+        return outgoing(saved.snapshot)
+    }
+
     /// The workout to open straight into when the app launches, if one was
     /// interrupted and is still inside the idle limit.
     ///
@@ -255,7 +286,7 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         guard session.activationState == .activated, session.isWatchAppInstalled else { return }
         var ctx: [String: Any] = [:]
         if let data = lastPayloadData { ctx["payload"] = data }
-        if role == .driving, let snap = liveSnapshot, let d = try? JSONEncoder().encode(snap) {
+        if role == .driving, let snap = liveSnapshot, let d = try? JSONEncoder().encode(outgoing(snap)) {
             ctx["session"] = d
         }
         if let aerobicContext { ctx["aerobic"] = aerobicContext }
@@ -292,8 +323,17 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         liveSnapshot = snapshot
         // Every change, not only the checkpoints. What is dialled into a wheel
         // before the phone goes into a pocket is exactly what gets lost, and it
-        // is the part the user has to remember to type again.
-        unfinishedSession = UnfinishedSession(snapshot: snapshot, savedAt: Date())
+        // is the part the user has to remember to type again. Written with the
+        // rest as it stands, so a reopened workout carries on with it too.
+        unfinishedSession = UnfinishedSession(snapshot: outgoing(snapshot), savedAt: Date())
+    }
+
+    /// A rest started, ended or was skipped without any wheel moving. Brings
+    /// the written-down session up to date, so reopening the app after it was
+    /// reclaimed neither loses a running rest nor revives a skipped one.
+    func restChanged() {
+        guard role == .driving, let snap = liveSnapshot else { return }
+        unfinishedSession = UnfinishedSession(snapshot: outgoing(snap), savedAt: Date())
     }
     func checkpoint() { if role == .driving { sendContext() } }
 
@@ -386,7 +426,7 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         let session = WCSession.default
         guard session.activationState == .activated, session.isReachable else { return }
         var msg: [String: Any] = ["type": "driverActive"]
-        if let snap = liveSnapshot, let d = try? JSONEncoder().encode(snap) { msg["snapshot"] = d }
+        if let snap = liveSnapshot, let d = try? JSONEncoder().encode(outgoing(snap)) { msg["snapshot"] = d }
         session.sendMessage(msg, replyHandler: nil, errorHandler: nil)
     }
 
@@ -407,9 +447,12 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     // into a burst of notifications for rests that finished long ago; a rest
     // the Watch misses is simply a rest the Watch misses.
 
-    func sendRestTimer(endsAt: Date, exercise: String) {
+    func sendRestTimer(endsAt: Date, total: Int, exercise: String) {
+        // The length goes too: the Watch greys its screen across the whole
+        // rest, and cannot tell how much of it has gone from the end alone.
         deliver(["type": "restTimer",
                  "endsAt": endsAt.timeIntervalSince1970,
+                 "total": total,
                  "exercise": exercise])
     }
 
@@ -562,15 +605,24 @@ extension PhoneSessionManager: WCSessionDelegate {
             }
         case "queryDriver":
             DispatchQueue.main.async {
-                var reply: [String: Any] = ["isDriving": self.role == .driving]
-                if self.role == .driving, let snap = self.liveSnapshot,
-                   let d = try? JSONEncoder().encode(snap) { reply["snapshot"] = d }
+                let offer = self.sessionToOffer
+                var reply: [String: Any] = ["isDriving": offer != nil]
+                if let offer, let d = try? JSONEncoder().encode(offer) { reply["snapshot"] = d }
                 replyHandler(reply)
             }
         case "takeOver":
             DispatchQueue.main.async {
-                let snap = self.liveSnapshot
+                // Built BEFORE anything here is stopped, so it carries the rest
+                // as it was at the moment of hand-over.
+                let snap = self.sessionToOffer
                 if self.role == .driving { self.role = .paused }
+                // The Watch owns the workout now, and the rest with it. Ended
+                // here quietly — a cancel that told the Watch would arrive just
+                // after it had picked the rest up, and end it there too.
+                RestTimer.shared.handOver()
+                // A killed phone handing over must not also reopen the workout
+                // at its next launch: the Watch is carrying it now.
+                self.forgetUnfinishedSession()
                 var reply: [String: Any] = [:]
                 if let snap, let d = try? JSONEncoder().encode(snap) { reply["snapshot"] = d }
                 replyHandler(reply)

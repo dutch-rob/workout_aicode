@@ -1333,6 +1333,78 @@ struct LogListTests {
     #expect(OpenWorkoutPolicy.isResumable(lastActivityAt: touched, now: earlier))
 }
 
+// MARK: - A rest carried across a hand-over
+//
+// Moving from phone to Watch is most likely exactly during a rest, and takes
+// long enough that a rest begun again at the top would be noticeably wrong. The
+// snapshot now carries the rest's end date, so the time the hand-over takes
+// comes off the rest instead of being added to it.
+
+@Test func aSnapshotFromBeforeRestsTravelledStillDecodes() throws {
+    // A phone and a Watch can run different versions for a while after an
+    // update. The older side's snapshot must still be read, as having no rest.
+    let json = """
+    {"workoutId":"W","currentIndex":1,"weights":[[50]],"reps":[[10]],
+     "loggedIndices":[0],"startedAt":1000}
+    """
+    let snap = try JSONDecoder().decode(SessionSnapshot.self, from: Data(json.utf8))
+    #expect(snap.currentIndex == 1)
+    #expect(snap.restEndsAt == nil)
+    #expect(snap.pendingRest() == nil)
+    // No timestamp means it cannot be shown to be current, so it is not
+    // offered for taking over from the application context.
+    #expect(!snap.isFresh())
+}
+
+@Test func aRestInProgressSurvivesTheRoundTrip() throws {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let snap = SessionSnapshot(workoutId: "W", currentIndex: 0, weights: [], reps: [],
+                               loggedIndices: [], startedAt: 0,
+                               restEndsAt: now.timeIntervalSince1970 + 40, restTotal: 90,
+                               updatedAt: now.timeIntervalSince1970)
+    let back = try JSONDecoder().decode(SessionSnapshot.self,
+                                        from: try JSONEncoder().encode(snap))
+    let rest = try #require(back.pendingRest(now: now))
+    // Forty seconds left of ninety: the other device picks up two thirds of the
+    // way through, not at the top.
+    #expect(rest.endsAt.timeIntervalSince(now) == 40)
+    #expect(rest.total == 90)
+}
+
+@Test func aRestThatEndedDuringTheHandOverIsNotStartedAgain() {
+    // The hand-over took longer than the rest had left. Nothing to carry on.
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let snap = SessionSnapshot(workoutId: "W", currentIndex: 0, weights: [], reps: [],
+                               loggedIndices: [], startedAt: 0,
+                               restEndsAt: now.timeIntervalSince1970 - 1, restTotal: 90)
+    #expect(snap.pendingRest(now: now) == nil)
+}
+
+@Test func aStashedWorkoutGoesStaleAfterTheSameHourAsAutoEnd() {
+    // The Watch cannot see Shared/, so the hour is written twice. A workout
+    // the phone would already have closed must not be offered to the Watch.
+    #expect(SessionSnapshot.staleAfter == OpenWorkoutPolicy.idleLimit)
+
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    func stamped(_ secondsAgo: TimeInterval) -> SessionSnapshot {
+        SessionSnapshot(workoutId: "W", currentIndex: 0, weights: [], reps: [],
+                        loggedIndices: [], startedAt: 0,
+                        updatedAt: now.timeIntervalSince1970 - secondsAgo)
+    }
+    #expect(stamped(60).isFresh(now: now))
+    #expect(!stamped(OpenWorkoutPolicy.idleLimit + 1).isFresh(now: now))
+}
+
+@Test func theTwoCopiesOfTheSyncContractAreIdentical() throws {
+    // Edited in pairs by hand; a snapshot field added to one side only would
+    // decode as absent on the other and quietly drop the rest.
+    let here = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent()
+    let phone = try Data(contentsOf: here.appendingPathComponent("workout_aicode/WatchSync.swift"))
+    let watch = try Data(contentsOf: here.appendingPathComponent("workout_aicode Watch App/WatchSync.swift"))
+    #expect(phone == watch)
+}
+
 // MARK: - Heart rate zones
 //
 // A stand-in until the OS 27 SDK, where HealthKit hands over the user's real

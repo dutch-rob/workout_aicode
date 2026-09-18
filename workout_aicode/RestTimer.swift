@@ -153,9 +153,27 @@ final class RestTimer: ObservableObject {
         endsAt = end
         tick = Date()
 
+        run(until: end)
+    }
+
+    /// Carry on with a rest begun on the other device, from where it is now —
+    /// the end date travels, so the time the hand-over took is already off.
+    /// Also used when the app reopens an interrupted workout mid-rest.
+    func resume(endsAt end: Date, total: Int, exercise: String) {
+        guard RestTimerDefaults.isEnabled, total > 0, end > Date() else { return }
+        exerciseName = exercise
+        totalSeconds = total
+        endsAt = end
+        tick = Date()
+        run(until: end)
+    }
+
+    private func run(until end: Date) {
         scheduleNotification(at: end)
-        PhoneSessionManager.shared.sendRestTimer(endsAt: end, exercise: exercise)
+        PhoneSessionManager.shared.sendRestTimer(endsAt: end, total: totalSeconds,
+                                                 exercise: exerciseName)
         startTicking()
+        PhoneSessionManager.shared.restChanged()
         // Resting with the phone on the bench should not mean unlocking it
         // again to see how long is left.
         UIApplication.shared.isIdleTimerDisabled = true
@@ -210,6 +228,14 @@ final class RestTimer: ObservableObject {
         }
     }
 
+    /// The Watch has taken the workout over, rest included. Ends the rest here
+    /// without telling the Watch: a cancel sent now would land just after the
+    /// Watch had picked the rest up, and end it there as well.
+    func handOver() {
+        guard endsAt != nil else { return }
+        finish(haptic: false)
+    }
+
     /// The workout ended (finished or quit) — no rest outlives it.
     func cancel() {
         guard endsAt != nil else { return }
@@ -221,6 +247,7 @@ final class RestTimer: ObservableObject {
         stopTicking()
         cancelNotification()
         endsAt = nil
+        PhoneSessionManager.shared.restChanged()
         UIApplication.shared.isIdleTimerDisabled = false
         if haptic { RestTimerHaptics.strong() }
     }

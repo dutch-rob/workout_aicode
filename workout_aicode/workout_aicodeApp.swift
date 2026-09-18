@@ -423,6 +423,13 @@ struct workout_aicodeApp: App {
         // Must be in place before the app finishes launching, or an end-of-rest
         // notification arriving with the app in front shows nothing at all.
         UNUserNotificationCenter.current().delegate = RestTimerNotificationDelegate.shared
+        // Connectivity up at launch, not when a view first asks for it. When
+        // the Watch is opened mid-workout after iOS has reclaimed this app, the
+        // app is woken in the background just to answer "is a workout going?",
+        // and a background launch builds no window for a @StateObject to be
+        // created in. The answer comes from what was written down before the
+        // app was killed, which needs no store.
+        _ = PhoneSessionManager.shared
     }
 
     var body: some Scene {
