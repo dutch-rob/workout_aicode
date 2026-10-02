@@ -110,6 +110,21 @@ struct NewExerciseNumberTests {
         }
     }
 
+    @Test func theRestTimerIsOffUntilItIsTurnedOn() {
+        // Its own store, not the device's. This test failed twice during
+        // development for a reason that had nothing to do with the code: the
+        // rest timer had been switched on by hand in the simulator, and the
+        // test clones inherit the device's settings. A test that a person's own
+        // use of the app can break is a test people learn to ignore.
+        let store = UserDefaults(suiteName: "resttimer-\(UUID().uuidString)")!
+
+        #expect(!ExerciseDefaults.restTimerIsOn(in: store))   // never answered
+        store.set(false, forKey: RestTimerKey.enabled)
+        #expect(!ExerciseDefaults.restTimerIsOn(in: store))   // answered no
+        store.set(true, forKey: RestTimerKey.enabled)
+        #expect(ExerciseDefaults.restTimerIsOn(in: store))    // only this is on
+    }
+
     @Test func defaultsAreNotAskedOfSomeoneWhoAlreadyHasExercises() {
         UserDefaults.standard.removeObject(forKey: ExerciseDefaultsKey.asked)
         #expect(ExerciseDefaults.shouldAsk(existingExercises: 0))
@@ -783,11 +798,6 @@ struct SchemaMigrationTests {
         d.set(120, forKey: RestTimerKey.defaultSeconds)
         defer { d.removeObject(forKey: RestTimerKey.defaultSeconds) }
         #expect(ExerciseDefaults.makeExercise(name: "Dip").restSeconds == 120)
-    }
-
-    @Test func theRestTimerIsOffUntilItIsTurnedOn() {
-        UserDefaults.standard.removeObject(forKey: RestTimerKey.enabled)
-        #expect(!RestTimerDefaults.isEnabled)
     }
 
     // MARK: - The Watch sync contract

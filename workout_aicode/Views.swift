@@ -553,11 +553,20 @@ struct LogExerciseView: View {
     /// the number you had chosen was destroyed by the act of measuring it.
     @State private var actualSeconds: [Int] = []
     @State private var showAllLoggedAlert = false
-    @State private var dragOffsetX: CGFloat = 0
+    /// How far the page is slid across, while the app is sliding it: the
+    /// "log, next" animation and the tail of a swipe.
+    @State private var slideOffset: CGFloat = 0
+    /// How far the FINGER has dragged the page, right now.
+    ///
+    /// @GestureState, not @State, and that is the point of it: SwiftUI puts a
+    /// gesture state back to its initial value when the gesture ends OR is
+    /// cancelled, and a drag over these wheels does get cancelled — the
+    /// pickers are UIKit and can claim the touch mid-drag. Held in @State, a
+    /// cancelled drag left the page sitting wherever the finger had got to,
+    /// with nothing to put it back: every control then sat somewhere other
+    /// than where it was drawn.
+    @GestureState private var dragTranslation: CGFloat = 0
     @State private var containerWidth: CGFloat = 0
-    private enum DragDirection { case horizontal, vertical }
-    @State private var dragDirection: DragDirection? = nil
-    @State private var isPaging: Bool = false
     /// True while an exercise is sliding off and the next one in.
     @State private var isSliding = false
 
@@ -580,7 +589,7 @@ struct LogExerciseView: View {
             pageContent(exercise: exerciseAt(currentIndex))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .contentShape(Rectangle())
-                .offset(x: dragOffsetX)
+                .offset(x: slideOffset + dragTranslation)
                 .padding()
                 .modifier(RestDrain(height: geo.size.height))
                 // At the bottom, in the space under the wheels. At the top it
@@ -985,43 +994,24 @@ struct LogExerciseView: View {
 
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 10, coordinateSpace: .local)
-            .onChanged { value in
-                let translation = value.translation
-                if dragDirection == nil {
-                    let directionSlop: CGFloat = 8
-                    if abs(translation.width) > directionSlop || abs(translation.height) > directionSlop {
-                        dragDirection = abs(translation.width) > abs(translation.height) ? .horizontal : .vertical
-                        isPaging = (dragDirection == .horizontal)
-                    }
-                }
-                dragOffsetX = dragDirection == .horizontal ? translation.width : 0
+            // Horizontal only: a vertical drag belongs to the wheel under the
+            // finger, and must not drag the page sideways.
+            .updating($dragTranslation) { value, state, _ in
+                let horizontal = abs(value.translation.width) > abs(value.translation.height)
+                state = horizontal ? value.translation.width : 0
             }
             .onEnded { value in
-                defer {
-                    dragDirection = nil
-                    isPaging = false
-                }
-                guard dragDirection == .horizontal else {
-                    withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
-                    return
-                }
+                let horizontal = value.translation.width
+                guard abs(horizontal) > abs(value.translation.height) else { return }
 
                 let threshold: CGFloat = 80
-                let horizontal = value.translation.width
-
                 if horizontal <= -threshold {
-                    slideToNext()
+                    slideToNext(from: horizontal)
                 } else if horizontal >= threshold {
-                    carriedOn = false
-                    withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = containerWidth }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                        goToPrevUnlogged()
-                        dragOffsetX = -containerWidth
-                        withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = 0 }
-                    }
-                } else {
-                    withAnimation(.easeOut(duration: 0.2)) { dragOffsetX = 0 }
+                    slideToPrevious(from: horizontal)
                 }
+                // Under the threshold there is nothing to do: the finger's
+                // offset is gesture state and goes back on its own.
             }
     }
 
@@ -1175,15 +1165,30 @@ struct LogExerciseView: View {
     /// The log button is disabled for the length of the slide: a second tap
     /// inside it would land before `currentIndex` moves, and log the exercise
     /// just logged a second time.
-    private func slideToNext() {
+    private func slideToNext(from start: CGFloat = 0) {
+        slide(from: start, out: -1) { goToNextUnlogged() }
+    }
+
+    private func slideToPrevious(from start: CGFloat = 0) {
+        slide(from: start, out: 1) { goToPrevUnlogged() }
+    }
+
+    /// One page out, swap, one page in.
+    ///
+    /// `start` is where the finger left the page. The slide begins from there
+    /// so it continues the swipe rather than jumping back to centre first —
+    /// the finger's own offset disappears the moment the gesture ends.
+    private func slide(from start: CGFloat, out direction: CGFloat,
+                       swap: @escaping () -> Void) {
         carriedOn = false
         guard !isSliding else { return }
         isSliding = true
-        withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = -containerWidth }
+        slideOffset = start
+        withAnimation(.easeInOut(duration: 0.22)) { slideOffset = direction * containerWidth }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            goToNextUnlogged()
-            dragOffsetX = containerWidth
-            withAnimation(.easeInOut(duration: 0.22)) { dragOffsetX = 0 }
+            swap()
+            slideOffset = -direction * containerWidth
+            withAnimation(.easeInOut(duration: 0.22)) { slideOffset = 0 }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { isSliding = false }
         }
     }

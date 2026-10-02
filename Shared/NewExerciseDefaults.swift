@@ -57,6 +57,18 @@ enum ExerciseDefaults {
     /// "1:30", "0:45", "5:00".
     static func restLabel(_ seconds: Int) -> String { minutesSeconds(seconds) }
 
+    /// Whether the rest timer is switched on.
+    ///
+    /// Takes the store it reads, defaulting to the user's. That is for the
+    /// test: UserDefaults.standard belongs to the whole device, so a test that
+    /// asserts on it can be broken by somebody switching the rest timer on in
+    /// the simulator by hand — which happened twice while this was being
+    /// built. Given its own store, the test cannot be poisoned and cannot
+    /// poison anything else.
+    static func restTimerIsOn(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: RestTimerKey.enabled)
+    }
+
     /// The rest a new exercise is created with — the user's answer to the
     /// first-run question, or the built-in default if they never gave one.
     static var restSeconds: Int {

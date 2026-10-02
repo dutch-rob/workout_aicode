@@ -48,9 +48,7 @@ enum RestTimerDefaults {
     /// "1:30", "0:45", "5:00".
     static func label(_ seconds: Int) -> String { ExerciseDefaults.restLabel(seconds) }
 
-    static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: RestTimerKey.enabled)
-    }
+    static var isEnabled: Bool { ExerciseDefaults.restTimerIsOn() }
 
     /// The rest a new exercise is created with — the user's answer to the
     /// first-run question, or the built-in default if they never gave one.

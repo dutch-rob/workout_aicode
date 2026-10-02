@@ -175,7 +175,7 @@ final class AppStore: ObservableObject {
             exercises: syncExercises,
             lastEntries: lastMap,
             healthSharingEnabled: UserDefaults.standard.bool(forKey: "healthSharingEnabled"),
-            restTimerEnabled: UserDefaults.standard.bool(forKey: RestTimerKey.enabled)
+            restTimerEnabled: ExerciseDefaults.restTimerIsOn()
         )
         return try? JSONEncoder().encode(payload)
     }
