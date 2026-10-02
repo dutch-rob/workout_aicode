@@ -494,7 +494,12 @@ struct WatchLogExerciseView: View {
         }
         .confirmationDialog("Exercises", isPresented: $showExerciseList, titleVisibility: .visible) {
             ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
-                Button(exerciseAt(idx)?.name ?? "") { setIndex(idx) }
+                // The tick is part of the title here: a watchOS confirmation
+                // dialog takes plain buttons, with nowhere to hang an icon.
+                // Same meaning as the phone's checkmark, and the row stays
+                // tappable — a logged exercise can still be gone back to.
+                let name = exerciseAt(idx)?.name ?? ""
+                Button(loggedIndices.contains(idx) ? "✓ \(name)" : name) { setIndex(idx) }
             }
         }
     }

@@ -853,7 +853,20 @@ struct LogExerciseView: View {
             Menu("list") {
                 ForEach(exerciseIds.indices, id: \.self) { idx in
                     let exercise = exerciseAt(idx)
-                    Button(exercise?.name ?? "") { carriedOn = false; currentIndex = idx }
+                    Button {
+                        carriedOn = false
+                        currentIndex = idx
+                    } label: {
+                        // A tick on the ones already logged, rather than greying
+                        // them: a greyed row in a menu reads as unavailable, and
+                        // a logged exercise is somewhere you may well want to go
+                        // back to — to add a set, or to look at what you did.
+                        if loggedIndices.contains(idx) {
+                            Label(exercise?.name ?? "", systemImage: "checkmark")
+                        } else {
+                            Text(exercise?.name ?? "")
+                        }
+                    }
                 }
             }
             .buttonStyle(.bordered)
