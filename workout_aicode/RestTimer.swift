@@ -95,8 +95,20 @@ final class RestTimer: ObservableObject {
     @Published private(set) var exerciseName = ""
     /// Length of this rest, which the grey drains across.
     @Published private(set) var totalSeconds = 0
-    /// Bumped by the tick so the countdown redraws.
-    @Published private(set) var tick = Date()
+    /// The display clock, deliberately a separate object — see CountdownClock.
+    ///
+    /// It moves twenty times a second. Published on THIS object, every one of
+    /// those ticks rebuilt the whole log screen (measured: 21 a second), and
+    /// the "list" menu inside it stopped accepting taps. Keeping the ticking
+    /// in its own object means observing the rest timer no longer means being
+    /// rebuilt by the clock: only the grey and the counter observe this.
+    let clock = CountdownClock()
+
+    /// Where the rest has got to. Reading it subscribes nobody to the ticking.
+    private var tick: Date {
+        get { clock.now }
+        set { clock.now = newValue }
+    }
 
     var isRunning: Bool { endsAt != nil }
 
@@ -363,6 +375,8 @@ struct RestDrain: ViewModifier {
     let height: CGFloat
 
     @ObservedObject private var timer = RestTimer.shared
+    /// The ticking. A leaf asks for this; a screen must not — see the clock.
+    @ObservedObject private var clock = RestTimer.shared.clock
 
     func body(content: Content) -> some View {
         content
@@ -389,6 +403,7 @@ struct RestDrain: ViewModifier {
 /// the one control the old countdown screen had, kept where it is findable.
 struct RestCounter: View {
     @ObservedObject private var timer = RestTimer.shared
+    @ObservedObject private var clock = RestTimer.shared.clock
 
     var body: some View {
         if timer.isRunning {

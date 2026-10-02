@@ -73,8 +73,13 @@ struct MacLogsView: View {
             ToolbarItem {
                 Button(action: openEditor) {
                     Label("Edit logs", systemImage: "square.and.pencil")
+                        // With its words, not just the pencil. A macOS toolbar
+                        // shows icon-only by default, and an unlabelled icon is
+                        // a feature nobody finds: this one went unnoticed until
+                        // it was asked for as though it did not exist.
+                        .labelStyle(.titleAndIcon)
                 }
-                .help("Correct a logged row, or add one")
+                .help("Correct a logged row, add one, or delete one")
             }
         }
         .sheet(item: $editing) { session in

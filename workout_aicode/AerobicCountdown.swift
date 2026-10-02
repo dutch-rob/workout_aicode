@@ -1,3 +1,10 @@
+/// A clock that something draws itself from, kept apart from the state around
+/// it so that watching the state does not mean being rebuilt on every tick.
+@MainActor
+final class CountdownClock: ObservableObject {
+    @Published var now = Date()
+}
+
 import SwiftUI
 import Combine
 import UIKit
@@ -74,7 +81,21 @@ final class AerobicCountdown: ObservableObject {
     @Published private(set) var exerciseName = ""
     /// The full length that was chosen, for the ring.
     @Published private(set) var totalSeconds = 0
-    @Published private(set) var tick = Date()
+    /// The display clock, deliberately a separate object.
+    ///
+    /// It moves five times a second, and anything observing the countdown
+    /// would be rebuilt that often — including the log screen, which only
+    /// wants to know whether a session is showing and what it came to. That is
+    /// exactly how the "list" menu came to ignore taps during a rest (see
+    /// LogExerciseView). So only the countdown's own screen observes this.
+    let clock = CountdownClock()
+
+    /// Where the countdown has got to. Reading it does not subscribe anyone to
+    /// the ticking — `clock` is the thing that publishes.
+    private var tick: Date {
+        get { clock.now }
+        set { clock.now = newValue }
+    }
 
     /// Set when a session ends, for the log screen to pick up. Seconds actually
     /// spent, whether it ran out or was stopped early.
@@ -472,6 +493,8 @@ struct HeartRateBar: View {
 
 struct AerobicCountdownView: View {
     @ObservedObject private var session = AerobicCountdown.shared
+    /// The ticking, which only this screen needs — see AerobicCountdown.clock.
+    @ObservedObject private var clock = AerobicCountdown.shared.clock
 
     var body: some View {
         VStack(spacing: 28) {

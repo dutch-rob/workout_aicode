@@ -3,6 +3,7 @@ import Foundation
 import SwiftData
 import HealthKit
 import SwiftUI
+import Combine
 @testable import workout_aicode
 
 
@@ -1413,6 +1414,59 @@ struct LogListTests {
     let phone = try Data(contentsOf: here.appendingPathComponent("workout_aicode/WatchSync.swift"))
     let watch = try Data(contentsOf: here.appendingPathComponent("workout_aicode Watch App/WatchSync.swift"))
     #expect(phone == watch)
+}
+
+// MARK: - The countdowns must not rebuild the screen they sit on
+//
+// The bug these guard against: the log screen observed the rest timer, whose
+// tick fires twenty times a second, so the whole screen — "list" menu and all —
+// was rebuilt at that rate, and the menu stopped accepting taps. It appeared
+// and then ignored everything, only while a rest was running.
+//
+// The fix is structural: the ticking lives in its own object, so observing a
+// countdown does not subscribe anyone to the clock. These hold that shape,
+// because the symptom is invisible to reading the code and only shows on a
+// real device with a long enough menu.
+
+@MainActor
+@Test func aRestTickDoesNotDisturbWhatObservesTheRestTimer() {
+    let timer = RestTimer.shared
+    var rebuilds = 0
+    let watching = timer.objectWillChange.sink { _ in rebuilds += 1 }
+    defer { watching.cancel() }
+
+    timer.clock.now = Date()        // one tick of the countdown
+    timer.clock.now = Date()        // and another
+
+    #expect(rebuilds == 0)
+}
+
+@MainActor
+@Test func anAerobicTickDoesNotDisturbWhatObservesTheCountdown() {
+    let countdown = AerobicCountdown.shared
+    var rebuilds = 0
+    let watching = countdown.objectWillChange.sink { _ in rebuilds += 1 }
+    defer { watching.cancel() }
+
+    countdown.clock.now = Date()
+    countdown.clock.now = Date()
+
+    #expect(rebuilds == 0)
+}
+
+@MainActor
+@Test func theClockItselfStillPublishesToWhateverDrawsIt() {
+    // The other half: a leaf that watches the clock must still be told, or the
+    // grey would stop draining and the counter would stop counting.
+    let clock = CountdownClock()
+    var ticks = 0
+    let watching = clock.objectWillChange.sink { _ in ticks += 1 }
+    defer { watching.cancel() }
+
+    clock.now = Date()
+    clock.now = Date()
+
+    #expect(ticks == 2)
 }
 
 // MARK: - Heart rate zones
