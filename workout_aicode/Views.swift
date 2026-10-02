@@ -522,8 +522,24 @@ struct LogExerciseView: View {
     var onEndSession: () -> Void = {}
 
     @ObservedObject private var handoff = PhoneSessionManager.shared
-    @ObservedObject private var restTimer = RestTimer.shared
     @ObservedObject private var aerobic = AerobicCountdown.shared
+
+    /// Deliberately NOT @ObservedObject.
+    ///
+    /// The rest timer publishes a tick twenty times a second so the grey can
+    /// drain smoothly. Observed here, every one of those ticks rebuilt this
+    /// whole screen — measured at 21 rebuilds a second — and the "list" menu
+    /// is part of it. A menu whose presenting view is torn down and rebuilt at
+    /// that rate stops accepting taps and scrolls: the list appeared and then
+    /// ignored everything, while a swipe on the plain view underneath still
+    /// worked. That was the reported bug, and it was present only while a rest
+    /// was counting down.
+    ///
+    /// Nothing in this view's body reads a published value from the timer —
+    /// every use is a method call. The two things that DO need the ticks, the
+    /// draining grey and the counter beside the title, observe it themselves
+    /// and are leaves, so a tick now redraws them and nothing else.
+    private var restTimer: RestTimer { .shared }
     /// Every aerobic result, to pre-fill the wheel with what was done last
     /// time — the same courtesy the weight wheels have always paid.
     @Query private var aerobicResults: [AerobicResult]
