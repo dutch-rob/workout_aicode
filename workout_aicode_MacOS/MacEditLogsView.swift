@@ -43,11 +43,53 @@ struct MacEditLogsView: View {
     @State private var newWeights: [Int] = [0, 0, 0]
     @State private var newReps: [Int] = [0, 0, 0]
 
+    /// One row as plain values.
+    ///
+    /// The table draws from these, never from the model objects, and that is
+    /// what stopped it crashing on delete. SwiftData tears a deleted object's
+    /// backing data away immediately; SwiftUI then redraws, and the row for the
+    /// row just removed read `weights` off the detached object:
+    ///
+    ///   "This backing data was detached from a context without resolving
+    ///    attribute faults ... \WorkoutLog.weights"
+    ///
+    /// The same lesson as the phone's start screen, in a different costume:
+    /// hold identities, and look the object up only where it is about to be
+    /// written to. A value cannot fault.
+    private struct Row: Identifiable {
+        let id: UUID
+        let workoutId: UUID
+        let exerciseId: UUID
+        let date: Date
+        let weights: [Int]
+        let reps: [Int]
+        /// Set for an aerobic row, which has a duration instead of sets.
+        let aerobicSeconds: Int?
+    }
+
+    private var rows: [Row] {
+        let durations = Dictionary(aerobicResults.filter { !$0.isDeleted }
+                                        .map { ($0.logId, $0.durationSeconds) },
+                                   uniquingKeysWith: { a, _ in a })
+        return logs.filter { !$0.isDeleted }.map {
+            Row(id: $0.id, workoutId: $0.workoutId, exerciseId: $0.exerciseId,
+                date: $0.date, weights: $0.weights, reps: $0.reps,
+                aerobicSeconds: durations[$0.id])
+        }
+    }
+
+    /// The live record behind a row, when one is about to be changed. Nil once
+    /// it has been deleted, so an edit arriving late is dropped rather than
+    /// crashing.
+    private func record(_ id: UUID) -> WorkoutLog? {
+        logs.first { $0.id == id && !$0.isDeleted }
+    }
+
     /// How many weight/reps pairs the table is wide. At least three, so there
     /// is somewhere to type, and one spare past the longest row so a set can
     /// always be added without a control for adding columns.
     private var setColumns: Int {
-        let longest = logs.map { max($0.weights.count, $0.reps.count) }.max() ?? 0
+        let longest = rows.map { max($0.weights.count, $0.reps.count) }.max() ?? 0
         return min(12, max(3, longest + 1))
     }
 
@@ -98,7 +140,7 @@ struct MacEditLogsView: View {
 
     private var footer: some View {
         HStack {
-            Text("\(logs.count) rows")
+            Text("\(rows.count) rows")
                 .font(.caption).foregroundStyle(.secondary)
             Spacer()
             Button("Done") { finish() }
@@ -113,8 +155,8 @@ struct MacEditLogsView: View {
         ScrollView([.vertical, .horizontal]) {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
-                    ForEach(logs) { log in
-                        row(log)
+                    ForEach(rows) { row in
+                        self.row(row)
                         Divider()
                     }
                     newRow
@@ -142,30 +184,31 @@ struct MacEditLogsView: View {
         .background(.regularMaterial)
     }
 
-    private func row(_ log: WorkoutLog) -> some View {
+    private func row(_ row: Row) -> some View {
         HStack(spacing: 8) {
-            workoutPicker(selection: Binding(get: { log.workoutId },
-                                             set: { log.workoutId = $0 }))
-            exercisePicker(selection: Binding(get: { log.exerciseId },
-                                              set: { log.exerciseId = $0 }))
-            DatePicker("", selection: Binding(get: { log.date }, set: { log.date = $0 }))
+            workoutPicker(selection: Binding(get: { row.workoutId },
+                                             set: { record(row.id)?.workoutId = $0 }))
+            exercisePicker(selection: Binding(get: { row.exerciseId },
+                                              set: { record(row.id)?.exerciseId = $0 }))
+            DatePicker("", selection: Binding(get: { row.date },
+                                              set: { record(row.id)?.date = $0 }))
                 .labelsHidden()
                 .frame(width: 180)
 
-            if let result = aerobicResults.first(where: { $0.logId == log.id }) {
+            if let seconds = row.aerobicSeconds {
                 // A ride has no sets. Showing empty weight boxes would invite
                 // someone to type a number into a row that has no use for one.
-                Text("aerobic · \(minutesSeconds(result.durationSeconds))")
+                Text("aerobic · \(minutesSeconds(seconds))")
                     .font(.callout).foregroundStyle(.secondary)
                     .frame(width: CGFloat(setColumns) * 82, alignment: .leading)
             } else {
                 ForEach(0..<setColumns, id: \.self) { i in
-                    setPair(weight: weightBinding(log, i), reps: repsBinding(log, i))
+                    setPair(weight: weightBinding(row, i), reps: repsBinding(row, i))
                 }
             }
 
             Button {
-                delete(log)
+                delete(row.id)
             } label: {
                 Image(systemName: "minus.circle")
             }
@@ -243,14 +286,24 @@ struct MacEditLogsView: View {
         .frame(width: 74, alignment: .leading)
     }
 
-    private func weightBinding(_ log: WorkoutLog, _ i: Int) -> Binding<Int> {
-        Binding(get: { i < log.weights.count ? log.weights[i] : 0 },
-                set: { LogEditing.extend(log, toSets: i + 1); log.weights[i] = $0 })
+    /// Reads the row's own copy, writes to the record behind it — which may be
+    /// gone by the time a field commits, hence the lookup on every write.
+    private func weightBinding(_ row: Row, _ i: Int) -> Binding<Int> {
+        Binding(get: { i < row.weights.count ? row.weights[i] : 0 },
+                set: { value in
+                    guard let log = record(row.id) else { return }
+                    LogEditing.extend(log, toSets: i + 1)
+                    log.weights[i] = value
+                })
     }
 
-    private func repsBinding(_ log: WorkoutLog, _ i: Int) -> Binding<Int> {
-        Binding(get: { i < log.reps.count ? log.reps[i] : 0 },
-                set: { LogEditing.extend(log, toSets: i + 1); log.reps[i] = $0 })
+    private func repsBinding(_ row: Row, _ i: Int) -> Binding<Int> {
+        Binding(get: { i < row.reps.count ? row.reps[i] : 0 },
+                set: { value in
+                    guard let log = record(row.id) else { return }
+                    LogEditing.extend(log, toSets: i + 1)
+                    log.reps[i] = value
+                })
     }
 
     /// The bottom row is not a log yet, so its cells write to state rather
@@ -295,17 +348,22 @@ struct MacEditLogsView: View {
         newReps = [0, 0, 0]
     }
 
-    private func delete(_ log: WorkoutLog) {
-        for result in aerobicResults where result.logId == log.id { context.delete(result) }
-        DraftMode.forget(id: log.id, in: context)
+    private func delete(_ id: UUID) {
+        guard let log = record(id) else { return }
+        for result in aerobicResults where !result.isDeleted && result.logId == id {
+            context.delete(result)
+        }
+        DraftMode.forget(id: id, in: context)
         context.delete(log)
+        // Saved at once, so the query that feeds this table stops handing back
+        // a row whose record has gone.
         try? context.save()
     }
 
     // MARK: Leaving
 
     private func finish() {
-        for log in logs { LogEditing.trimEmptyTrailingSets(log) }
+        for log in logs where !log.isDeleted { LogEditing.trimEmptyTrailingSets(log) }
         try? context.save()
 
         if changed {

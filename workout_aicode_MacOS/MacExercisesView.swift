@@ -31,13 +31,16 @@ struct MacExercisesView: View {
 
     private var selected: ExerciseDef? {
         guard let selection else { return nil }
-        return exercises.first { $0.id == selection }
+        return exercises.first { $0.id == selection && !$0.isDeleted }
     }
 
     /// Your own, what you use first: starred, then whatever is in a workout,
     /// then the rest — the same order the phone's library uses.
     private var own: [ExerciseDef] {
-        sieve.own(exercises).sorted { a, b in
+        // Deleted ones filtered out before anything draws them: SwiftData tears
+        // a deleted object's backing data away at once, and reading a name off
+        // it in the next redraw is a crash — the one the log editor hit.
+        sieve.own(exercises.filter { !$0.isDeleted }).sorted { a, b in
             let ra = rank(a), rb = rank(b)
             if ra != rb { return ra < rb }
             return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending

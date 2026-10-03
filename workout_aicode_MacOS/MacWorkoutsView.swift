@@ -16,7 +16,12 @@ struct MacWorkoutsView: View {
     @State private var selection: UUID?
 
     private var draft: DraftSession? { drafts.first { $0.isActive } }
-    private var selected: WorkoutDef? { workouts.first { $0.id == selection } }
+    private var selected: WorkoutDef? {
+        workouts.first { $0.id == selection && !$0.isDeleted }
+    }
+    /// Deleted ones are gone from here before anything draws them — see
+    /// MacExercisesView.own for what reading one costs.
+    private var living: [WorkoutDef] { workouts.filter { !$0.isDeleted } }
 
     var body: some View {
         HSplitView {
@@ -44,12 +49,12 @@ struct MacWorkoutsView: View {
     }
 
     @ViewBuilder private var list: some View {
-        if workouts.isEmpty {
+        if living.isEmpty {
             MacEmptyState(thing: "workouts", onCreate: create)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(selection: $selection) {
-                ForEach(workouts) { workout in
+                ForEach(living) { workout in
                     HStack {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(workout.name.isEmpty ? "(unnamed)" : workout.name)
@@ -80,8 +85,9 @@ struct MacWorkoutsView: View {
     }
 
     private func delete(_ offsets: IndexSet) {
+        // Offsets index the list as shown.
         for index in offsets {
-            let workout = workouts[index]
+            let workout = living[index]
             DraftMode.forget(id: workout.id, in: context)
             context.delete(workout)
         }
@@ -99,7 +105,9 @@ struct MacWorkoutDetail: View {
     @State private var sieve = MacExerciseSieve()
 
     private var inWorkout: [ExerciseDef] {
-        workout.exerciseOrder.compactMap { id in allExercises.first { $0.id == id } }
+        workout.exerciseOrder.compactMap { id in
+            allExercises.first { $0.id == id && !$0.isDeleted }
+        }
     }
 
     /// Every exercise there is, not only the ones missing from this workout.
@@ -115,7 +123,7 @@ struct MacWorkoutDetail: View {
     /// membership here would move a row out from under the pointer the moment
     /// it was clicked.
     private var offered: [ExerciseDef] {
-        sieve.own(allExercises).sorted { a, b in
+        sieve.own(allExercises.filter { !$0.isDeleted }).sorted { a, b in
             let ra = LibraryOrder.rank(isFavourite: a.isFavourite, isInAnyWorkout: true,
                                        choosingForWorkout: true)
             let rb = LibraryOrder.rank(isFavourite: b.isFavourite, isInAnyWorkout: true,
