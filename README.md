@@ -102,6 +102,13 @@ If the rest timer is on, it runs here too — see [The rest timer](#the-rest-tim
 
 The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise, with a ✓ against the ones already logged. Swiping left and right moves between exercises without logging, exactly as on the phone.
 
+### Keeping the app on screen between sets
+Lower your wrist and the Watch goes back to the clock face, and by default raising it again only returns you to the app for about two minutes — roughly one rest. After that you have to find the app again to log the next set.
+
+This is a Watch setting rather than anything this app controls, and it is worth changing. On the Watch, open **Settings › General › Return to Clock**, find **SetsRepsWheels** in the list of apps, choose **Return to App**, and set it to **after 1 hour**. You can do the same from your iPhone in the **Watch** app, under *General › Return to Clock*. A workout then stays where you left it for as long as the workout lasts.
+
+Worth checking even if you have set it before: an app given its own entry can still be sitting on the two-minute default.
+
 ## Handing a workout over
 A workout runs on one device at a time, and you can move it across whenever you like — the sets you have already logged, the wheel positions and where you are in the workout all come with it.
 

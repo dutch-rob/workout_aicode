@@ -29,6 +29,7 @@ MARKER_START = "<!-- INFO_SCREEN_START -->"
 MARKER_END   = "<!-- INFO_SCREEN_END -->"
 
 HEADING  = "HEADING"
+SUBHEAD  = "SUBHEAD"
 PARA     = "PARA"
 NUMBERED = "NUMBERED"
 BULLET   = "BULLET"
@@ -66,6 +67,17 @@ def parse_items(section: str) -> list:
 
         if not line:
             flush()
+            continue
+
+        # ### Sub-heading. Must be tested BEFORE "## ", which also matches it.
+        #
+        # Without this the hashes ran into the paragraph below and the info
+        # screen showed "### With an Apple Watch If you have one..." — visible
+        # in the shipped app, because the README had sub-headings and this only
+        # ever knew about sections.
+        if line.startswith("### "):
+            flush()
+            items.append((SUBHEAD, line[4:].strip(), 0))
             continue
 
         # ## Heading
@@ -182,6 +194,14 @@ def generate(items: list) -> str:
 
             if typ == HEADING:
                 out.append(f'{L5}{swift_text(content)}.font(.headline).id("{slug(content)}")')
+                i += 1
+                continue
+
+            if typ == SUBHEAD:
+                # Smaller than a section, still clearly a heading, and with its
+                # own anchor so a link can reach it.
+                out.append(f'{L5}{swift_text(content)}.font(.subheadline).bold()'
+                           f'.id("{slug(content)}")')
                 i += 1
                 continue
 
