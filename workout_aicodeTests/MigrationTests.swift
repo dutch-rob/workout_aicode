@@ -1754,3 +1754,25 @@ private func at(_ seconds: Int) -> Date {
     #expect(restored.weights == [50, 55])
     #expect(restored.durationSeconds == 0)   // "not an aerobic exercise"
 }
+
+// MARK: - The survey is off
+
+@MainActor
+@Test func theSurveyIsNotShownToAnyone() {
+    // It shipped half-built in 1.3 and reached real users, because its
+    // conditions were far weaker than they read: "first use" is the date of the
+    // earliest log, so anyone with history met the eight weeks and the twelve
+    // logging days the moment they updated. This holds it shut until the screen
+    // is finished — a one-line flip that should fail a test if it is made by
+    // accident.
+    #expect(!SurveyScheduler.isEnabled)
+
+    // And the gate is really in the path, not merely declared: a user who would
+    // otherwise qualify many times over is still not due.
+    let logs = (0..<40).map { day in
+        WorkoutLog(date: Date(timeIntervalSince1970: 1_600_000_000 + Double(day) * 86_400),
+                   workoutId: UUID(), exerciseId: UUID(), weights: [50], reps: [10])
+    }
+    #expect(!SurveyScheduler.shared.isDue(logs: logs,
+                                          now: Date(timeIntervalSince1970: 1_700_000_000)))
+}

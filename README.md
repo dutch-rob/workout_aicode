@@ -43,7 +43,7 @@ After finishing a set, tap **log, next** to record the exercise and move to the 
 
 **quit** ends the workout without logging the exercise that is on screen. Anything you already logged during the workout is kept.
 
-If a machine is busy you can skip ahead: swipe left for the next exercise you have not logged yet, and right for the previous one. Swiping leaves the current exercise without logging it, so you can come back to it later.
+If a machine is busy you can skip ahead: swipe left for the next exercise you have not logged yet, and right for the previous one. Swiping leaves the current exercise without logging it, so you can come back to it later. **list** opens the whole workout and jumps straight to any exercise in it; the ones you have already logged carry a tick, and you can still go back to them — to add a set, or to look at what you did.
 
 ## Aerobic exercises
 Not everything in a gym has weights on it. An exercise can be **aerobic** instead of strength: pick it from the heart-shaped **AE** button beside the body picture in the exercise library, where every indoor workout the Apple Workout app offers is waiting ready-made — indoor walk, run and cycle, elliptical, rower, stair stepper, and the rest. Take one, or make your own and choose its activity on the *edit exercise* screen.
@@ -74,17 +74,22 @@ Off unless you switch it on, in Settings. With it off the app behaves exactly as
 
 With it on, a rest is counted after every set, and after each exercise you log. What ends a set is a wheel: you roll it to what you just lifted, and the rest starts from there. On the iPhone the touch is enough on its own, so moving a wheel and putting it back on the same number counts too — which is what happens when you simply repeat the previous set — and a plain tap on a wheel is the easiest way to start a rest by hand.
 
-The screen greys over the moment the rest starts, and the grey drains away over the next few seconds before the countdown appears. That pause is deliberate: setting the weight and then the repetitions is two separate touches, and covering the screen after the first would take the second wheel away from you. Touching a wheel again, or swiping to another exercise, fills the grey back up and puts the countdown off again — so how much grey is left is how long you still have to change your mind.
+The rest happens on the screen you are already on. The log screen greys over the moment it starts, and the grey drains down as the rest runs: how much is left is how much time is left, readable from across a bench. The seconds show small beside **log exercise** at the top, and tapping them ends the rest. The wheels stay usable throughout, and touching one starts the rest again from the top — because a wheel that moves is a set that just finished.
 
-The countdown then opens already a few seconds down rather than at the full time, because your rest began when the set ended, not when the screen changed. **skip rest** ends it early and takes you straight back to the wheels.
+Earlier versions took the screen away for a separate countdown with a **skip rest** button. It was fussy in use: the screen you needed for the next set was gone, and you had to dismiss it to get back.
 
-While it runs you are free to put the phone in your pocket or use something else. The countdown is only a display: the rest is kept by the clock, and a notification arrives when it is over whether or not the app is on screen. How loudly that lands is the phone's business rather than the app's — an app cannot buzz you while it is in the background, so what you feel is whatever your Sounds & Haptics settings do for a notification. An Apple Watch that was nearby when the rest started is told when it ends and taps your wrist itself, which is the more dependable tap on the shoulder.
+While a rest runs you are free to put the phone in your pocket or use something else. The countdown is only a display: the rest is kept by the clock, and a notification arrives when it is over whether or not the app is on screen. How loudly that lands is the phone's business rather than the app's — an app cannot buzz you while it is in the background, so what you feel is whatever your Sounds & Haptics settings do for a notification. An Apple Watch that was nearby when the rest started is told when it ends and taps your wrist itself, which is the more dependable tap on the shoulder.
 
-It works the same way when you log on the Apple Watch: the wheel or the **log** button starts the rest, the grey drains, the countdown covers the screen, and **skip** ends it. One difference the hardware forces — the Digital Crown only reports a wheel that actually lands on a new number, so on the Watch repeating a set exactly is best logged with the **log** button rather than by nudging a wheel back where it was.
+It works the same way on the Apple Watch: the wheel or the **log** button starts the rest, the screen lightens and drains across it, and the seconds sit beside the exercise name with a tap to end them. One difference the hardware forces — the Digital Crown only reports a wheel that actually lands on a new number, so on the Watch repeating a set exactly is best logged with the **log** button rather than by nudging a wheel back where it was.
 
-Whichever device you are logging on runs the rest, and skipping on one calls it off on the other. A rest started on the Watch stays on the Watch, so your phone does not buzz in a locker for a set you logged at the machine.
+Whichever device you are logging on runs the rest, and ending it on one calls it off on the other. A rest started on the Watch stays on the Watch, so your phone does not buzz in a locker for a set you logged at the machine. If you move the workout between devices in the middle of a rest, the rest moves with it and carries on where it was — the time the hand-over takes comes off the rest rather than being added to it.
 
 How long the rest is belongs to the exercise, because a heavy compound needs longer than a light isolation movement. The first-run question sets what new exercises start with, from 0:15 up to 5:00 in quarter minutes and 1:30 by default; any exercise can be given its own on its *edit exercise* screen, and Settings holds the starting value for new ones.
+
+## If the app closes mid-workout
+iPhones close apps that have been in a pocket for a while — that is iOS reclaiming memory, and no app can prevent it. Opening SetsRepsWheels again within the hour takes you straight back to the workout you were in, on the exercise you were on, with everything you had already logged and every number you had dialled into the wheels. A badge says **Carried on from earlier** so you can tell it apart from a fresh start.
+
+The same hour decides when a workout you never finished is treated as over: an hour after your last logged exercise it is written to Apple Health as having ended then, not whenever you next opened the app.
 
 ## The Apple Watch app
 The Watch app is a companion to the iPhone app: it shows your workouts and lets you log them at the machine, without taking your phone out. Everything else — creating workouts and exercises, browsing and exporting logs, settings — is done on the iPhone.
@@ -95,7 +100,7 @@ Because the screen is small, the Watch shows **one** row of wheels at a time. Th
 
 If the rest timer is on, it runs here too — see [The rest timer](#the-rest-timer).
 
-The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise. Swiping left and right moves between exercises without logging, exactly as on the phone.
+The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise, with a ✓ against the ones already logged. Swiping left and right moves between exercises without logging, exactly as on the phone.
 
 ## Handing a workout over
 A workout runs on one device at a time, and you can move it across whenever you like — the sets you have already logged, the wheel positions and where you are in the workout all come with it.

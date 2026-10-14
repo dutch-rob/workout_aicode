@@ -24,6 +24,21 @@ final class SurveyScheduler: ObservableObject {
     private let declinedKey  = "surveyDeclinedAt"
     private let declineCount = "surveyDeclineCount"
 
+    /// OFF. The survey is not shown to anyone.
+    ///
+    /// It went out in 1.3 and was still there in 1.4 and 1.5, half-built: the
+    /// segmented pickers start on a value that is not one of their options, so
+    /// they draw with nothing selected, and "Send" is enabled before anything
+    /// has been answered. It reached real users because the conditions below
+    /// are far weaker than they look — see `noteLaunch`, where "first use" is
+    /// the date of the EARLIEST LOG, so anyone with history satisfied the
+    /// eight weeks and the twelve logging days the moment they updated.
+    ///
+    /// Switched off here rather than deleted: the questions are still the ones
+    /// worth asking, and this is one line to flip when the screen is finished
+    /// and the trigger means what it says.
+    static let isEnabled = false
+
     /// Thresholds, both of which must be met.
     static let requiredLoggingDays = 12
     static let requiredWeeks = 8
@@ -54,6 +69,7 @@ final class SurveyScheduler: ObservableObject {
     }
 
     func isDue(logs: [WorkoutLog], now: Date = Date()) -> Bool {
+        guard Self.isEnabled else { return false }
         if defaults.object(forKey: answeredKey) != nil { return false }
         if defaults.integer(forKey: declineCount) >= Self.maximumAsks { return false }
 

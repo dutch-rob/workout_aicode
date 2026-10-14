@@ -35,7 +35,14 @@ enum DemoMode {
 
     /// An in-memory container holding a realistic-looking training history.
     static func makeContainer() -> ModelContainer {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        // cloudKitDatabase: .none explicitly. Without it the app's CloudKit
+        // entitlement lets mirroring attach itself to this throwaway store;
+        // in a simulator with no iCloud account that fails
+        // ("Unable to initialize without an iCloud account"), the store is
+        // pulled out from under the seeding, and the app dies on the save with
+        // "No eligible connection available". A screenshot run has nothing to
+        // sync and must never try.
+        let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         // swiftlint:disable:next force_try
         let container = try! ModelContainer(
             for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self,

@@ -121,7 +121,9 @@ for group in $WHICH; do
   case "$group" in
     # The Watch gets a short settle: its screen sleeps quickly, and a long wait
     # captures solid black. minkb rejects a frame that is asleep anyway.
-    phone) run_device "iPhone 17 Pro Max"       "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  "${IOS_SCREENS[@]}" ;;
+    # 18 Pro Max since Xcode 27: the 17 Pro Max simulator is gone with the
+    # older runtime, and App Store Connect wants the current 6.9" size.
+    phone) run_device "iPhone 18 Pro Max"       "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  "${IOS_SCREENS[@]}" ;;
     ipad)  run_device "iPad Pro 13-inch (M5)"   "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  "${IOS_SCREENS[@]}" ;;
     # 46mm, NOT 42mm: App Store Connect accepts only 422x514, 410x502, 416x496,
     # 396x484, 368x448 or 312x390 for Watch, and the 42mm renders at 374x446 —
