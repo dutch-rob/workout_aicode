@@ -9,6 +9,8 @@ import SwiftData
 //
 //   -SRWDemo               seed an IN-MEMORY store with sample workouts + history
 //   -SRWScreen <name>      open a screen: log | logs | info | settings
+//   -SRWSide <name>        which tab the open Duo's left pane shows:
+//                          logs | graphs | progress | transfer
 //
 // DEBUG-only, so none of this can ship. The in-memory store matters: screenshots
 // never touch (or risk) the real data on the device they run on.
@@ -30,6 +32,14 @@ enum DemoMode {
     static var screen: String? {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "-SRWScreen"), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
+    /// Value passed after `-SRWSide`, if any: which tab the left-hand pane of
+    /// the open Duo shows. Only read when that pane exists.
+    static var side: String? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "-SRWSide"), i + 1 < args.count else { return nil }
         return args[i + 1]
     }
 

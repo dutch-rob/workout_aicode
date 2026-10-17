@@ -11,10 +11,18 @@
 #   -SRWScreen <name>    which screen to open ("rest" opens the log screen with
 #                        the rest countdown over it — the timer is off by
 #                        default, so it cannot be reached by launching alone)
+#   -SRWSide <name>      which tab the open Duo's LEFT pane shows
+#
+# The iPhone Duo shots are of the OPEN screen in landscape, which this script
+# cannot arrange: there is no simctl verb for the fold, and Xcode 27.1 ships
+# DeviceHub rather than Simulator.app. Open it by hand in the simulator window
+# first — the state survives, so it only has to be done once — and the run
+# stops with a clear message if it finds the inner screen dark or upright.
 #
 # Usage:  tools/make-screenshots.sh            # everything
 #         DEVICES=phone tools/make-screenshots.sh
 #         DEVICES="phone watch" tools/make-screenshots.sh
+#         DEVICES=duo tools/make-screenshots.sh    # the folding iPhone
 #         SCREENS=info tools/make-screenshots.sh   # re-shoot one screen only
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -28,7 +36,7 @@ OUT="fastlane/screenshots/en-US"
 # real screen, which is mostly white and compresses well. So: wait generously.
 SETTLE="${SETTLE:-15}"          # seconds to let a screen finish rendering
 WARMUP="${WARMUP:-15}"          # first launch after install is much slower
-WHICH="${DEVICES:-phone ipad watch}"
+WHICH="${DEVICES:-phone ipad watch duo}"
 # Optional space-separated filter of screen names (the part before ":" in the
 # *_SCREENS lists), for re-shooting a single screen after a UI tweak.
 ONLY="${SCREENS:-}"
@@ -40,6 +48,23 @@ IOS_APP=$(find "$DERIVED"/workout_aicode-*/Build/Products/Debug-iphonesimulator 
 WATCH_APP=$(find "$DERIVED"/workout_aicode-*/Build/Products/Debug-watchsimulator \
             -maxdepth 1 -name "workout_aicode Watch App-.app" 2>/dev/null | head -1)
 
+inner_display_of() {   # udid -> screen id of the LARGEST built-in display
+  # A Duo has two: the cover screen and, bigger, the one behind the fold.
+  # Read rather than hardcoded, since screen ids are the simulator's to choose.
+  xcrun simctl io "$1" enumerate 2>/dev/null | awk '
+    /Screen ID:/            { id = $3 }
+    /Screen Type: Integrated/ { integrated = 1 }
+    /Pixel Size:/ {
+      if (integrated) {
+        line = $0; gsub(/[{},]/, " ", line); split(line, f, " ")
+        area = f[3] * f[4]
+        if (area > best) { best = area; bid = id }
+      }
+      integrated = 0
+    }
+    END { print bid }'
+}
+
 udid_of() {   # exact device name -> UDID
   xcrun simctl list devices available 2>/dev/null \
     | grep -F "$1 (" | head -1 | grep -oE "[0-9A-Fa-f-]{36}"
@@ -50,17 +75,30 @@ udid_of() {   # exact device name -> UDID
 IOS_SCREENS=("workouts:01_workouts" "log:02_log_exercise" "aerobic:03_aerobic"
              "rest:04_rest_timer" "library:05_library" "graphs:06_graphs"
              "progress:07_progress" "logs:08_logs" "info:09_info")
+# The Duo, open and on its side, is two panes: "<right screen>:<left tab>:<label>".
+# The right half is the app as the cover screen shows it, so these are the
+# screens that are NOT the logs or the graphs — those are what the left half is
+# for, and the two halves alternate between the log list and the graphs.
+DUO_SCREENS=("workouts:logs:01_workouts"      "log:graphs:02_log_exercise"
+             "rest:logs:03_rest_timer"        "aerobic:graphs:04_aerobic"
+             "library:logs:05_library"        "progress:graphs:06_progress"
+             "info:logs:07_info")
 WATCH_SCREENS=("workouts:01_watch_workouts" "log:02_watch_log"
                "heart:03_watch_heart_rate" "rest:04_watch_rest_timer"
                "paused:05_watch_handover")
 
-shoot() {   # udid  devlabel  bundle  screen  filelabel  settle  minkb
+shoot() {   # udid  devlabel  bundle  screen  filelabel  settle  minkb  side  display
   local udid="$1" dev="$2" bundle="$3" screen="$4" label="$5"
-  local settle="$6" minkb="$7"
+  local settle="$6" minkb="$7" side="${8:-}" display="${9:-}"
   local path="$OUT/${dev}-${label}.png"
   local tmp="/tmp/srw-shot-$$.png"
   local args=(-SRWDemo)
   [ "$screen" != "workouts" ] && args+=(-SRWScreen "$screen")
+  [ -n "$side" ] && args+=(-SRWSide "$side")
+  # A folding phone has more than one screen, and the default capture is the
+  # cover one. Empty everywhere else, which keeps the command unchanged there.
+  local io=()
+  [ -n "$display" ] && io=(--display "$display")
 
   local attempt=0 kb=0 tries=0
   while [ "$attempt" -lt 3 ]; do
@@ -74,7 +112,7 @@ shoot() {   # udid  devlabel  bundle  screen  filelabel  settle  minkb
     local prev="" cur=""
     tries=0
     while [ "$tries" -lt 10 ]; do
-      xcrun simctl io "$udid" screenshot "$tmp" >/dev/null 2>&1
+      xcrun simctl io "$udid" screenshot ${io[@]+"${io[@]}"} "$tmp" >/dev/null 2>&1
       cur=$(md5 -q "$tmp" 2>/dev/null)
       [ -n "$prev" ] && [ "$cur" = "$prev" ] && break
       prev="$cur"
@@ -94,14 +132,21 @@ shoot() {   # udid  devlabel  bundle  screen  filelabel  settle  minkb
   echo "  ✓ ${dev}-${label}.png  (${kb}KB, settled after $((tries * 2))s)"
 }
 
-run_device() {   # devicename  bundle  app  settle  minkb  screens...
-  local name="$1" bundle="$2" app="$3" settle="$4" minkb="$5"; shift 5
+run_device() {   # devicename  bundle  app  settle  minkb  whichscreen  screens...
+  local name="$1" bundle="$2" app="$3" settle="$4" minkb="$5" which_screen="$6"; shift 6
   local udid; udid=$(udid_of "$name")
   if [ -z "$udid" ]; then echo "!! simulator not found: $name"; return; fi
   if [ -z "$app" ]; then echo "!! app not built for $name — build the scheme first"; return; fi
   echo "== $name =="
   xcrun simctl boot "$udid" >/dev/null 2>&1
   xcrun simctl bootstatus "$udid" >/dev/null 2>&1
+
+  local display=""
+  if [ "$which_screen" = inner ]; then
+    display=$(inner_display_of "$udid")
+    if [ -z "$display" ]; then echo "!! no inner display found on $name"; return; fi
+    check_open "$udid" "$display" "$name" || return
+  fi
   # Uninstall first: `install` alone replaces the binary but keeps the data
   # container, and on the Watch that container holds the last received
   # WatchConnectivity context, which would be replayed over the demo data.
@@ -113,8 +158,34 @@ run_device() {   # devicename  bundle  app  settle  minkb  screens...
   sleep "$WARMUP"
   for pair in "$@"; do
     if [ -n "$ONLY" ] && ! grep -qw -- "${pair%%:*}" <<<"$ONLY"; then continue; fi
-    shoot "$udid" "$name" "$bundle" "${pair%%:*}" "${pair##*:}" "$settle" "$minkb"
+    # "<screen>:<label>", or "<screen>:<side tab>:<label>" for the two-pane Duo.
+    local side=""
+    [ "$(awk -F: '{print NF}' <<<"$pair")" -eq 3 ] && side=$(cut -d: -f2 <<<"$pair")
+    shoot "$udid" "$name" "$bundle" "${pair%%:*}" "${pair##*:}" \
+          "$settle" "$minkb" "$side" "$display"
   done
+}
+
+check_open() {   # udid  display  name -> 0 when the inner screen is open and on its side
+  local udid="$1" display="$2" name="$3"
+  local probe="/tmp/srw-fold-$$.png"
+  xcrun simctl io "$udid" screenshot --display "$display" "$probe" >/dev/null 2>&1
+  local kb w h
+  kb=$(( $(stat -f%z "$probe" 2>/dev/null || echo 0) / 1000 ))
+  w=$(sips -g pixelWidth  "$probe" 2>/dev/null | awk '/pixelWidth/  {print $2}')
+  h=$(sips -g pixelHeight "$probe" 2>/dev/null | awk '/pixelHeight/ {print $2}')
+  rm -f "$probe"
+  if [ "$kb" -lt 20 ]; then
+    echo "!! $name's inner screen is dark — it is folded shut."
+    echo "   Open it in the simulator window (landscape), then: DEVICES=duo $0"
+    return 1
+  fi
+  if [ -n "$w" ] && [ -n "$h" ] && [ "$w" -lt "$h" ]; then
+    echo "!! $name is open but upright — these shots are of the landscape layout."
+    echo "   Turn it on its side, then: DEVICES=duo $0"
+    return 1
+  fi
+  return 0
 }
 
 for group in $WHICH; do
@@ -123,13 +194,15 @@ for group in $WHICH; do
     # captures solid black. minkb rejects a frame that is asleep anyway.
     # 18 Pro Max since Xcode 27: the 17 Pro Max simulator is gone with the
     # older runtime, and App Store Connect wants the current 6.9" size.
-    phone) run_device "iPhone 18 Pro Max"       "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  "${IOS_SCREENS[@]}" ;;
-    ipad)  run_device "iPad Pro 13-inch (M5)"   "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  "${IOS_SCREENS[@]}" ;;
+    phone) run_device "iPhone 18 Pro Max"       "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  ""      "${IOS_SCREENS[@]}" ;;
+    ipad)  run_device "iPad Pro 13-inch (M5)"   "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 0  ""      "${IOS_SCREENS[@]}" ;;
+    # Open, on its side, and shot on the screen behind the fold.
+    duo)   run_device "iPhone Duo"              "$IOS_BUNDLE"   "$IOS_APP"   "$SETTLE" 20 "inner" "${DUO_SCREENS[@]}" ;;
     # 46mm, NOT 42mm: App Store Connect accepts only 422x514, 410x502, 416x496,
     # 396x484, 368x448 or 312x390 for Watch, and the 42mm renders at 374x446 —
     # a real device size that is simply not on Apple's accepted list. The 46mm
     # gives 416x496 and uploads fine.
-    watch) run_device "Apple Watch Series 11 (46mm)" "$WATCH_BUNDLE" "$WATCH_APP" 4 8 "${WATCH_SCREENS[@]}" ;;
+    watch) run_device "Apple Watch Series 11 (46mm)" "$WATCH_BUNDLE" "$WATCH_APP" 4 8 "" "${WATCH_SCREENS[@]}" ;;
     *) echo "unknown group: $group" ;;
   esac
 done

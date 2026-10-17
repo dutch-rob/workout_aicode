@@ -432,6 +432,18 @@ struct workout_aicodeApp: App {
         _ = PhoneSessionManager.shared
     }
 
+    /// The left pane opens on the log list. A screenshot run can ask for a
+    /// different tab with `-SRWSide`, so the App Store page can show the
+    /// graphs beside a workout rather than the same list every time.
+    private var sidePaneTab: LogsStatsView.Tab {
+        #if DEBUG
+        if let raw = DemoMode.side, let tab = LogsStatsView.Tab(rawValue: raw) {
+            return tab
+        }
+        #endif
+        return .logs
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -456,7 +468,7 @@ struct workout_aicodeApp: App {
                 } side: {
                     // The open screen's left half. Your logs, beside the wheels
                     // you are setting on the right.
-                    NavigationStack { LogsStatsView() }
+                    NavigationStack { LogsStatsView(initialTab: sidePaneTab) }
                 }
                     .environmentObject(setup.store)
                     .environmentObject(setup)

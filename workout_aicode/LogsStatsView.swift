@@ -27,7 +27,13 @@ struct LogsStatsView: View {
         }
     }
 
-    @State private var tab: Tab = .logs
+    @State private var tab: Tab
+
+    /// Opens on the log list, as it always has. The Duo's left-hand pane sets
+    /// this so a screenshot run can show the graphs there instead.
+    init(initialTab: Tab = .logs) {
+        _tab = State(initialValue: initialTab)
+    }
     /// Only needed to judge whether the survey is due when leaving.
     @Query private var logs: [WorkoutLog]
 
