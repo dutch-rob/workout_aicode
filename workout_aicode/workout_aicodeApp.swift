@@ -451,7 +451,13 @@ struct workout_aicodeApp: App {
                 // are published, so @Query re-runs against the new one on its
                 // own, and nothing in this tree is identified by a model object
                 // any more.
-                ContentView()
+                FoldAwareRoot {
+                    ContentView()
+                } side: {
+                    // The open screen's left half. Your logs, beside the wheels
+                    // you are setting on the right.
+                    NavigationStack { LogsStatsView() }
+                }
                     .environmentObject(setup.store)
                     .environmentObject(setup)
                     .modelContainer(setup.container)

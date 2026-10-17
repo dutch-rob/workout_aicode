@@ -524,6 +524,11 @@ struct LogExerciseView: View {
     @ObservedObject private var handoff = PhoneSessionManager.shared
     @ObservedObject private var aerobic = AerobicCountdown.shared
 
+    /// The camera / clock / wifi band on the trailing edge of the Duo's
+    /// screens, and 0 everywhere else. The wheels run under it; the rows that
+    /// sit alongside the icons stop short of it. See `FoldLayout`.
+    @Environment(\.sensorBandWidth) private var sensorBand
+
     /// Deliberately NOT @ObservedObject.
     ///
     /// The rest timer publishes a tick twenty times a second so the grey can
@@ -661,6 +666,7 @@ struct LogExerciseView: View {
                 // While paused, the root Paused screen covers us; ignore drags.
                 .simultaneousGesture(handoff.role == .paused ? nil : dragGesture)
         }
+        .ignoresSafeArea(.container, edges: sensorBand > 0 ? .trailing : [])
         .navigationTitle("log exercise")
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -794,8 +800,17 @@ struct LogExerciseView: View {
 
     private func pageContent(exercise: ExerciseDef?) -> some View {
         VStack(spacing: 4) {
-            buttonRow
+            // These two sit alongside the clock and the camera, so they stop
+            // at the safe area. Everything below them is past the icons and
+            // runs the full width of the screen.
+            //
+            // Measured off the cover screen: the clock starts 83pt down and
+            // the wifi/battery ring ends at about 150, and these two rows
+            // cover that. Anything new added ABOVE the wheels needs the same
+            // padding, or it will run under the icons.
+            buttonRow.padding(.trailing, sensorBand)
             Text(exercise?.name ?? "").font(.title2).bold()
+                .padding(.trailing, sensorBand)
             if let exercise {
                 if exercise.kind == .aerobic {
                     aerobicContent(for: exercise)
