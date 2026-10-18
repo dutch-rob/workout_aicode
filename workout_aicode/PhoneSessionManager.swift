@@ -229,6 +229,7 @@ final class PhoneSessionManager: NSObject, ObservableObject {
 
     /// A workout began (on either device). Finalizes any stale prior one first.
     func noteWorkoutStarted(at date: Date) {
+        guard !watchIsTheHealthWriter else { forgetOpenWorkout(); return }
         if let w = openWorkout, abs(w.startedAt.timeIntervalSince(date)) < 1 { return }
         finalizeAbandonedOpenWorkout()
         openWorkout = OpenWorkout(startedAt: date, lastActivityAt: date)
@@ -236,11 +237,28 @@ final class PhoneSessionManager: NSObject, ObservableObject {
 
     /// A set was logged (on either device) — extend the workout's activity time.
     func noteActivity(at date: Date = Date()) {
+        guard !watchIsTheHealthWriter else { forgetOpenWorkout(); return }
         if var w = openWorkout {
             if date > w.lastActivityAt { w.lastActivityAt = date; openWorkout = w }
         } else {
             openWorkout = OpenWorkout(startedAt: date, lastActivityAt: date)
         }
+    }
+
+    /// In Apple-workout mode a workout on the Watch is written to Health BY the
+    /// Watch, as the session it ran. The phone must then not keep an open
+    /// workout of its own for it: the hour-later auto-end would write the same
+    /// workout a second time, and the user would find it twice in Fitness.
+    ///
+    /// Only while the Watch has it. A workout driven here is still the phone's
+    /// to record, which is what the Health switch means in this mode.
+    private var watchIsTheHealthWriter: Bool {
+        WatchWorkoutMode.current == .appleWorkout && role != .driving
+    }
+
+    /// Drop the open workout without writing it anywhere.
+    private func forgetOpenWorkout() {
+        openWorkout = nil
     }
 
     /// The workout ended on THIS (phone) device — either by finishing every
@@ -382,6 +400,9 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         requestTakeOver { [weak self] snap in
             guard let self else { return }
             guard let snap else {
+                // Refused: the Watch is running an Apple workout and keeps it.
+                // Standing by is the truth here, not "no session anywhere".
+                if self.remoteAppleWorkout { self.role = .paused; return }
                 self.role = .none; self.snoozed = false; self.routeWorkoutId = nil; return
             }
             self.adoptSnapshot = snap
@@ -394,11 +415,23 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         }
     }
 
+    /// True while the Watch is running the workout as an Apple workout, which
+    /// cannot be handed back: HealthKit will not move a session between
+    /// devices, and half a workout in Fitness would be worse than none. The
+    /// phone shows what is happening instead of offering to take it, and locks
+    /// the screens that would change the workout underneath it.
+    @Published private(set) var remoteAppleWorkout = false
+
     /// "Not now" — dismiss the Paused screen and browse normally.
     func dismissPaused() {
         role = .none
         snoozed = true
     }
+
+    /// The Watch is running an Apple workout and the phone is standing by: the
+    /// screens that would change the workout are locked, the ones that only
+    /// read are not. Cleared when the Watch says the session ended.
+    var isLockedByWatchWorkout: Bool { remoteAppleWorkout && role == .paused }
 
     /// Consume `adoptSnapshot` for `workoutId` (log view calls on appear/change).
     func takeAdoptSnapshot(for workoutId: String) -> SessionSnapshot? {
@@ -429,6 +462,15 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         session.sendMessage(["type": "takeOver"], replyHandler: { reply in
             let snap = (reply["snapshot"] as? Data)
                 .flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
+            // The Watch can say no: an Apple workout stays where it is.
+            if reply["refused"] as? Bool == true {
+                DispatchQueue.main.async {
+                    self.remoteAppleWorkout = true
+                    self.role = .paused
+                    completion(nil)
+                }
+                return
+            }
             DispatchQueue.main.async { completion(snap ?? self.remoteSnapshot) }
         }, errorHandler: { _ in
             DispatchQueue.main.async { completion(self.remoteSnapshot) }
@@ -442,9 +484,13 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         }
         session.sendMessage(["type": "queryDriver"], replyHandler: { reply in
             let driving = reply["isDriving"] as? Bool ?? false
+            let apple = reply["appleWorkout"] as? Bool ?? false
             let snap = (reply["snapshot"] as? Data)
                 .flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
-            DispatchQueue.main.async { completion(driving, snap) }
+            DispatchQueue.main.async {
+                self.remoteAppleWorkout = driving && apple
+                completion(driving, snap)
+            }
         }, errorHandler: { _ in
             DispatchQueue.main.async { completion(false, nil) }
         })
@@ -698,13 +744,16 @@ extension PhoneSessionManager: WCSessionDelegate {
                     self.adoptSnapshot = nil
                 }
                 self.snoozed = false
+                self.remoteAppleWorkout = false
                 self.remoteSnapshot = nil
             }
         case "driverActive":
             let snap = decodeSnapshot(message["snapshot"])
+            let apple = message["appleWorkout"] as? Bool ?? false
             DispatchQueue.main.async {
                 self.remoteSnapshot = snap
                 self.snoozed = false
+                self.remoteAppleWorkout = apple
                 if let snap { self.noteWorkoutStarted(at: Date(timeIntervalSince1970: snap.startedAt)) }
                 if self.role != .driving { self.role = .paused }
             }

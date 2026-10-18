@@ -94,17 +94,7 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     /// countdown still runs, and the session is still written to Health — there
     /// is simply no heart rate to show.
     func requestAuthorization() async {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
-        let toShare: Set = [HKObjectType.workoutType()]
-        var toRead: Set<HKObjectType> = [HKObjectType.workoutType()]
-        if let heartRate = HKQuantityType.quantityType(forIdentifier: .heartRate) {
-            toRead.insert(heartRate)
-        }
-        if let resting = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) {
-            toRead.insert(resting)
-        }
-        toRead.insert(HKCharacteristicType(.dateOfBirth))
-        try? await store.requestAuthorization(toShare: toShare, read: toRead)
+        await WatchHealthAccess.requestAuthorization(store)
     }
 
     // MARK: - Running
@@ -117,6 +107,13 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     /// The phone launched us with this configuration — see WatchAppDelegate.
     func start(configuration: HKWorkoutConfiguration, exercise: String = "") async {
         guard !isRunning, HKHealthStore.isHealthDataAvailable() else { return }
+        // watchOS runs one workout session at a time. In Apple-workout mode
+        // the whole workout is already a session, so it stands aside here and
+        // picks up again when this countdown is done — saving the strength it
+        // has collected so far as the workout it was. Doing this HERE rather
+        // than at each start button covers every way a countdown can begin:
+        // the Watch's own, and the phone asking for one.
+        await WatchStrengthWorkout.shared.suspendForAerobic()
         if !exercise.isEmpty { exerciseName = exercise }
         await requestAuthorization()
 
@@ -182,6 +179,8 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
         startedAt = nil
         stopTicking()
         lastSummary = summary
+        // The weights carry on from here, in a session of their own.
+        await WatchStrengthWorkout.shared.resumeAfterAerobic()
         return summary
     }
 
@@ -257,30 +256,7 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     /// The user's own resting rate and age where Health has them, falling back
     /// to defaults rather than refusing to show zones at all.
     private func currentZones() async -> HeartRateZones {
-        var resting = HeartRateZones.defaultResting
-        var maximum = HeartRateZones.defaultMaximum
-
-        if let type = HKQuantityType.quantityType(forIdentifier: .restingHeartRate),
-           let value = await mostRecentQuantity(type) {
-            resting = Int(value.doubleValue(for: HKUnit.count().unitDivided(by: .minute())).rounded())
-        }
-        if let birth = try? store.dateOfBirthComponents(),
-           let date = Calendar.current.date(from: birth),
-           let age = Calendar.current.dateComponents([.year], from: date, to: Date()).year {
-            maximum = HeartRateZones.estimatedMaximum(forAge: age)
-        }
-        return HeartRateZones(restingHeartRate: resting, maximumHeartRate: maximum)
-    }
-
-    private func mostRecentQuantity(_ type: HKQuantityType) async -> HKQuantity? {
-        await withCheckedContinuation { continuation in
-            let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
-            let query = HKSampleQuery(sampleType: type, predicate: nil,
-                                      limit: 1, sortDescriptors: [sort]) { _, samples, _ in
-                continuation.resume(returning: (samples?.first as? HKQuantitySample)?.quantity)
-            }
-            store.execute(query)
-        }
+        await WatchHealthAccess.zones(from: store)
     }
 
     fileprivate func absorb(_ statistics: HKStatistics?, at date: Date) {

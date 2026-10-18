@@ -190,7 +190,8 @@ final class AppStore: ObservableObject {
             exercises: syncExercises,
             lastEntries: lastMap,
             healthSharingEnabled: UserDefaults.standard.bool(forKey: "healthSharingEnabled"),
-            restTimerEnabled: ExerciseDefaults.restTimerIsOn()
+            restTimerEnabled: ExerciseDefaults.restTimerIsOn(),
+            watchWorkoutMode: WatchWorkoutMode.current.rawValue
         )
         return try? JSONEncoder().encode(payload)
     }

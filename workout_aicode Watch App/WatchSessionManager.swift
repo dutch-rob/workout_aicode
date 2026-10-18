@@ -26,6 +26,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
     /// The phone's rest-timer switch. Off until a payload says otherwise, so a
     /// Watch that has not heard from the phone never invents a rest.
     @Published private(set) var restTimerEnabled = false
+    /// How a workout logged here is recorded — the phone's setting, sent with
+    /// the definitions. See `WatchWorkoutMode`.
+    @Published private(set) var workoutMode: WatchWorkoutMode = .handover
     private var lastEntries: [String: SyncLastEntry] = [:]
 
     // MARK: Handover session state
@@ -77,6 +80,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
             exercises   = payload.exercises
             lastEntries = payload.lastEntries
             restTimerEnabled = payload.restTimerEnabled
+            workoutMode = WatchWorkoutMode(rawValue: payload.watchWorkoutMode) ?? .handover
         }
         // Left by the phone for a Watch app that was not running when the
         // aerobic session began — which is the usual way it begins.
@@ -167,7 +171,15 @@ final class WatchSessionManager: NSObject, ObservableObject {
 
     /// The workout was completed on the Watch: tell the phone the times so it
     /// records the workout to Apple Health (the phone is the sole Health writer).
+    ///
+    /// Except in Apple-workout mode, where the Watch has been recording a real
+    /// HKWorkout all along and finishes it here. Asking the phone to write one
+    /// too would put the same workout in Health twice.
     func finishWorkout(startedAt: Date, endedAt: Date) {
+        if workoutMode == .appleWorkout {
+            Task { @MainActor in await WatchStrengthWorkout.shared.finish() }
+            return
+        }
         let session = WCSession.default
         guard session.activationState == .activated else { return }
         let msg: [String: Any] = [
@@ -186,6 +198,13 @@ final class WatchSessionManager: NSObject, ObservableObject {
 
     func leaveSession() {
         let wasDriving = (role == .driving)
+        // Leaving the log screen any other way than finishing — a back swipe,
+        // the phone taking over — still ends the Apple workout. A session left
+        // running would keep the app awake and go on collecting at the end of
+        // a workout that is over.
+        if wasDriving, workoutMode == .appleWorkout {
+            Task { @MainActor in await WatchStrengthWorkout.shared.finish() }
+        }
         role = .none
         liveSnapshot = nil
         adoptSnapshot = nil
@@ -299,7 +318,8 @@ final class WatchSessionManager: NSObject, ObservableObject {
     private func broadcastDriverActive() {
         let session = WCSession.default
         guard session.activationState == .activated, session.isReachable else { return }
-        var msg: [String: Any] = ["type": "driverActive"]
+        var msg: [String: Any] = ["type": "driverActive",
+                                  "appleWorkout": workoutMode == .appleWorkout]
         if let snap = liveSnapshot, let d = try? JSONEncoder().encode(outgoing(snap)) { msg["snapshot"] = d }
         session.sendMessage(msg, replyHandler: nil, errorHandler: nil)
     }
@@ -445,13 +465,28 @@ extension WatchSessionManager: WCSessionDelegate {
         switch message["type"] as? String {
         case "queryDriver":
             DispatchQueue.main.async {
-                var reply: [String: Any] = ["isDriving": self.role == .driving]
+                var reply: [String: Any] = [
+                    "isDriving": self.role == .driving,
+                    // An Apple workout cannot be handed back, so the phone
+                    // shows what is happening rather than offering to take it.
+                    "appleWorkout": self.role == .driving
+                        && self.workoutMode == .appleWorkout
+                ]
                 if self.role == .driving, let snap = self.liveSnapshot,
                    let d = try? JSONEncoder().encode(self.outgoing(snap)) { reply["snapshot"] = d }
                 replyHandler(reply)
             }
         case "takeOver":
             DispatchQueue.main.async {
+                // In Apple-workout mode the workout stays here. The session is
+                // recording heart rate and holding the app on the wrist, and
+                // HealthKit cannot move either to the phone mid-workout; a
+                // half-workout in Fitness would be worse than no hand-over.
+                // The phone is told, and shows that rather than offering.
+                if self.role == .driving, self.workoutMode == .appleWorkout {
+                    replyHandler(["refused": true, "appleWorkout": true])
+                    return
+                }
                 // Stamped before the rest is let go, so it travels as it was.
                 let snap = self.liveSnapshot.map(self.outgoing)
                 if self.role == .driving { self.role = .paused }

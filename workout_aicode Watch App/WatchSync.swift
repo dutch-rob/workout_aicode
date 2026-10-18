@@ -200,6 +200,44 @@ struct SessionSnapshot: Codable, Equatable {
 }
 
 /// The full snapshot the phone pushes to the Watch whenever its data changes.
+/// How a workout logged on the Apple Watch is recorded.
+///
+/// `.handover` is the original behaviour: the workout can move between the
+/// iPhone and the Watch as often as you like, and the PHONE writes a single
+/// Traditional Strength Training workout to Health at the end, if that was
+/// asked for.
+///
+/// `.appleWorkout` has the Watch run a real `HKWorkoutSession` for the whole
+/// workout — heart rate, the zone behind the exercise name, an entry in
+/// Fitness that counts towards the rings — at the price of the workout not
+/// being able to come back to the phone part-way through. It can still go
+/// phone → Watch: the session is back-dated to when the workout really began,
+/// so the duration is whole even though the heart rate only starts at the wrist.
+///
+/// The setting lives on the phone. `current` is the phone's reading of it; the
+/// Watch is told through `SyncPayload` and keeps its own copy, exactly as it
+/// does for the rest timer.
+enum WatchWorkoutMode: String, Codable, CaseIterable, Identifiable {
+    case handover
+    case appleWorkout
+
+    var id: String { rawValue }
+
+    static let key = "watchWorkoutMode"
+
+    static var current: WatchWorkoutMode {
+        WatchWorkoutMode(rawValue: UserDefaults.standard.string(forKey: key) ?? "")
+            ?? .handover
+    }
+
+    var label: String {
+        switch self {
+        case .handover:     return "Hand over between devices"
+        case .appleWorkout: return "Apple workout on the Watch"
+        }
+    }
+}
+
 struct SyncPayload: Codable {
     var workouts: [SyncWorkout]
     var exercises: [SyncExercise]
@@ -210,6 +248,10 @@ struct SyncPayload: Codable {
     /// Whether the rest timer is switched on. The setting lives on the phone,
     /// so the Watch has to be told, exactly like Health sharing.
     var restTimerEnabled: Bool
+    /// Which of the two ways a Watch workout is recorded — see
+    /// `WatchWorkoutMode`. Sent as its raw value so an older Watch build
+    /// simply does not find the key and carries on handing over.
+    var watchWorkoutMode: String
 
     static func lastEntryKey(workoutId: String, exerciseId: String) -> String {
         "\(workoutId)|\(exerciseId)"
@@ -217,15 +259,18 @@ struct SyncPayload: Codable {
 
     enum CodingKeys: String, CodingKey {
         case workouts, exercises, lastEntries, healthSharingEnabled, restTimerEnabled
+        case watchWorkoutMode
     }
     init(workouts: [SyncWorkout], exercises: [SyncExercise],
          lastEntries: [String: SyncLastEntry], healthSharingEnabled: Bool = false,
-         restTimerEnabled: Bool = false) {
+         restTimerEnabled: Bool = false,
+         watchWorkoutMode: String = WatchWorkoutMode.handover.rawValue) {
         self.workouts = workouts
         self.exercises = exercises
         self.lastEntries = lastEntries
         self.healthSharingEnabled = healthSharingEnabled
         self.restTimerEnabled = restTimerEnabled
+        self.watchWorkoutMode = watchWorkoutMode
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -234,5 +279,7 @@ struct SyncPayload: Codable {
         lastEntries = try c.decode([String: SyncLastEntry].self, forKey: .lastEntries)
         healthSharingEnabled = try c.decodeIfPresent(Bool.self, forKey: .healthSharingEnabled) ?? false
         restTimerEnabled = try c.decodeIfPresent(Bool.self, forKey: .restTimerEnabled) ?? false
+        watchWorkoutMode = try c.decodeIfPresent(String.self, forKey: .watchWorkoutMode)
+            ?? WatchWorkoutMode.handover.rawValue
     }
 }

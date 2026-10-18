@@ -43,10 +43,17 @@ ONLY="${SCREENS:-}"
 mkdir -p "$OUT"
 
 DERIVED=~/Library/Developer/Xcode/DerivedData
-IOS_APP=$(find "$DERIVED"/workout_aicode-*/Build/Products/Debug-iphonesimulator \
-            -maxdepth 1 -name "workout_aicode.app" 2>/dev/null | head -1)
-WATCH_APP=$(find "$DERIVED"/workout_aicode-*/Build/Products/Debug-watchsimulator \
-            -maxdepth 1 -name "workout_aicode Watch App-.app" 2>/dev/null | head -1)
+# Xcode writes products either per-project (workout_aicode-<hash>/Build/...) or,
+# when the build location is set to a shared one, straight into Build/Products.
+# Look in both and take the newest: a stale path silently shoots the LAST build
+# instead of this one, which is worse than not finding it at all.
+newest_app() {   # platform-dir  app-name
+  find "$DERIVED"/workout_aicode-*/Build/Products/"$1" "$DERIVED"/Build/Products/"$1" \
+       -maxdepth 1 -name "$2" -print0 2>/dev/null \
+    | xargs -0 ls -dt 2>/dev/null | head -1
+}
+IOS_APP=$(newest_app Debug-iphonesimulator "workout_aicode.app")
+WATCH_APP=$(newest_app Debug-watchsimulator "workout_aicode Watch App-.app")
 
 inner_display_of() {   # udid -> screen id of the LARGEST built-in display
   # A Duo has two: the cover screen and, bigger, the one behind the fold.

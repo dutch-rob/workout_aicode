@@ -98,6 +98,7 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(handoff.isLockedByWatchWorkout)
                 }
 
                 HStack(spacing: 12) {
@@ -110,17 +111,20 @@ struct ContentView: View {
                             Text("new workout").frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
+                        .disabled(handoff.isLockedByWatchWorkout)
                     } else {
                         NavigationLink(destination: EditWorkoutsView()) {
                             Text("edit workouts").frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
+                        .disabled(handoff.isLockedByWatchWorkout)
                     }
 
                     NavigationLink(destination: ExerciseLibraryView()) {
                         Text("exercise library").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(handoff.isLockedByWatchWorkout)
                 }
 
                 if workouts.isEmpty {
@@ -137,8 +141,14 @@ struct ContentView: View {
                                         .bold()
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding()
-                                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.blue.opacity(1.0)))
+                                        .background(RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.blue.opacity(
+                                                handoff.isLockedByWatchWorkout ? 0.3 : 1.0)))
                                 }
+                                // A workout is already running on the Watch:
+                                // starting another here would be a second
+                                // session fighting the first for the same logs.
+                                .disabled(handoff.isLockedByWatchWorkout)
                             }
                         }.padding(.top, 4)
                     }
@@ -229,9 +239,19 @@ struct ContentView: View {
         // session only moves over when the user taps "Continue here".
         .overlay {
             if handoff.role == .paused {
-                HandoverPausedView(otherDeviceName: "Apple Watch",
-                                   onContinue: { handoff.reclaim() },
-                                   onDismiss: { handoff.dismissPaused() })
+                if handoff.remoteAppleWorkout {
+                    // Only over a workout screen. On the start screen the
+                    // locked buttons say it, and the logs, graphs, progress
+                    // and info are all still there to be read — which is the
+                    // reason to open the phone mid-workout in the first place.
+                    if !path.isEmpty {
+                        WatchWorkoutActiveView(onReturn: { path.removeAll() })
+                    }
+                } else {
+                    HandoverPausedView(otherDeviceName: "Apple Watch",
+                                       onContinue: { handoff.reclaim() },
+                                       onDismiss: { handoff.dismissPaused() })
+                }
             }
         }
         #if DEBUG

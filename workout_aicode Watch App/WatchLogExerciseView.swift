@@ -242,6 +242,9 @@ struct WatchLogExerciseView: View {
             // the neighbour sliding in during a swipe.
             if showRest { WatchRestCounter() }
         }
+        // In Apple-workout mode this row carries the heart rate zone. It draws
+        // nothing in the other mode, or before the first reading arrives.
+        .background { WatchZoneRowBackground() }
     }
 
     private var rowLabel: some View {
@@ -376,6 +379,7 @@ struct WatchLogExerciseView: View {
     }
 
     private func startOrAdoptSession() {
+        defer { startAppleWorkoutIfChosen() }
         if let snap = session.takeAdoptSnapshot(for: workout.id) {
             // Opened via handover — continue exactly where the phone left off.
             adopt(snap)
@@ -387,6 +391,19 @@ struct WatchLogExerciseView: View {
             session.enterSession(workoutId: workout.id,
                                  current: currentSnapshot()) { snap in adopt(snap) }
         }
+    }
+
+    /// In Apple-workout mode the whole workout is a real HKWorkoutSession.
+    ///
+    /// `startedAt` is the start of the WORKOUT: when this screen was reached by
+    /// hand-over from the phone it is the phone's start, and the session is
+    /// back-dated to it so Health records the whole thing rather than the part
+    /// done at the machine. Only the heart rate is missing from the earlier
+    /// stretch, which is unavoidable — nothing was on the wrist for it.
+    private func startAppleWorkoutIfChosen() {
+        guard session.workoutMode == .appleWorkout else { return }
+        let start = startedAt
+        Task { await WatchStrengthWorkout.shared.start(workoutStartedAt: start) }
     }
 
     // MARK: - Picker row (reps OR weights)

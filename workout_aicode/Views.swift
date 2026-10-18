@@ -1328,6 +1328,44 @@ struct HandoverPausedView: View {
     }
 }
 
+/// What the log screen becomes while the Watch is running the workout as an
+/// Apple workout: a statement, and the way back.
+///
+/// There is no "Continue here". HealthKit will not move a running session to
+/// another device, and ending it early to hand over would put half a workout
+/// in Fitness and lose the heart rate for the rest — so the choice the
+/// hand-over screen offers does not exist here. Saying so plainly beats a
+/// button that cannot work.
+struct WatchWorkoutActiveView: View {
+    let onReturn: () -> Void
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+            VStack(spacing: 20) {
+                Image(systemName: "applewatch.radiowaves.left.and.right")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.blue)
+                Text("Workout active on your Apple Watch")
+                    .font(.title3).bold()
+                    .multilineTextAlignment(.center)
+                Text("It is running as an Apple workout, so it stays on your wrist until you finish it there. Your logs, graphs and progress are still here to look at.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button(action: onReturn) {
+                    Text("Return to start screen")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+            .padding(32)
+        }
+    }
+}
+
 // MARK: - Logs Screen
 // MARK: - logs tab
 //
@@ -2138,6 +2176,10 @@ struct RecoveryView: View {
 // MARK: - Settings Screen
 struct SettingsView: View {
     @AppStorage(PrefillScope.key) private var prefillAcrossWorkouts = PrefillScope.defaultAcrossWorkouts
+    @AppStorage(WatchWorkoutMode.key) private var watchWorkoutModeRaw = WatchWorkoutMode.handover.rawValue
+    private var watchWorkoutMode: WatchWorkoutMode {
+        WatchWorkoutMode(rawValue: watchWorkoutModeRaw) ?? .handover
+    }
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("healthSharingEnabled") private var healthSharingEnabled = false
     @AppStorage(StatsSettingsKey.formula) private var formulaRaw = OneRMFormula.epley.rawValue
@@ -2169,8 +2211,32 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker(selection: $watchWorkoutModeRaw) {
+                    ForEach(WatchWorkoutMode.allCases) { mode in
+                        Text(mode.label).tag(mode.rawValue)
+                    }
+                } label: {
+                    Label("Workouts on the Watch", systemImage: "applewatch")
+                }
+                .pickerStyle(.inline)
+                .onChange(of: watchWorkoutModeRaw) { _, _ in
+                    // The Watch is told which way to work, with the definitions.
+                    store.reloadAll()
+                }
+            } footer: {
+                if watchWorkoutMode == .appleWorkout {
+                    Text("Starting a workout on the Watch makes it a real Apple workout: your heart rate is recorded, the zone shows behind the exercise name, and it lands in Fitness and counts towards your rings. The price is that a workout on your wrist cannot come back to the phone part-way through — you can still start on the phone and carry on at the machine, and the Apple workout is back-dated to when you really began. An aerobic exercise is still recorded as its own workout of the activity you chose, so a workout with cardio in the middle arrives in Fitness as strength, then cardio, then strength.")
+                } else {
+                    Text("A workout can be moved between your iPhone and your Watch as often as you like; whichever device you pick it up on asks first. Your Watch does not record a workout of its own, so there is no heart rate during the weights and nothing towards your rings except what an aerobic exercise adds.")
+                }
+            }
+
+            Section {
                 Toggle(isOn: $healthSharingEnabled) {
-                    Label("Save workouts to Apple Health", systemImage: "heart.fill")
+                    Label(watchWorkoutMode == .appleWorkout
+                          ? "Save workouts that are only logged on the phone also to Apple Health"
+                          : "Save workouts to Apple Health",
+                          systemImage: "heart.fill")
                 }
                 .onChange(of: healthSharingEnabled) { _, enabled in
                     if enabled { HealthWorkoutLogger.shared.requestAuthorization() }
@@ -2178,7 +2244,11 @@ struct SettingsView: View {
                     store.reloadAll()
                 }
             } footer: {
-                Text("When on, a finished workout is saved to Apple Health as a Traditional Strength Training session, with its total duration — including time handed over between iPhone and Apple Watch. Aerobic exercises are separate: your Apple Watch records those as real workouts of the activity you chose, whatever this setting says, which is what makes them appear in Fitness. Heart rate is read on the Watch during an aerobic countdown, and never leaves your devices.")
+                if watchWorkoutMode == .appleWorkout {
+                    Text("A workout you log on the Watch is saved to Apple Health by the Watch itself, as the Apple workout it is, whatever this setting says. This setting is for the rest: a workout logged only on the phone, saved as a Traditional Strength Training session with its total duration.")
+                } else {
+                    Text("When on, a finished workout is saved to Apple Health as a Traditional Strength Training session, with its total duration — including time handed over between iPhone and Apple Watch. Aerobic exercises are separate: your Apple Watch records those as real workouts of the activity you chose, whatever this setting says, which is what makes them appear in Fitness. Heart rate is read on the Watch during an aerobic countdown, and never leaves your devices.")
+                }
             }
 
             Section {
