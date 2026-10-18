@@ -75,6 +75,11 @@ struct ContentView: View {
             case "heart":
                 WatchAerobicWorkout.shared.showDemoHeartRate(
                     exercise: "Indoor cycle", bpm: 137, remaining: 1080)
+            case "zone":
+                path = [DemoMode.workoutId]
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    WatchStrengthWorkout.shared.showDemoZone(bpm: 131)
+                }
             case "rest":
                 path = [DemoMode.workoutId]
                 // After the log screen exists, so the rest lands on it.

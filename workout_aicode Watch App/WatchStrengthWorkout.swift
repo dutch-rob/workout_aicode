@@ -182,6 +182,17 @@ final class WatchStrengthWorkout: NSObject, ObservableObject {
         currentZoneFraction = 0
     }
 
+    #if DEBUG
+    /// Screenshot/demo only: a zone and a position in it, so the row can be
+    /// looked at without a wrist. The simulator has no heart rate.
+    func showDemoZone(bpm: Int) {
+        let zones = HeartRateZones()
+        let zone = zones.zone(for: bpm)
+        currentZone = zone
+        currentZoneFraction = zones.fraction(forBeatsPerMinute: bpm, inZone: zone)
+    }
+    #endif
+
     fileprivate func absorb(_ statistics: HKStatistics?) {
         guard let statistics,
               statistics.quantityType == HKQuantityType.quantityType(forIdentifier: .heartRate),
