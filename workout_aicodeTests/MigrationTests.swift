@@ -245,6 +245,59 @@ struct SchemaMigrationTests {
         return log
     }
 
+    // MARK: What a wheel opens on, after a routine is split
+    //
+    // The pre-fill used to be looked up by (workout, exercise), so moving an
+    // exercise into a new workout lost months of history: every wheel opened
+    // on nothing. `PrefillScope` makes it a choice, and both halves of that
+    // choice are worth holding still.
+
+    @MainActor @Test func anExerciseRemembersItsNumbersInANewWorkout() throws {
+        let context = try logEditStore()
+        let store = AppStore(context: context)
+        let benchId = UUID()
+        let oldWorkoutId = UUID()
+
+        let newWorkout = WorkoutDef(name: "Upper, part two")
+        newWorkout.exerciseOrder = [benchId]
+        context.insert(newWorkout)
+        // Logged months ago, under the workout that has since been split up.
+        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: oldWorkoutId, exerciseId: benchId,
+                             weights: [60, 65], reps: [10, 8])
+        context.insert(log)
+        try context.save()
+
+        let carried = store.lastEntries(for: newWorkout, acrossWorkouts: true)
+        #expect(carried[benchId]?.weights == [60, 65])
+        #expect(carried[benchId]?.reps == [10, 8])
+
+        // And the other half of the switch: each workout keeps its own.
+        let perWorkout = store.lastEntries(for: newWorkout, acrossWorkouts: false)
+        #expect(perWorkout[benchId] == nil)
+    }
+
+    @MainActor @Test func theNewestSessionWinsWhereverItWasLogged() throws {
+        let context = try logEditStore()
+        let store = AppStore(context: context)
+        let squatId = UUID()
+
+        let workout = WorkoutDef(name: "Leg day")
+        workout.exerciseOrder = [squatId]
+        context.insert(workout)
+        context.insert(WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                                  workoutId: workout.id, exerciseId: squatId,
+                                  weights: [100], reps: [5]))
+        // Newer, and under a different workout: this is the one to open on.
+        context.insert(WorkoutLog(date: Date(timeIntervalSince1970: 2_000_000),
+                                  workoutId: UUID(), exerciseId: squatId,
+                                  weights: [110], reps: [5]))
+        try context.save()
+
+        #expect(store.lastEntries(for: workout, acrossWorkouts: true)[squatId]?.weights == [110])
+        #expect(store.lastEntries(for: workout, acrossWorkouts: false)[squatId]?.weights == [100])
+    }
+
     @MainActor @Test func anEditedRowGoesBackToWhatItWas() throws {
         let context = try logEditStore()
         let log = addLog(context, weights: [60, 60], reps: [10, 8])

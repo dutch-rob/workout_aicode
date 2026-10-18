@@ -414,6 +414,28 @@ struct WatchLogExerciseView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .simultaneousGesture(wheelTouchGesture)
+    }
+
+    /// A touch on a wheel ends a set, as it does on the phone.
+    ///
+    /// The Watch used to start the rest only when a wheel came to rest on a
+    /// DIFFERENT number, so repeating the previous set — the common case —
+    /// started nothing, and the wheel had to be wiggled off its value and back
+    /// to fake a change. A touch is the honest signal: the user has just
+    /// lifted, and has reached for the wheel.
+    ///
+    /// Simultaneous, so the wheels still scroll and the page swipe between
+    /// exercises still works; a horizontal fling is that swipe, not a set.
+    private var wheelTouchGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onEnded { value in
+                if abs(value.translation.width) > 40,
+                   abs(value.translation.width) > abs(value.translation.height) {
+                    return
+                }
+                noteSetFinished()
+            }
     }
 
     // MARK: - The other metric, shown as labels

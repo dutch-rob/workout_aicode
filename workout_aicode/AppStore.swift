@@ -101,13 +101,28 @@ final class AppStore: ObservableObject {
 
     /// For each exercise in the workout, the most recent log row (used to
     /// pre-fill the picker wheels). Returns at most one row per exercise.
-    func lastEntries(for workout: WorkoutDef) -> [UUID: WorkoutLog] {
+    /// The last logged set per exercise in `workout`, to open the wheels on.
+    ///
+    /// `acrossWorkouts` decides whether an exercise remembers its own history
+    /// or only what was logged under this workout — see `PrefillScope`. The
+    /// parameter exists so tests can pin it; everything else takes the setting.
+    func lastEntries(for workout: WorkoutDef,
+                     acrossWorkouts: Bool = PrefillScope.acrossWorkouts) -> [UUID: WorkoutLog] {
         do {
             let workoutID = workout.id
-            let descriptor = FetchDescriptor<WorkoutLog>(
-                predicate: #Predicate<WorkoutLog> { $0.workoutId == workoutID },
-                sortBy: [SortDescriptor(\WorkoutLog.date, order: .reverse)]
-            )
+            let descriptor: FetchDescriptor<WorkoutLog>
+            if acrossWorkouts {
+                // Every log, newest first; the loop below stops as soon as it
+                // has one for each exercise in this workout.
+                descriptor = FetchDescriptor<WorkoutLog>(
+                    sortBy: [SortDescriptor(\WorkoutLog.date, order: .reverse)]
+                )
+            } else {
+                descriptor = FetchDescriptor<WorkoutLog>(
+                    predicate: #Predicate<WorkoutLog> { $0.workoutId == workoutID },
+                    sortBy: [SortDescriptor(\WorkoutLog.date, order: .reverse)]
+                )
+            }
             let logs = try context.fetch(descriptor)
             var map: [UUID: WorkoutLog] = [:]
             let targetSet = Set(workout.exerciseOrder)

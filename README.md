@@ -209,6 +209,7 @@ The settings screen has:
    - **Share data among your iPhones/iPads** — keeps your workouts, exercises and logs in step across your devices through your own iCloud account. Off by default.
    - **Save workouts to Apple Health** — see [Apple Health](#apple-health) above. Off by default.
    - **Rest timer** — counts your rest after every set and after each exercise you log. Off by default, see [The rest timer](#the-rest-timer) above.
+   - **Remember an exercise across workouts** — on by default: a wheel opens on the last time you did that exercise, whichever workout you did it in, so splitting or reorganising a routine keeps your numbers. Turn it off if you want each workout to remember its own — a heavy day and a light day that share an exercise.
    - **Numbers for a new exercise** — the sets, weight range, increment and rest each new exercise starts with. Exercises you already have are not changed.
    - **One-rep max formula** — which of the three formulas the statistics use. Epley by default.
    - **Workouts in the trend** — how many recent workouts the trend line uses, 16 by default and never fewer than 8.

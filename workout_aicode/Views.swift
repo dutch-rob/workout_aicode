@@ -2137,6 +2137,7 @@ struct RecoveryView: View {
 
 // MARK: - Settings Screen
 struct SettingsView: View {
+    @AppStorage(PrefillScope.key) private var prefillAcrossWorkouts = PrefillScope.defaultAcrossWorkouts
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("healthSharingEnabled") private var healthSharingEnabled = false
     @AppStorage(StatsSettingsKey.formula) private var formulaRaw = OneRMFormula.epley.rawValue
@@ -2196,6 +2197,19 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("When on, a rest is counted after every set and after each exercise you log, for as long as that exercise is set to. You can leave the app while it runs: a notification arrives when the rest is over, and an Apple Watch that was nearby when the rest started taps your wrist as well. With this off, the app works exactly as before.")
+            }
+
+            Section {
+                Toggle(isOn: $prefillAcrossWorkouts) {
+                    Label("Remember an exercise across workouts", systemImage: "arrow.triangle.merge")
+                }
+                .onChange(of: prefillAcrossWorkouts) { _, _ in
+                    // The Watch is sent its own copy of the pre-fill numbers,
+                    // so they have to be rebuilt and pushed.
+                    store.reloadAll()
+                }
+            } footer: {
+                Text("When on, a wheel opens on the last time you did that exercise, whichever workout you did it in — so splitting or reorganising a routine keeps your numbers. With this off, each workout remembers its own, which suits a heavy day and a light day that share the same exercise.")
             }
 
             Section {

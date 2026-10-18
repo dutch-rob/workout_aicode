@@ -190,10 +190,18 @@ struct ContentView: View {
             // complaint.
             if !triedResume {
                 triedResume = true
-                if path.isEmpty, handoff.role != .paused, !isDemoRun,
-                   let id = handoff.workoutToResume(),
-                   let workout = workouts.first(where: { $0.id.uuidString == id }) {
-                    path = [workout.id]
+                if path.isEmpty, handoff.role != .paused, !isDemoRun {
+                    // The answer arrives after the Watch has been asked whether
+                    // it is running this workout, so everything is checked
+                    // again here: the user may have tapped a workout, or the
+                    // Paused screen may have come up, while we waited.
+                    handoff.workoutToResume { id in
+                        guard let id, path.isEmpty, handoff.role == .none,
+                              let workout = workouts.first(where: {
+                                  $0.id.uuidString == id
+                              }) else { return }
+                        path = [workout.id]
+                    }
                 }
             }
             #if DEBUG

@@ -188,15 +188,43 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     }
 
     /// The workout to open straight into when the app launches, if one was
-    /// interrupted and is still inside the idle limit.
+    /// interrupted and is still inside the idle limit — and only once the Watch
+    /// has said it is not running that workout right now.
+    ///
+    /// Asking matters. This used to be a plain synchronous answer, and the
+    /// caller guarded it with `role != .paused`, which is never true at launch:
+    /// the Watch is asked over WatchConnectivity and the reply arrives later.
+    /// So opening the phone during a Watch workout — to look at the logs, say —
+    /// navigated into the log screen, which enters the session, which
+    /// broadcasts `driverActive`, which left the Watch showing Paused. The user
+    /// had taken the workout off their wrist without being asked, and declining
+    /// afterwards was too late to give it back.
+    ///
+    /// When the Watch is driving, the Paused screen is raised instead, which is
+    /// the hand-over the user can accept or decline — the one that was always
+    /// meant to be the only way across.
     ///
     /// Settles the auto-end first, so a workout that has already gone cold is
     /// written to Health and forgotten rather than reopened.
-    func workoutToResume() -> String? {
+    func workoutToResume(_ completion: @escaping (String?) -> Void) {
         checkAutoEnd()
-        guard let saved = unfinishedSession else { return nil }
+        guard let saved = unfinishedSession,
+              resumableSession(for: saved.snapshot.workoutId) != nil else {
+            completion(nil); return
+        }
         let id = saved.snapshot.workoutId
-        return resumableSession(for: id) != nil ? id : nil
+        let session = WCSession.default
+        // Out of range: no Watch to take anything from, so carry on as before.
+        guard session.activationState == .activated, session.isReachable else {
+            completion(id); return
+        }
+        queryDriver { [weak self] isDriving, snap in
+            guard let self else { completion(nil); return }
+            guard isDriving else { completion(id); return }
+            self.remoteSnapshot = snap
+            if self.role == .none, !self.snoozed { self.role = .paused }
+            completion(nil)
+        }
     }
 
     /// A workout began (on either device). Finalizes any stale prior one first.
