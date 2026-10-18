@@ -20,12 +20,15 @@ struct WatchZoneRowBackground: View {
     @ObservedObject private var workout = WatchStrengthWorkout.shared
 
     private let spacing: CGFloat = 2
-    private let litOpacity: Double = 0.5
-    private let restingOpacity: Double = 0.18
-    /// Marker size, kept small: it shares the row with the descenders of the
-    /// exercise name.
-    private let markerWidth: CGFloat = 7
-    private let markerHeight: CGFloat = 4
+    /// Every zone at the same brightness. Dimming the ones you are not in
+    /// made them all but invisible on the wrist — this row is small, and a
+    /// colour at a fifth strength behind text is not a colour. The zone you
+    /// are in is picked out by WIDTH instead, which survives being small.
+    private let tint: Double = 0.5
+    /// The marker pokes up out of the bar into the text's row. Small enough
+    /// not to fight the exercise name, big enough to find at a glance.
+    private let markerWidth: CGFloat = 9
+    private let markerHeight: CGFloat = 5.5
 
     var body: some View {
         GeometryReader { geo in
@@ -34,8 +37,7 @@ struct WatchZoneRowBackground: View {
                     HStack(spacing: spacing) {
                         ForEach(1...HeartRateZones.zoneCount, id: \.self) { index in
                             RoundedRectangle(cornerRadius: 3)
-                                .fill(ZoneColour.colour(index)
-                                    .opacity(index == zone ? litOpacity : restingOpacity))
+                                .fill(ZoneColour.colour(index).opacity(tint))
                                 .frame(width: width(for: index, zone: zone,
                                                     in: geo.size.width))
                         }
@@ -49,22 +51,35 @@ struct WatchZoneRowBackground: View {
         }
     }
 
-    /// Six shares: two for the zone you are in, one for each of the others —
-    /// the aerobic band's proportions, so the two screens read the same way.
-    private func width(for index: Int, zone: Int, in total: CGFloat) -> CGFloat {
-        let gaps = spacing * CGFloat(HeartRateZones.zoneCount - 1)
-        let unit = max(0, total - gaps) / CGFloat(HeartRateZones.zoneCount + 1)
-        return index == zone ? unit * 2 : unit
+    /// Halve the zones you are not in, and give what that frees to the one you
+    /// are — capped at half the row, so the band stays a band rather than one
+    /// block with slivers beside it. With five zones the cap is what binds:
+    /// the one you are in takes half the width and the other four share the
+    /// rest, an eighth each.
+    private func activeWidth(in usable: CGFloat) -> CGFloat {
+        let count = CGFloat(HeartRateZones.zoneCount)
+        let equal = usable / count
+        let freed = (equal / 2) * (count - 1)
+        return min(usable / 2, equal + freed)
     }
 
-    /// Along the lit block, clamped so it stays inside it at either end.
+    private func width(for index: Int, zone: Int, in total: CGFloat) -> CGFloat {
+        let gaps = spacing * CGFloat(HeartRateZones.zoneCount - 1)
+        let usable = max(0, total - gaps)
+        let active = activeWidth(in: usable)
+        if index == zone { return active }
+        return max(0, usable - active) / CGFloat(HeartRateZones.zoneCount - 1)
+    }
+
+    /// Along the block you are in, clamped so it stays inside it at either end.
     private func markerX(in total: CGFloat, zone: Int) -> CGFloat {
         let gaps = spacing * CGFloat(HeartRateZones.zoneCount - 1)
-        let unit = max(0, total - gaps) / CGFloat(HeartRateZones.zoneCount + 1)
-        let start = (unit + spacing) * CGFloat(zone - 1)
+        let usable = max(0, total - gaps)
+        let active = activeWidth(in: usable)
+        let other = max(0, usable - active) / CGFloat(HeartRateZones.zoneCount - 1)
+        let start = (other + spacing) * CGFloat(zone - 1)
         let fraction = min(1, max(0, workout.currentZoneFraction))
-        let along = (unit * 2 - markerWidth) * CGFloat(fraction)
-        return start + along
+        return start + max(0, active - markerWidth) * CGFloat(fraction)
     }
 }
 
