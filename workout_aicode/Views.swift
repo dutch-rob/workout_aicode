@@ -2177,8 +2177,17 @@ struct RecoveryView: View {
 struct SettingsView: View {
     @AppStorage(PrefillScope.key) private var prefillAcrossWorkouts = PrefillScope.defaultAcrossWorkouts
     @AppStorage(WatchWorkoutMode.key) private var watchWorkoutModeRaw = WatchWorkoutMode.handover.rawValue
+    @ObservedObject private var handoff = PhoneSessionManager.shared
     private var watchWorkoutMode: WatchWorkoutMode {
         WatchWorkoutMode(rawValue: watchWorkoutModeRaw) ?? .handover
+    }
+    /// Whether to say anything about the Watch at all. Without one, the choice
+    /// between the two ways of recording a Watch workout is a setting for a
+    /// device the user does not have — and the Health switch keeps its plain
+    /// wording, since nothing else is writing workouts.
+    private var showsWatchSettings: Bool { handoff.watchAppInstalled }
+    private var watchRecordsWorkouts: Bool {
+        showsWatchSettings && watchWorkoutMode == .appleWorkout
     }
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("healthSharingEnabled") private var healthSharingEnabled = false
@@ -2210,6 +2219,7 @@ struct SettingsView: View {
                 }
             }
 
+            if showsWatchSettings {
             Section {
                 Picker(selection: $watchWorkoutModeRaw) {
                     ForEach(WatchWorkoutMode.allCases) { mode in
@@ -2230,10 +2240,11 @@ struct SettingsView: View {
                     Text("A workout can be moved between your iPhone and your Watch as often as you like; whichever device you pick it up on asks first. Your Watch does not record a workout of its own, so there is no heart rate during the weights and nothing towards your rings except what an aerobic exercise adds.")
                 }
             }
+            }
 
             Section {
                 Toggle(isOn: $healthSharingEnabled) {
-                    Label(watchWorkoutMode == .appleWorkout
+                    Label(watchRecordsWorkouts
                           ? "Save workouts that are only logged on the phone also to Apple Health"
                           : "Save workouts to Apple Health",
                           systemImage: "heart.fill")
@@ -2244,7 +2255,7 @@ struct SettingsView: View {
                     store.reloadAll()
                 }
             } footer: {
-                if watchWorkoutMode == .appleWorkout {
+                if watchRecordsWorkouts {
                     Text("A workout you log on the Watch is saved to Apple Health by the Watch itself, as the Apple workout it is, whatever this setting says. This setting is for the rest: a workout logged only on the phone, saved as a Traditional Strength Training session with its total duration.")
                 } else {
                     Text("When on, a finished workout is saved to Apple Health as a Traditional Strength Training session, with its total duration — including time handed over between iPhone and Apple Watch. Aerobic exercises are separate: your Apple Watch records those as real workouts of the activity you chose, whatever this setting says, which is what makes them appear in Fitness. Heart rate is read on the Watch during an aerobic countdown, and never leaves your devices.")

@@ -46,6 +46,11 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         return session.activationState == .activated && session.isWatchAppInstalled
     }
 
+    /// Whether a Watch app is installed to show Watch settings for at all.
+    /// Published, unlike `hasWatchApp`, so a screen can be built from it and
+    /// redraw when a Watch is paired or unpaired while the app is open.
+    @Published private(set) var watchAppInstalled = false
+
     /// Role of THIS device in the shared workout session.
     @Published private(set) var role: HandoverRole = .none
     /// When set, ContentView should navigate into this workout. Cleared on consume.
@@ -645,8 +650,19 @@ extension PhoneSessionManager: WCSessionDelegate {
     func session(_ session: WCSession,
                  activationDidCompleteWith state: WCSessionActivationState, error: Error?) {
         let reachable = session.isReachable
+        let installed = session.isWatchAppInstalled
         DispatchQueue.main.async {
             self.isWatchReachable = reachable
+            self.watchAppInstalled = installed
+            self.pushDefinitions()
+        }
+    }
+
+    /// Paired, unpaired, or the Watch app installed or removed while we run.
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        let installed = session.isWatchAppInstalled
+        DispatchQueue.main.async {
+            self.watchAppInstalled = installed
             self.pushDefinitions()
         }
     }
