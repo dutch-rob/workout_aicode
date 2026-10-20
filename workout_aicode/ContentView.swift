@@ -98,7 +98,6 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(handoff.isLockedByWatchWorkout)
                 }
 
                 HStack(spacing: 12) {

@@ -1328,6 +1328,37 @@ struct HandoverPausedView: View {
     }
 }
 
+/// The heart rate band as the Watch will draw it, for choosing how strong it
+/// should be.
+///
+/// All five zones at equal width here, unlike the Watch, where the one you are
+/// in is widened: this is about the colour, not about reading a rate, and
+/// equal blocks make the five strengths comparable. The name lies across them
+/// for the thing that actually matters — whether it can still be read.
+struct ZoneTintPreview: View {
+    let tint: Double
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            HStack(spacing: 2) {
+                ForEach(1...HeartRateZones.zoneCount, id: \.self) { zone in
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(ZoneColour.colour(zone).opacity(tint))
+                }
+            }
+            // Long enough to cross most of the band: a short name would be
+            // judged against two colours out of five.
+            Text("Incline dumbbell press")
+                .font(.caption).bold()
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.leading, 4)
+        }
+        .frame(height: 24)
+        .padding(.vertical, 2)
+    }
+}
+
 /// What the log screen becomes while the Watch is running the workout as an
 /// Apple workout: a statement, and the way back.
 ///
@@ -2185,10 +2216,21 @@ struct SettingsView: View {
     /// between the two ways of recording a Watch workout is a setting for a
     /// device the user does not have — and the Health switch keeps its plain
     /// wording, since nothing else is writing workouts.
-    private var showsWatchSettings: Bool { handoff.watchAppInstalled }
+    private var showsWatchSettings: Bool {
+        #if DEBUG
+        // A paired simulator never reports the companion as installed, however
+        // it is paired and installed — so a screenshot run says there is one.
+        if DemoMode.isEnabled { return true }
+        #endif
+        return handoff.watchAppInstalled
+    }
     private var watchRecordsWorkouts: Bool {
         showsWatchSettings && watchWorkoutMode == .appleWorkout
     }
+    @AppStorage(WatchPreferences.zoneTintKey) private var zoneTint = WatchPreferences.defaultZoneTint
+    @AppStorage(WatchPreferences.restTapsKey) private var restTaps = WatchPreferences.defaultRestTaps
+    @AppStorage(WatchPreferences.wheelRowsKey) private var wheelRows = WatchPreferences.defaultWheelRows
+
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("healthSharingEnabled") private var healthSharingEnabled = false
     @AppStorage(StatsSettingsKey.formula) private var formulaRaw = OneRMFormula.epley.rawValue
@@ -2229,17 +2271,58 @@ struct SettingsView: View {
                     Label("Workouts on the Watch", systemImage: "applewatch")
                 }
                 .pickerStyle(.inline)
+                .disabled(handoff.isLockedByWatchWorkout)
                 .onChange(of: watchWorkoutModeRaw) { _, _ in
                     // The Watch is told which way to work, with the definitions.
                     store.reloadAll()
                 }
             } footer: {
+                if handoff.isLockedByWatchWorkout {
+                    Text("A workout is running on your Watch. This is the one setting that cannot change while it does — the workout is being recorded one way or the other, and switching underneath it would lose what has been collected. Everything else here can be changed now, including how the Watch looks.")
+                        .foregroundStyle(.orange)
+                } else {
                 if watchWorkoutMode == .appleWorkout {
                     Text("Starting a workout on the Watch makes it a real Apple workout: your heart rate is recorded, the zone shows behind the exercise name, and it lands in Fitness and counts towards your rings. The price is that a workout on your wrist cannot come back to the phone part-way through — you can still start on the phone and carry on at the machine, and the Apple workout is back-dated to when you really began. An aerobic exercise is still recorded as its own workout of the activity you chose, so a workout with cardio in the middle arrives in Fitness as strength, then cardio, then strength.")
                 } else {
                     Text("A workout can be moved between your iPhone and your Watch as often as you like; whichever device you pick it up on asks first. Your Watch does not record a workout of its own, so there is no heart rate during the weights and nothing towards your rings except what an aerobic exercise adds.")
                 }
+                }
             }
+            }
+
+            if showsWatchSettings {
+                Section {
+                    Picker(selection: $wheelRows) {
+                        Text("One row, with a reps/weights toggle").tag(1)
+                        Text("Both rows at once").tag(2)
+                    } label: {
+                        Label("Wheels on the Watch", systemImage: "square.split.1x2")
+                    }
+                    .pickerStyle(.inline)
+                    .onChange(of: wheelRows) { _, _ in store.reloadAll() }
+                } footer: {
+                    Text("Two rows put the weights and the repetitions on screen together, so there is no switching between them at the machine. The wheels are shorter, the exercise name moves up beside the clock, and the numbers that used to sit under the wheels are no longer needed. One row is how the Watch has always worked.")
+                }
+            }
+
+            if watchRecordsWorkouts {
+                Section {
+                    ZoneTintPreview(tint: zoneTint)
+                    Slider(value: $zoneTint,
+                           in: WatchPreferences.minimumZoneTint...1,
+                           step: 0.05) {
+                        Text("Band strength")
+                    } minimumValueLabel: {
+                        Image(systemName: "circle")
+                    } maximumValueLabel: {
+                        Image(systemName: "circle.fill")
+                    }
+                    .onChange(of: zoneTint) { _, _ in store.reloadAll() }
+                } header: {
+                    Text("Heart rate band")
+                } footer: {
+                    Text("How strongly the zone colours are drawn behind the exercise name on your Watch. The band above shows all five at the strength you pick, with a name over them as it will appear — strong enough to read at a glance, light enough to read the name through.")
+                }
             }
 
             Section {
@@ -2275,6 +2358,12 @@ struct SettingsView: View {
                     // The Watch keeps its own copy of this switch, so it has to
                     // be told — same as the Health toggle above.
                     store.reloadAll()
+                }
+                if restTimerOn, showsWatchSettings {
+                    Stepper(value: $restTaps, in: 1...WatchPreferences.maximumRestTaps) {
+                        Label("Taps on the wrist: \(restTaps)", systemImage: "hand.tap")
+                    }
+                    .onChange(of: restTaps) { _, _ in store.reloadAll() }
                 }
             } footer: {
                 Text("When on, a rest is counted after every set and after each exercise you log, for as long as that exercise is set to. You can leave the app while it runs: a notification arrives when the rest is over, and an Apple Watch that was nearby when the rest started taps your wrist as well. With this off, the app works exactly as before.")

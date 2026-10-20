@@ -56,6 +56,8 @@ Starting one runs a countdown. As with the rest timer, the clock keeps the time 
 
 **log, next** stays greyed out until a session has actually run, because a number on a wheel is a plan and this app logs what happened. Once it has, what the session came to appears under the exercise name — the time, your average heart rate, and how long you spent in each zone — and the button comes back. What gets logged is what you actually did: stopping at twelve minutes of a twenty-minute ride records twelve. Those same numbers are what the *logs* tab shows for that session, in place of the weights and repetitions a strength exercise has.
 
+With a Watch, the end of a rest is a tap on your wrist. How many taps is up to you, from one to five in Settings: watchOS has no way to make a tap harder, so the only way to make the end of a rest harder to miss in a gym is to repeat it. Two by default.
+
 The rest timer stays quiet after cardio. You have just done twenty minutes of it, and a ninety-second rest prompt on top would be noise.
 
 ### With an Apple Watch
@@ -101,6 +103,13 @@ Because the screen is small, the Watch shows **one** row of wheels at a time. Th
 If the rest timer is on, it runs here too — see [The rest timer](#the-rest-timer).
 
 The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise, with a ✓ against the ones already logged. Swiping left and right moves between exercises without logging, exactly as on the phone.
+
+### One row of wheels or two
+Settings › *Wheels on the Watch*.
+
+**One row** is how the Watch has always worked: a toggle at the top switches the wheels between repetitions and weights, and whichever row is not on the wheels is shown underneath them as numbers.
+
+**Both rows at once** puts the weights and the repetitions on screen together, so there is nothing to switch at the machine. The wheels are shorter — three numbers each rather than five — the exercise name moves up onto the clock's row, and the numbers under the wheels go, since each row now shows itself. A rest counts down beside the name, which shortens to make room for it.
 
 ### Two ways to record a Watch workout
 Settings › *Workouts on the Watch* chooses between them.
@@ -223,8 +232,11 @@ The **ready-made exercises** cover every primary muscle group and come already f
 The settings screen has:
    - **Share data among your iPhones/iPads** — keeps your workouts, exercises and logs in step across your devices through your own iCloud account. Off by default.
    - **Save workouts to Apple Health** — see [Apple Health](#apple-health) above. Off by default.
-   - **Rest timer** — counts your rest after every set and after each exercise you log. Off by default, see [The rest timer](#the-rest-timer) above.
+   - **Rest timer** — counts your rest after every set and after each exercise you log. Off by default, see [The rest timer](#the-rest-timer) above. With a Watch, **taps on the wrist** sets how many taps mark the end of a rest, from one to five.
+
    - **Workouts on the Watch** — hand over between devices, or record a Watch workout as a real Apple workout. See [The Apple Watch app](#the-apple-watch-app) above. Handing over by default.
+   - **Wheels on the Watch** — one row with a reps/weights toggle, or both rows at once. See [The Apple Watch app](#the-apple-watch-app) above. One row by default.
+   - **Heart rate band** — how strongly the zone colours are drawn behind the exercise name on the Watch, from barely there to full strength, with a preview to judge it against. Only shown when the Watch records Apple workouts.
    - **Remember an exercise across workouts** — on by default: a wheel opens on the last time you did that exercise, whichever workout you did it in, so splitting or reorganising a routine keeps your numbers. Turn it off if you want each workout to remember its own — a heavy day and a light day that share an exercise.
    - **Numbers for a new exercise** — the sets, weight range, increment and rest each new exercise starts with. Exercises you already have are not changed.
    - **One-rep max formula** — which of the three formulas the statistics use. Epley by default.

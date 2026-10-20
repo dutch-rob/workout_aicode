@@ -27,6 +27,9 @@ struct WatchLogExerciseView: View {
     private enum Mode { case reps, weights }
 
     @State private var mode: Mode = .reps
+    /// Two rows of wheels — weights and repetitions on screen together, with
+    /// no toggle between them — when the phone says so. See `WatchPreferences`.
+    private var twoRows: Bool { session.wheelRows == 2 }
     @State private var currentIndex: Int = 0
     @State private var weights: [[Int]] = []
     @State private var reps: [[Int]] = []
@@ -145,17 +148,49 @@ struct WatchLogExerciseView: View {
     private func currentPage(for exercise: SyncExercise) -> some View {
         if exercise.isAerobic {
             aerobicPage(for: exercise)
+        } else if twoRows {
+            // Nothing but the wheels: the name is up on the clock's row, and
+            // the w/r values under the wheels said what the other row now
+            // says for itself.
+            VStack(spacing: 2) {
+                wheelRow(for: exercise, metric: .weights)
+                wheelRow(for: exercise, metric: .reps)
+            }
         } else {
             VStack(spacing: 2) {
                 exerciseTitle(exercise, showRest: true)
                 HStack(spacing: 2) {
-                    rowLabel
+                    rowLabel(mode)
                     pickerRow(for: exercise)
                 }
                 .frame(height: wheelHeight())
                 otherMetricLabels(for: exercise, index: currentIndex)
             }
         }
+    }
+
+    /// The exercise name on the clock's row, with the rest beside it, over a
+    /// band that runs the full width of the screen.
+    private func topNameRow(_ exercise: SyncExercise?) -> some View {
+        HStack(spacing: 4) {
+            Text(exercise?.name ?? "")
+                .font(.caption).bold()
+                .lineLimit(1)
+                .truncationMode(.tail)
+            WatchRestCounter()
+            Spacer(minLength: 0)
+        }
+        .frame(width: toggleWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background { WatchZoneRowBackground() }
+    }
+
+    private func wheelRow(for exercise: SyncExercise, metric: Mode) -> some View {
+        HStack(spacing: 2) {
+            rowLabel(metric)
+            pickerRow(for: exercise, metric: metric)
+        }
+        .frame(height: wheelHeight(rows: 2))
     }
 
     // MARK: - Aerobic
@@ -207,27 +242,44 @@ struct WatchLogExerciseView: View {
     private func neighbourPage(index: Int) -> some View {
         if isHorizontalDrag == true, index != currentIndex, let ex = exerciseAt(index) {
             VStack(spacing: 2) {
-                exerciseTitle(ex)
-                HStack(spacing: 2) {
-                    rowLabel
+                if twoRows {
+                    emptyWheelRow(for: ex, metric: .weights)
+                    emptyWheelRow(for: ex, metric: .reps)
+                } else {
+                    exerciseTitle(ex)
                     HStack(spacing: 2) {
-                        ForEach(0..<max(1, ex.numberOfSeries), id: \.self) { _ in
-                            RoundedRectangle(cornerRadius: 10)
-                                .strokeBorder(Color.gray.opacity(0.55), lineWidth: 1)
-                                .frame(maxWidth: .infinity)
-                        }
+                        rowLabel(mode)
+                        emptyWheels(for: ex)
                     }
+                    .frame(height: wheelHeight())
+                    // Reserve the value row's height so nothing shifts on landing.
+                    Text(" ")
+                        .font(.caption).bold()
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(height: wheelHeight())
-                // Reserve the value row's height so nothing shifts on landing.
-                Text(" ")
-                    .font(.caption).bold()
-                    .frame(maxWidth: .infinity)
             }
             .allowsHitTesting(false)
         } else {
             Color.clear
         }
+    }
+
+    private func emptyWheels(for exercise: SyncExercise) -> some View {
+        HStack(spacing: 2) {
+            ForEach(0..<max(1, exercise.numberOfSeries), id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.gray.opacity(0.55), lineWidth: 1)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func emptyWheelRow(for exercise: SyncExercise, metric: Mode) -> some View {
+        HStack(spacing: 2) {
+            rowLabel(metric)
+            emptyWheels(for: exercise)
+        }
+        .frame(height: wheelHeight(rows: 2))
     }
 
     private func exerciseTitle(_ exercise: SyncExercise, showRest: Bool = false) -> some View {
@@ -247,8 +299,8 @@ struct WatchLogExerciseView: View {
         .background { WatchZoneRowBackground() }
     }
 
-    private var rowLabel: some View {
-        Text(mode == .reps ? "reps" : "weight")
+    private func rowLabel(_ metric: Mode) -> some View {
+        Text(metric == .reps ? "reps" : "weight")
             .font(.caption2)
             .foregroundStyle(.secondary)
             .fixedSize()
@@ -284,20 +336,29 @@ struct WatchLogExerciseView: View {
                 // between two things it does not have, and it was sitting on
                 // top of the exercise name.
                 if exercise?.isAerobic != true {
-                    HStack(spacing: 0) {
-                        Button {
-                            withAnimation { mode = (mode == .reps ? .weights : .reps) }
-                        } label: {
-                            Label(mode == .reps ? "weights" : "reps",
-                                  systemImage: "arrow.left.arrow.right")
-                                .font(.caption2)
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity)
+                    if twoRows {
+                        // With both rows on screen there is nothing to toggle,
+                        // so the name takes that row — which is the clock's
+                        // row, hence the same width cap the toggle had. The
+                        // band behind it is NOT capped: it runs the full width,
+                        // under the clock, where there is nothing else to show.
+                        topNameRow(exercise)
+                    } else {
+                        HStack(spacing: 0) {
+                            Button {
+                                withAnimation { mode = (mode == .reps ? .weights : .reps) }
+                            } label: {
+                                Label(mode == .reps ? "weights" : "reps",
+                                      systemImage: "arrow.left.arrow.right")
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                            .frame(width: toggleWidth)
+                            Spacer(minLength: 0)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
-                        .frame(width: toggleWidth)
-                        Spacer(minLength: 0)
                     }
                 }
 
@@ -345,8 +406,12 @@ struct WatchLogExerciseView: View {
     /// Wheels take the strip minus the title and value rows. Reserve enough for
     /// BOTH rows at full size — if this is too tight the value text silently
     /// shrinks (minimumScaleFactor) instead of the wheels giving way.
-    private func wheelHeight() -> CGFloat {
-        max(60, stripHeight - 50)
+    private func wheelHeight(rows: Int = 1) -> CGFloat {
+        // Two rows divide the whole strip between them: with the name moved
+        // to the clock's row and the w/r values gone, there is nothing else
+        // inside it to reserve height for.
+        if rows == 2 { return max(44, (stripHeight - 4) / 2) }
+        return max(60, stripHeight - 50)
     }
 
     /// Toggle width — left-aligned and capped so it clears the clock top-right.
@@ -408,12 +473,14 @@ struct WatchLogExerciseView: View {
 
     // MARK: - Picker row (reps OR weights)
 
-    private func pickerRow(for exercise: SyncExercise) -> some View {
+    private func pickerRow(for exercise: SyncExercise,
+                           metric: Mode? = nil) -> some View {
         let count = max(1, exercise.numberOfSeries)
+        let metric = metric ?? mode
         return HStack(spacing: 2) {
             ForEach(0..<count, id: \.self) { series in
                 Group {
-                    if mode == .reps {
+                    if metric == .reps {
                         Picker("", selection: repsBinding(series: series)) {
                             ForEach(0...200, id: \.self) { Text("\($0)").tag($0) }
                         }

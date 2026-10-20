@@ -19,12 +19,17 @@ import SwiftUI
 struct WatchZoneRowBackground: View {
     @ObservedObject private var workout = WatchStrengthWorkout.shared
 
+    @ObservedObject private var session = WatchSessionManager.shared
+
     private let spacing: CGFloat = 2
-    /// Every zone at the same brightness. Dimming the ones you are not in
-    /// made them all but invisible on the wrist — this row is small, and a
-    /// colour at a fifth strength behind text is not a colour. The zone you
-    /// are in is picked out by WIDTH instead, which survives being small.
-    private let tint: Double = 0.5
+    /// Every zone at the same strength. Dimming the ones you are not in made
+    /// them all but invisible on the wrist — this row is small, and a colour
+    /// at a fifth strength behind text is not a colour. The zone you are in is
+    /// picked out by WIDTH instead, which survives being small.
+    ///
+    /// How strong is the user's, set on the phone against a preview: it
+    /// depends on the wrist, the light, and the person reading it.
+    private var tint: Double { session.zoneTint }
     /// The marker pokes up out of the bar into the text's row. Small enough
     /// not to fight the exercise name, big enough to find at a glance.
     private let markerWidth: CGFloat = 9

@@ -29,6 +29,10 @@ final class WatchSessionManager: NSObject, ObservableObject {
     /// How a workout logged here is recorded — the phone's setting, sent with
     /// the definitions. See `WatchWorkoutMode`.
     @Published private(set) var workoutMode: WatchWorkoutMode = .handover
+    /// See `WatchPreferences`. Defaults until the phone has been heard from.
+    @Published private(set) var zoneTint = WatchPreferences.defaultZoneTint
+    @Published private(set) var restTaps = WatchPreferences.defaultRestTaps
+    @Published private(set) var wheelRows = WatchPreferences.defaultWheelRows
     private var lastEntries: [String: SyncLastEntry] = [:]
 
     // MARK: Handover session state
@@ -56,6 +60,19 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
     /// Force the Paused screen for a screenshot of the hand-over prompt.
     func showDemoPaused() { role = .paused }
+    /// Settings normally arrive from the phone. A simulator has no phone, so a
+    /// screenshot run can set them directly: `-SRWRows 2`, `-SRWTint 0.8`.
+    func applyDemoPreferences() {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "-SRWRows"), i + 1 < args.count,
+           let rows = Int(args[i + 1]) {
+            wheelRows = WatchPreferences.clampRows(rows)
+        }
+        if let i = args.firstIndex(of: "-SRWTint"), i + 1 < args.count,
+           let tint = Double(args[i + 1]) {
+            zoneTint = WatchPreferences.clampTint(tint)
+        }
+    }
     #endif
 
     // MARK: - Lookups
@@ -81,6 +98,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
             lastEntries = payload.lastEntries
             restTimerEnabled = payload.restTimerEnabled
             workoutMode = WatchWorkoutMode(rawValue: payload.watchWorkoutMode) ?? .handover
+            zoneTint = payload.zoneTint
+            restTaps = payload.restTaps
+            wheelRows = payload.wheelRows
         }
         // Left by the phone for a Watch app that was not running when the
         // aerobic session began — which is the usual way it begins.

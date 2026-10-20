@@ -69,6 +69,7 @@ struct ContentView: View {
             // Screenshot demo mode — see DemoMode.swift.
             guard DemoMode.isEnabled else { return }
             session.loadDemoData()
+            session.applyDemoPreferences()
             switch DemoMode.screen {
             case "log":    path = [DemoMode.workoutId]
             case "paused": session.showDemoPaused()

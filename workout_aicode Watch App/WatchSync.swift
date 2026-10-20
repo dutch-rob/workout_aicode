@@ -238,6 +238,59 @@ enum WatchWorkoutMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Settings that live on the phone but are acted on by the Watch.
+///
+/// All three are sent with the definitions, like the rest-timer switch, and
+/// all three have a default that an older Watch build — or one that has not
+/// heard from the phone yet — falls back to.
+enum WatchPreferences {
+
+    /// How strongly the heart rate band behind the exercise name is drawn:
+    /// 0.1 is barely there, 1 is the colour at full strength. Chosen on the
+    /// phone against a preview, because how vivid is vivid enough depends on
+    /// the wrist, the light and the person.
+    static let zoneTintKey = "watchZoneTint"
+    static let defaultZoneTint: Double = 0.5
+    static let minimumZoneTint: Double = 0.1
+
+    /// Taps on the wrist when a rest ends. One is easy to miss in a gym; the
+    /// haptic itself cannot be made stronger, so the only dial is how many.
+    static let restTapsKey = "watchRestTaps"
+    static let defaultRestTaps = 2
+    static let maximumRestTaps = 5
+
+    /// One row of wheels with a reps/weights toggle, or both rows at once.
+    static let wheelRowsKey = "watchWheelRows"
+    static let defaultWheelRows = 1
+
+    static var zoneTint: Double {
+        let stored = UserDefaults.standard.object(forKey: zoneTintKey) as? Double
+        return clampTint(stored ?? defaultZoneTint)
+    }
+
+    static var restTaps: Int {
+        let stored = UserDefaults.standard.object(forKey: restTapsKey) as? Int
+        return clampTaps(stored ?? defaultRestTaps)
+    }
+
+    static var wheelRows: Int {
+        let stored = UserDefaults.standard.object(forKey: wheelRowsKey) as? Int
+        return clampRows(stored ?? defaultWheelRows)
+    }
+
+    static func clampTint(_ value: Double) -> Double {
+        min(1, max(minimumZoneTint, value))
+    }
+
+    static func clampTaps(_ value: Int) -> Int {
+        min(maximumRestTaps, max(1, value))
+    }
+
+    static func clampRows(_ value: Int) -> Int {
+        value == 2 ? 2 : 1
+    }
+}
+
 struct SyncPayload: Codable {
     var workouts: [SyncWorkout]
     var exercises: [SyncExercise]
@@ -252,6 +305,11 @@ struct SyncPayload: Codable {
     /// `WatchWorkoutMode`. Sent as its raw value so an older Watch build
     /// simply does not find the key and carries on handing over.
     var watchWorkoutMode: String
+    /// See `WatchPreferences` — the band's strength, the taps at the end of a
+    /// rest, and whether the Watch shows one row of wheels or two.
+    var zoneTint: Double
+    var restTaps: Int
+    var wheelRows: Int
 
     static func lastEntryKey(workoutId: String, exerciseId: String) -> String {
         "\(workoutId)|\(exerciseId)"
@@ -259,18 +317,24 @@ struct SyncPayload: Codable {
 
     enum CodingKeys: String, CodingKey {
         case workouts, exercises, lastEntries, healthSharingEnabled, restTimerEnabled
-        case watchWorkoutMode
+        case watchWorkoutMode, zoneTint, restTaps, wheelRows
     }
     init(workouts: [SyncWorkout], exercises: [SyncExercise],
          lastEntries: [String: SyncLastEntry], healthSharingEnabled: Bool = false,
          restTimerEnabled: Bool = false,
-         watchWorkoutMode: String = WatchWorkoutMode.handover.rawValue) {
+         watchWorkoutMode: String = WatchWorkoutMode.handover.rawValue,
+         zoneTint: Double = WatchPreferences.defaultZoneTint,
+         restTaps: Int = WatchPreferences.defaultRestTaps,
+         wheelRows: Int = WatchPreferences.defaultWheelRows) {
         self.workouts = workouts
         self.exercises = exercises
         self.lastEntries = lastEntries
         self.healthSharingEnabled = healthSharingEnabled
         self.restTimerEnabled = restTimerEnabled
         self.watchWorkoutMode = watchWorkoutMode
+        self.zoneTint = zoneTint
+        self.restTaps = restTaps
+        self.wheelRows = wheelRows
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -281,5 +345,11 @@ struct SyncPayload: Codable {
         restTimerEnabled = try c.decodeIfPresent(Bool.self, forKey: .restTimerEnabled) ?? false
         watchWorkoutMode = try c.decodeIfPresent(String.self, forKey: .watchWorkoutMode)
             ?? WatchWorkoutMode.handover.rawValue
+        zoneTint = WatchPreferences.clampTint(
+            try c.decodeIfPresent(Double.self, forKey: .zoneTint) ?? WatchPreferences.defaultZoneTint)
+        restTaps = WatchPreferences.clampTaps(
+            try c.decodeIfPresent(Int.self, forKey: .restTaps) ?? WatchPreferences.defaultRestTaps)
+        wheelRows = WatchPreferences.clampRows(
+            try c.decodeIfPresent(Int.self, forKey: .wheelRows) ?? WatchPreferences.defaultWheelRows)
     }
 }

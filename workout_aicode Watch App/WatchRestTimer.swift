@@ -155,7 +155,7 @@ final class WatchRestTimer: ObservableObject {
         stopTicking()
         // Only reached with the app awake; otherwise the notification does the
         // buzzing, and this would be a second one on top of it.
-        WatchRestHaptics.strong()
+        WatchRestHaptics.strong(taps: WatchSessionManager.shared.restTaps)
     }
 
     /// Fifteen times a second while a rest runs: the grey is drawn from the
@@ -221,12 +221,25 @@ final class WatchRestTimer: ObservableObject {
 
 enum WatchRestHaptics {
     /// `.notification` is the strongest of the standard patterns and the one
-    /// people already read as "look at me", repeated so it is not mistaken for
-    /// an incoming message.
-    static func strong() {
+    /// people already read as "look at me". How MANY of them is the only dial
+    /// there is — watchOS gives no way to make a tap harder — and in a gym,
+    /// under a bar, one is easy to miss. The count is the user's, set on the
+    /// phone; two is what it was before there was a choice.
+    static func strong(taps: Int = WatchPreferences.defaultRestTaps) {
         let device = WKInterfaceDevice.current()
-        device.play(.notification)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { device.play(.notification) }
+        let count = WatchPreferences.clampTaps(taps)
+        for index in 0..<count {
+            // Far enough apart to be felt as separate taps rather than one
+            // long buzz, close enough to read as one announcement.
+            let delay = Double(index) * 0.6
+            if delay == 0 {
+                device.play(.notification)
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    device.play(.notification)
+                }
+            }
+        }
     }
 }
 
