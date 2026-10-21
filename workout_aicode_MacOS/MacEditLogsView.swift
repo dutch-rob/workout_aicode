@@ -32,6 +32,7 @@ struct MacEditLogsView: View {
     @Query(sort: [SortDescriptor(\WorkoutDef.name)]) private var workouts: [WorkoutDef]
     @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var exercises: [ExerciseDef]
     @Query private var aerobicResults: [AerobicResult]
+    @Query private var assistedResults: [AssistedResult]
 
     @State private var leaving = false
     @State private var failure: String?
@@ -65,16 +66,23 @@ struct MacEditLogsView: View {
         let reps: [Int]
         /// Set for an aerobic row, which has a duration instead of sets.
         let aerobicSeconds: Int?
+        /// What was set on the machine, per set, for an assisted exercise —
+        /// the number the weight column was worked out from. Empty otherwise.
+        let machineSettings: [Int]
     }
 
     private var rows: [Row] {
         let durations = Dictionary(aerobicResults.filter { !$0.isDeleted }
                                         .map { ($0.logId, $0.durationSeconds) },
                                    uniquingKeysWith: { a, _ in a })
+        let machines = Dictionary(assistedResults.filter { !$0.isDeleted }
+                                        .map { ($0.logId, $0.machineSettings) },
+                                  uniquingKeysWith: { a, _ in a })
         return logs.filter { !$0.isDeleted }.map {
             Row(id: $0.id, workoutId: $0.workoutId, exerciseId: $0.exerciseId,
                 date: $0.date, weights: $0.weights, reps: $0.reps,
-                aerobicSeconds: durations[$0.id])
+                aerobicSeconds: durations[$0.id],
+                machineSettings: machines[$0.id] ?? [])
         }
     }
 
@@ -203,7 +211,8 @@ struct MacEditLogsView: View {
                     .frame(width: CGFloat(setColumns) * 82, alignment: .leading)
             } else {
                 ForEach(0..<setColumns, id: \.self) { i in
-                    setPair(weight: weightBinding(row, i), reps: repsBinding(row, i))
+                    setPair(weight: weightBinding(row, i), reps: repsBinding(row, i),
+                            machine: i < row.machineSettings.count ? row.machineSettings[i] : nil)
                 }
             }
 
@@ -274,14 +283,26 @@ struct MacEditLogsView: View {
         .frame(width: 190)
     }
 
-    private func setPair(weight: Binding<Int>, reps: Binding<Int>) -> some View {
-        HStack(spacing: 2) {
-            TextField("", value: weight, format: .number)
-                .frame(width: 34)
-            TextField("", value: reps, format: .number)
-                .frame(width: 34)
+    private func setPair(weight: Binding<Int>, reps: Binding<Int>,
+                         machine: Int? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 2) {
+                TextField("", value: weight, format: .number)
+                    .frame(width: 34)
+                TextField("", value: reps, format: .number)
+                    .frame(width: 34)
+            }
+            .multilineTextAlignment(.trailing)
+            // What the machine was carrying, for an assisted set. Not editable:
+            // the weight above is what was lifted, and this follows it — typing
+            // here would be two ways to say the same thing, which is how the
+            // two come to disagree.
+            if let machine {
+                Text("machine \(machine)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .multilineTextAlignment(.trailing)
         .monospacedDigit()
         .frame(width: 74, alignment: .leading)
     }
