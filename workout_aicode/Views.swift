@@ -1629,6 +1629,8 @@ struct ImportExportView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
     @Query private var workouts: [WorkoutDef]
     @Query private var exercises: [ExerciseDef]
+    @Query private var aerobicResults: [AerobicResult]
+    @Query private var assistedResults: [AssistedResult]
 
     @State private var exportURL: URL?
 
@@ -1779,7 +1781,7 @@ struct ImportExportView: View {
     private func buildExportEnvelope() -> ExportEnvelope {
         let bundle = Bundle.main
         return ExportEnvelope(
-            exportVersion: "logJSON.2",
+            exportVersion: "logJSON.3",
             appIdentifier: bundle.bundleIdentifier ?? "",
             appVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
             build: bundle.infoDictionary?["CFBundleVersion"] as? String ?? "",
@@ -1799,7 +1801,9 @@ struct ImportExportView: View {
             data: ExportEnvelope.AllData(
                 workouts: workouts,
                 exercises: exercises,
-                logs: logs
+                logs: logs,
+                aerobicResults: aerobicResults,
+                assistedResults: assistedResults
             )
         )
     }
@@ -1848,7 +1852,9 @@ struct ImportExportView: View {
         let version = (try? JSONDecoder().decode(VersionPeek.self, from: data))?.exportVersion ?? ""
 
         let decoder = JSONDecoder()
-        if version == "logJSON.2" {
+        if version == "logJSON.2" || version == "logJSON.3" {
+            // The only difference is the two result arrays, which are optional:
+            // a logJSON.2 file decodes into the current shape with none.
             return try decoder.decode(ExportEnvelope.self, from: data)
         } else if version.hasPrefix("logJSON.1") {
             let legacy = try decoder.decode(LegacyExportEnvelope.self, from: data)
@@ -1989,6 +1995,15 @@ struct ImportExportView: View {
                     context.delete(exercise)
                 }
             }
+            // The results hang off logs that are about to go, so they go too.
+            // Left behind they would be orphans, and would then attach
+            // themselves to an imported log that happened to reuse the id.
+            if let existing = try? context.fetch(FetchDescriptor<AerobicResult>()) {
+                for result in existing { context.delete(result) }
+            }
+            if let existing = try? context.fetch(FetchDescriptor<AssistedResult>()) {
+                for result in existing { context.delete(result) }
+            }
             // Insert imported data
             for exercise in envelope.data.exercises {
                 context.insert(exercise)
@@ -1998,6 +2013,12 @@ struct ImportExportView: View {
             }
             for log in envelope.data.logs {
                 context.insert(log)
+            }
+            for result in envelope.data.aerobicResults ?? [] {
+                context.insert(result)
+            }
+            for result in envelope.data.assistedResults ?? [] {
+                context.insert(result)
             }
             try context.save()
             // Notify store or reload
@@ -2065,6 +2086,7 @@ struct ImportExportView: View {
 
             var insertedLogs = 0
             var conflictCount = 0
+            var importedLogIds: Set<UUID> = []
 
             for importedLog in envelope.data.logs {
                 let key = LogSig(date: importedLog.date,
@@ -2078,7 +2100,22 @@ struct ImportExportView: View {
                 } else {
                     context.insert(importedLog)
                     insertedLogs += 1
+                    importedLogIds.insert(importedLog.id)
                 }
+            }
+
+            // A result belongs to one log. Where the log was skipped as a
+            // duplicate, its result is skipped too: the log that won is the
+            // one already here, with whatever results it already had.
+            let existingAerobicIds = Set(aerobicResults.map(\.id))
+            for result in envelope.data.aerobicResults ?? []
+            where importedLogIds.contains(result.logId) && !existingAerobicIds.contains(result.id) {
+                context.insert(result)
+            }
+            let existingAssistedIds = Set(assistedResults.map(\.id))
+            for result in envelope.data.assistedResults ?? []
+            where importedLogIds.contains(result.logId) && !existingAssistedIds.contains(result.id) {
+                context.insert(result)
             }
             try context.save()
             NotificationCenter.default.post(name: .modelDataDidChange, object: nil)

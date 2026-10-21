@@ -171,8 +171,8 @@ struct InfoView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("    • export TSV — your log as a tab separated file, easy to open in a spreadsheet")
-                            Text("    • export JSON — your log together with your workout and exercise definitions")
-                            Text("    • import JSON — read back a file in the same format (easiest starting from one you exported)")
+                            Text("    • export JSON — your log together with your workout and exercise definitions, and what hangs off each set: what an aerobic session measured, and the body weight and machine setting behind an assisted one")
+                            Text("    • import JSON — read back a file in the same format (easiest starting from one you exported). Files exported by older versions still read; they simply have none of the extra detail.")
                             Text("    • undo import — restore the previous data if an import did not do what you wanted")
                         }
                     }

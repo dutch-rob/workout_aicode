@@ -200,8 +200,8 @@ The **logs/stats** button opens four tabs.
 
 **import/export** holds the file tools:
    - export TSV — your log as a tab separated file, easy to open in a spreadsheet
-   - export JSON — your log together with your workout and exercise definitions
-   - import JSON — read back a file in the same format (easiest starting from one you exported)
+   - export JSON — your log together with your workout and exercise definitions, and what hangs off each set: what an aerobic session measured, and the body weight and machine setting behind an assisted one
+   - import JSON — read back a file in the same format (easiest starting from one you exported). Files exported by older versions still read; they simply have none of the extra detail.
    - undo import — restore the previous data if an import did not do what you wanted
 
 Exports are sent wherever you choose. Editing an exported JSON file and importing it back is currently the only way to correct a mistake in your log; I intend to make that easier.

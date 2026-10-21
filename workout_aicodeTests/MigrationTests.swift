@@ -164,6 +164,50 @@ struct NewExerciseNumberTests {
     #expect(restored.maximumHeartRate == 170)
 }
 
+/// The export file itself, not just the types in it.
+///
+/// Until logJSON.3 the envelope carried workouts, exercises and logs and
+/// nothing else, so an exported ride kept its date and lost its twenty
+/// minutes, and an exported assisted set kept the weight lifted without the
+/// machine setting it came from.
+@Test func anExportCarriesWhatHangsOffItsLogs() throws {
+    let logId = UUID()
+    let data = ExportEnvelope.AllData(
+        workouts: [], exercises: [],
+        logs: [WorkoutLog(id: logId, date: Date(timeIntervalSince1970: 1_000_000),
+                          workoutId: UUID(), exerciseId: UUID(),
+                          weights: [52], reps: [8])],
+        aerobicResults: [AerobicResult(logId: logId, durationSeconds: 1200,
+                                       averageHeartRate: 130, maximumHeartRate: 150,
+                                       zoneSeconds: [0, 300, 600, 300, 0])],
+        assistedResults: [AssistedResult(logId: logId, bodyWeight: 82,
+                                         machineSettings: [30])])
+    let envelope = ExportEnvelope(
+        exportVersion: "logJSON.3", appIdentifier: "test", appVersion: "1.6", build: "11",
+        exportedAt: "now",
+        device: .init(model: "iPhone", system: "iOS", version: "27.1"),
+        locale: "en_GB", timeZone: "Europe/Amsterdam",
+        counts: .init(workouts: 0, exercises: 0, logs: 1),
+        data: data)
+
+    let restored = try JSONDecoder().decode(
+        ExportEnvelope.self, from: try JSONEncoder().encode(envelope))
+    #expect(restored.data.aerobicResults?.first?.durationSeconds == 1200)
+    #expect(restored.data.assistedResults?.first?.machineSettings == [30])
+    #expect(restored.data.assistedResults?.first?.bodyWeight == 82)
+    #expect(restored.data.assistedResults?.first?.logId == logId)
+}
+
+/// An export written before any of that still reads: the two arrays are
+/// optional, so a logJSON.2 file lands in the current shape with none.
+@Test func anExportFromBeforeTheResultsStillImports() throws {
+    let json = #"{"exportVersion":"logJSON.2","appIdentifier":"robotex.workout-aicode","appVersion":"1.5","build":"9","exportedAt":"2026-01-01T00:00:00Z","device":{"model":"iPhone","system":"iOS","version":"26.0"},"locale":"en_GB","timeZone":"Europe/Amsterdam","counts":{"workouts":0,"exercises":0,"logs":0},"data":{"workouts":[],"exercises":[],"logs":[]}}"#
+    let restored = try JSONDecoder().decode(ExportEnvelope.self, from: Data(json.utf8))
+    #expect(restored.data.aerobicResults == nil)
+    #expect(restored.data.assistedResults == nil)
+    #expect(restored.data.logs.isEmpty)
+}
+
 @Test func anAerobicExerciseSurvivesAnExportRoundTrip() throws {
     let original = ExerciseDef(name: "Treadmill", kind: .aerobic, aerobicActivity: .indoorRun)
     let restored = try JSONDecoder().decode(

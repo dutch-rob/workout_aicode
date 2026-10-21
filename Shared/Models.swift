@@ -959,6 +959,26 @@ struct ExportEnvelope: Codable {
         let workouts: [WorkoutDef]
         let exercises: [ExerciseDef]
         let logs: [WorkoutLog]
+        /// What an aerobic session measured, and what an assisted set was
+        /// worked out from. Both hang off a log by its id.
+        ///
+        /// Optional because every export before logJSON.3 was written without
+        /// them: a file from then is not broken, it simply has none. Until
+        /// this, an exported ride kept its date and lost its twenty minutes,
+        /// and an exported assisted set kept the weight lifted but not the
+        /// machine setting it came from.
+        let aerobicResults: [AerobicResult]?
+        let assistedResults: [AssistedResult]?
+
+        init(workouts: [WorkoutDef], exercises: [ExerciseDef], logs: [WorkoutLog],
+             aerobicResults: [AerobicResult]? = nil,
+             assistedResults: [AssistedResult]? = nil) {
+            self.workouts = workouts
+            self.exercises = exercises
+            self.logs = logs
+            self.aerobicResults = aerobicResults
+            self.assistedResults = assistedResults
+        }
     }
 }
 
