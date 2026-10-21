@@ -138,6 +138,13 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// What an assisted set was worked out from, for the log that holds it.
+    func assistedResult(forLogId logId: UUID) -> AssistedResult? {
+        let descriptor = FetchDescriptor<AssistedResult>(
+            predicate: #Predicate<AssistedResult> { $0.logId == logId })
+        return (try? context.fetch(descriptor))?.first
+    }
+
     // MARK: - Apple Watch sync
 
     /// Build the JSON payload the Watch needs to select and log a workout on its
@@ -149,13 +156,24 @@ final class AppStore: ObservableObject {
         let aerobic = (try? context.fetch(FetchDescriptor<AerobicResult>())) ?? []
         let durationByLog = Dictionary(aerobic.map { ($0.logId, $0.durationSeconds) },
                                        uniquingKeysWith: { a, _ in a })
+        let assistedIds = Set(exercises.filter(\.subtractsFromBodyWeight).map(\.id))
         var lastMap: [String: SyncLastEntry] = [:]
         for workout in workouts {
             let entries = lastEntries(for: workout)
             for (exId, log) in entries {
                 let key = SyncPayload.lastEntryKey(workoutId: workout.id.uuidString,
                                                    exerciseId: exId.uuidString)
-                lastMap[key] = SyncLastEntry(weights: log.weights, reps: log.reps,
+                // The Watch opens its wheels on what it is sent, so an assisted
+                // exercise is sent last time's MACHINE SETTING — the weight
+                // lifted would creep with the user's body weight and is not a
+                // number anyone sets on a machine.
+                var wheels = log.weights
+                if assistedIds.contains(exId),
+                   let settings = assistedResult(forLogId: log.id)?.machineSettings,
+                   !settings.isEmpty {
+                    wheels = settings
+                }
+                lastMap[key] = SyncLastEntry(weights: wheels, reps: log.reps,
                                              durationSeconds: durationByLog[log.id] ?? 0)
             }
         }
@@ -182,7 +200,8 @@ final class AppStore: ObservableObject {
                          weightIncrement: $0.weightIncrement,
                          restSeconds: $0.restSeconds,
                          kindRaw: $0.kindRaw,
-                         aerobicActivityRaw: $0.aerobicActivityRaw)
+                         aerobicActivityRaw: $0.aerobicActivityRaw,
+                         subtractsFromBodyWeight: $0.subtractsFromBodyWeight)
         }
 
         let payload = SyncPayload(
@@ -213,9 +232,25 @@ final class AppStore: ObservableObject {
         )
         if let existing = try? context.fetch(descriptor), !existing.isEmpty { return }
 
+        // An assisted machine's wheels show what is SET on it. The Watch sends
+        // that back unchanged — it has no business knowing what the user
+        // weighs — and the conversion to the weight actually lifted happens
+        // here, in the one place that writes a log from the Watch.
+        let exercise = exercises.first { $0.id == exerciseId }
+        let assisted = exercise?.subtractsFromBodyWeight == true
+        let bodyWeight = BodyWeight.currentKg
+        let lifted = assisted
+            ? weights.map { BodyWeight.liftedKg(bodyWeight: bodyWeight, machineSetting: $0) }
+            : weights
+
         let log = WorkoutLog(id: id, date: date, workoutId: workoutId,
-                             exerciseId: exerciseId, weights: weights, reps: reps)
+                             exerciseId: exerciseId, weights: lifted, reps: reps)
         context.insert(log)
+        if assisted {
+            context.insert(AssistedResult(logId: log.id,
+                                          bodyWeight: bodyWeight,
+                                          machineSettings: weights))
+        }
         // Only for an aerobic session, and only one that actually ran.
         if let durationSeconds, durationSeconds > 0 {
             context.insert(AerobicResult(logId: log.id,

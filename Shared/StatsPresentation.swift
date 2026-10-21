@@ -85,23 +85,50 @@ enum LogComparison {
         logs.first { $0.date < date && $0.exerciseId == exerciseId }
     }
 
+    /// How much a weight may differ before the difference is worth colouring:
+    /// half the exercise's own increment.
+    ///
+    /// On an ordinary machine this changes nothing — weights move by whole
+    /// increments, so any real change clears half of one. It exists for the
+    /// assisted machines, where the weight logged is BODY WEIGHT minus the
+    /// setting: step on the scale a kilo heavier and every set of an assisted
+    /// chin-up turns green, though nothing about the training changed. Half an
+    /// increment is the line between "you did something different" and "you
+    /// had breakfast".
+    static func tolerance(forIncrement increment: Int) -> Double {
+        Double(max(1, increment)) / 2
+    }
+
     /// More weight is progress, less is not. No previous entry is neither.
-    static func weightColour(current: Int, previous: Int?) -> Color {
+    ///
+    /// `increment` is the exercise's weight increment; a difference of half of
+    /// it or less is left uncoloured. Passing nothing keeps the old exact
+    /// comparison, which is what a caller without the exercise to hand gets.
+    static func weightColour(current: Int, previous: Int?,
+                             increment: Int? = nil) -> Color {
         guard let previous else { return .primary }
-        if current > previous { return .green }
-        if current < previous { return .red }
+        let margin = increment.map(tolerance(forIncrement:)) ?? 0
+        let difference = Double(current - previous)
+        if difference > margin { return .green }
+        if difference < -margin { return .red }
         return .primary
     }
 
     /// Reps only count as progress if the weight did not drop to buy them —
     /// two more reps at ten kilos less is not a better set, and colouring it
     /// green would be flattery rather than information.
+    ///
+    /// The same margin applies to that weight comparison: a kilo of body
+    /// weight must not take the colour off an extra repetition.
     static func repsColour(current: Int, previous: Int?,
-                           currentWeight: Int, previousWeight: Int?) -> Color {
+                           currentWeight: Int, previousWeight: Int?,
+                           increment: Int? = nil) -> Color {
         guard let previous else { return .primary }
+        let margin = increment.map(tolerance(forIncrement:)) ?? 0
         let prevWeight = previousWeight ?? currentWeight
-        if current > previous && currentWeight >= prevWeight { return .green }
-        if current < previous && currentWeight <= prevWeight { return .red }
+        let weightDifference = Double(currentWeight - prevWeight)
+        if current > previous && weightDifference >= -margin { return .green }
+        if current < previous && weightDifference <= margin { return .red }
         return .primary
     }
 }

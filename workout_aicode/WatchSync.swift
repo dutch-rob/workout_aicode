@@ -44,16 +44,21 @@ struct SyncExercise: Codable, Identifiable, Hashable {
     /// a newer phone should cost one attribute rather than the whole payload.
     var kindRaw: String
     var aerobicActivityRaw: String?
+    /// A machine that takes weight OFF you — an assisted chin-up. The Watch
+    /// only needs it to label the row: the wheels show what is set on the
+    /// machine either way, and the phone turns that into the weight lifted.
+    var subtractsFromBodyWeight: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement
-        case restSeconds, kindRaw, aerobicActivityRaw
+        case restSeconds, kindRaw, aerobicActivityRaw, subtractsFromBodyWeight
     }
     init(id: String, name: String, numberOfSeries: Int, lowestWeight: Int,
          highestWeight: Int, weightIncrement: Int,
          restSeconds: Int = SyncDefaults.restSeconds,
          kindRaw: String = SyncDefaults.strengthKind,
-         aerobicActivityRaw: String? = nil) {
+         aerobicActivityRaw: String? = nil,
+         subtractsFromBodyWeight: Bool = false) {
         self.id = id
         self.name = name
         self.numberOfSeries = numberOfSeries
@@ -63,6 +68,7 @@ struct SyncExercise: Codable, Identifiable, Hashable {
         self.restSeconds = restSeconds
         self.kindRaw = kindRaw
         self.aerobicActivityRaw = aerobicActivityRaw
+        self.subtractsFromBodyWeight = subtractsFromBodyWeight
     }
     // Lenient, because the two apps update independently: a Watch on the new
     // build can be handed a payload from the old phone build for as long as it
@@ -84,6 +90,10 @@ struct SyncExercise: Codable, Identifiable, Hashable {
         kindRaw = try c.decodeIfPresent(String.self, forKey: .kindRaw)
             ?? SyncDefaults.strengthKind
         aerobicActivityRaw = try c.decodeIfPresent(String.self, forKey: .aerobicActivityRaw)
+        // A phone that predates assisted machines describes exercises that add
+        // weight rather than take it off.
+        subtractsFromBodyWeight = try c.decodeIfPresent(
+            Bool.self, forKey: .subtractsFromBodyWeight) ?? false
     }
 
     /// Whether this is one the Watch should offer a duration and a workout for

@@ -59,6 +59,7 @@ enum DemoMode {
             configurations: config
         )
         seed(into: container.mainContext)
+        markFirstExerciseAssisted(in: container.mainContext)
         return container
     }
 
@@ -127,6 +128,18 @@ enum DemoMode {
                                      averageHeartRate: 138, maximumHeartRate: 157,
                                      zoneSeconds: [60, 240, 600, 180, 0]))
         }
+    }
+
+    /// Screenshot/demo only: makes the first exercise an assisted machine, so
+    /// the screens that only appear for one can be looked at without building
+    /// a workout by hand. `-SRWDemo -SRWAssisted`.
+    static func markFirstExerciseAssisted(in ctx: ModelContext) {
+        guard CommandLine.arguments.contains("-SRWAssisted"),
+              let first = try? ctx.fetch(FetchDescriptor<ExerciseDef>()).first(where: {
+                  $0.kind == .strength
+              }) else { return }
+        first.subtractsFromBodyWeight = true
+        try? ctx.save()
     }
 
     private static func build(_ name: String, _ rows: [Row],

@@ -300,7 +300,10 @@ struct WatchLogExerciseView: View {
     }
 
     private func rowLabel(_ metric: Mode) -> some View {
-        Text(metric == .reps ? "reps" : "weight")
+        // "machine" for the ones that take weight off you: the wheel is what
+        // you set on the machine, not what you lift.
+        let assisted = exerciseAt(currentIndex)?.subtractsFromBodyWeight == true
+        return Text(metric == .reps ? "reps" : (assisted ? "machine" : "weight"))
             .font(.caption2)
             .foregroundStyle(.secondary)
             .fixedSize()
@@ -348,7 +351,9 @@ struct WatchLogExerciseView: View {
                             Button {
                                 withAnimation { mode = (mode == .reps ? .weights : .reps) }
                             } label: {
-                                Label(mode == .reps ? "weights" : "reps",
+                                Label(mode == .reps
+                                  ? (exercise?.subtractsFromBodyWeight == true ? "machine" : "weights")
+                                  : "reps",
                                       systemImage: "arrow.left.arrow.right")
                                     .font(.caption2)
                                     .lineLimit(1)

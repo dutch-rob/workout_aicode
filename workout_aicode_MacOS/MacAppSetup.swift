@@ -52,7 +52,7 @@ final class MacAppSetup: ObservableObject {
     init() {
         let models: [any PersistentModel.Type] = [
             WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
-            AerobicResult.self, DraftSession.self
+            AerobicResult.self, DraftSession.self, AssistedResult.self
         ]
         let configuration = Self.syncEnabled
             ? ModelConfiguration(cloudKitDatabase: .automatic)

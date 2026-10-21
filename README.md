@@ -178,6 +178,15 @@ Deleting an exercise removes it from your list *and* from any workout that used 
 ## Editing an exercise
 On the *edit exercise* screen you set the name, the number of sets, the lowest weight, the highest weight and the increment that determine the numbers on its wheel, the rest this exercise gets when the rest timer is on, and the muscle groups it works. Underneath, **In these workouts** shows which workouts contain it, and you can add or remove it from any of them right there — the same relationship, editable from either end.
 
+### Machines that take weight off you
+An assisted chin-up or dip works the other way round from everything else: the number you set is how much of your own weight the machine carries, so a *bigger* number is an *easier* set. Tick **subtracted from body weight** on the exercise and the app handles that.
+
+The wheels still show what you set on the machine, because that is what you do at the machine. What gets logged is what you actually lifted — your body weight less that setting — so your graphs, trends and one-rep-max estimates read the right way round, and an assisted chin-up can be compared with any other exercise. Each set also records the body weight it was worked out from and the machine's own number, so an old session still makes sense years later when your weight has moved.
+
+Your body weight comes from Settings: from Apple Health, where it follows your weigh-ins on its own, or typed in and left alone. Nothing is ever written to Health.
+
+One consequence worth knowing: because the logged weight moves with your body weight, the colours in your logs ignore any difference of half an increment or less. A kilo after breakfast is not a personal best.
+
 An exercise needs a name and a primary muscle group before it can be saved, and the name has to be one you are not already using. Without a muscle group an exercise cannot be found on the body picture or grouped with anything else. **quit** leaves without keeping your changes; on an exercise you have only just created, it removes it again rather than leaving a nameless one behind.
 
 ## Your logs and statistics
@@ -235,6 +244,7 @@ The settings screen has:
    - **Rest timer** — counts your rest after every set and after each exercise you log. Off by default, see [The rest timer](#the-rest-timer) above. With a Watch, **taps on the wrist** sets how many taps mark the end of a rest, from one to five.
 
    - **Workouts on the Watch** — hand over between devices, or record a Watch workout as a real Apple workout. See [The Apple Watch app](#the-apple-watch-app) above. Handing over by default.
+   - **Body weight** — from Apple Health or set by hand, used only by exercises marked *subtracted from body weight*. Shown only when you have one. See [Machines that take weight off you](#machines-that-take-weight-off-you) above.
    - **Wheels on the Watch** — one row with a reps/weights toggle, or both rows at once. See [The Apple Watch app](#the-apple-watch-app) above. One row by default.
    - **Heart rate band** — how strongly the zone colours are drawn behind the exercise name on the Watch, from barely there to full strength, with a preview to judge it against. Only shown when the Watch records Apple workouts.
    - **Remember an exercise across workouts** — on by default: a wheel opens on the last time you did that exercise, whichever workout you did it in, so splitting or reorganising a routine keeps your numbers. Turn it off if you want each workout to remember its own — a heavy day and a light day that share an exercise.

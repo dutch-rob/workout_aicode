@@ -177,6 +177,16 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     /// when the rest timer is switched on in Settings.
     var restSeconds: Int = defaultRestSeconds
 
+    /// Machines that take weight OFF you rather than adding it — an assisted
+    /// chin-up or dip. What you set on the machine is how much of your own
+    /// weight it carries, so the weight actually lifted is your body weight
+    /// MINUS that setting, and a bigger number on the machine is an easier set.
+    ///
+    /// The wheel shows the machine's number, because that is what you set at
+    /// the machine; what is logged is the weight lifted, because that is what
+    /// the logs and the statistics are about.
+    var subtractsFromBodyWeight: Bool = false
+
     var kind: ExerciseKind {
         get { ExerciseKind(rawValue: kindRaw) ?? .strength }
         set { kindRaw = newValue.rawValue }
@@ -210,7 +220,8 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
          isFavourite: Bool = false,
          restSeconds: Int = defaultRestSeconds,
          kind: ExerciseKind = .strength,
-         aerobicActivity: AerobicActivity? = nil) {
+         aerobicActivity: AerobicActivity? = nil,
+         subtractsFromBodyWeight: Bool = false) {
         let clampedNumberOfSeries = max(0, numberOfSeries)
         let clampedLowest = max(0, lowestWeight)
         let clampedHighest = max(clampedLowest, highestWeight)
@@ -230,12 +241,13 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         self.restSeconds = restSeconds
         self.kindRaw = kind.rawValue
         self.aerobicActivityRaw = aerobicActivity?.rawValue
+        self.subtractsFromBodyWeight = subtractsFromBodyWeight
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement, movementType
         case primaryMuscle, secondaryMuscles, libraryKey, isFavourite, restSeconds
-        case kind, aerobicActivity
+        case kind, aerobicActivity, subtractsFromBodyWeight
     }
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -263,6 +275,9 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
             .flatMap(ExerciseKind.init(rawValue:)) ?? .strength
         let activity = (try c.decodeIfPresent(String.self, forKey: .aerobicActivity))
             .flatMap(AerobicActivity.init(rawValue:))
+        // Exports from before assisted machines existed describe an exercise
+        // that adds weight rather than taking it off.
+        let subtracts = try c.decodeIfPresent(Bool.self, forKey: .subtractsFromBodyWeight) ?? false
         self.init(id: id, name: name,
                   numberOfSeries: numberOfSeries,
                   lowestWeight: lowestWeight,
@@ -275,7 +290,8 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
                   isFavourite: favourite,
                   restSeconds: rest,
                   kind: kind,
-                  aerobicActivity: activity)
+                  aerobicActivity: activity,
+                  subtractsFromBodyWeight: subtracts)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -293,6 +309,7 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
         try c.encode(restSeconds, forKey: .restSeconds)
         try c.encode(kind.rawValue, forKey: .kind)
         try c.encodeIfPresent(aerobicActivity?.rawValue, forKey: .aerobicActivity)
+        try c.encode(subtractsFromBodyWeight, forKey: .subtractsFromBodyWeight)
     }
 }
 
@@ -652,6 +669,59 @@ final class AerobicResult: Identifiable, Codable {
     }
 }
 
+/// What an assisted set assumed, for the sets where the machine takes weight
+/// off you instead of adding it.
+///
+/// `WorkoutLog.weights` holds the weight actually LIFTED — body weight minus
+/// what the machine was carrying — because that is the number the logs, the
+/// graphs and the one-rep-max estimates are about. This records what that was
+/// worked out from, so a set stays readable years later: the body weight the
+/// app believed at the time, and what was set on the machine.
+///
+/// A separate entity for the reason AerobicResult is one: WorkoutLog's live
+/// class is V2's, and adding columns to it means freezing a copy and making a
+/// new class of the same name, which SwiftData resolves by silently dropping
+/// the new properties. See the note above WorkoutLogSchemaV6.
+@Model
+final class AssistedResult: Identifiable, Codable {
+    var id: UUID = UUID()
+    /// The WorkoutLog this belongs to.
+    var logId: UUID = UUID()
+    /// What the app took the user's body weight to be, in kilograms, at the
+    /// moment the set was logged — from Health, or typed in Settings.
+    var bodyWeight: Double = 0
+    /// What was set on the machine, per series: how much of the body weight it
+    /// was carrying. Same length as the log's weights.
+    var machineSettings: [Int] = []
+
+    init(id: UUID = UUID(), logId: UUID, bodyWeight: Double, machineSettings: [Int]) {
+        self.id = id
+        self.logId = logId
+        self.bodyWeight = bodyWeight
+        self.machineSettings = machineSettings
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, logId, bodyWeight, machineSettings
+    }
+    convenience init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id:              try c.decode(UUID.self, forKey: .id),
+            logId:           try c.decode(UUID.self, forKey: .logId),
+            bodyWeight:      try c.decodeIfPresent(Double.self, forKey: .bodyWeight) ?? 0,
+            machineSettings: try c.decodeIfPresent([Int].self, forKey: .machineSettings) ?? []
+        )
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(logId, forKey: .logId)
+        try c.encode(bodyWeight, forKey: .bodyWeight)
+        try c.encode(machineSettings, forKey: .machineSettings)
+    }
+}
+
 // V7 adds draft sessions.
 //
 // A separate entity again, and for the same reason AerobicResult is one: not a
@@ -743,15 +813,34 @@ typealias WorkoutLog = WorkoutLogSchemaV2.WorkoutLog
 // UserDefaults, deletes the V1 rows, then in `didMigrate` (V2 schema active)
 // recreates one V2 row per V1 entry — preserving every set of weights/reps.
 
+// V8 adds assisted machines: a flag on ExerciseDef, and AssistedResult to hold
+// what each assisted set was worked out from. ExerciseDef has gained fields
+// before and is the live class, so a new column there is ordinary; the per-set
+// numbers go in an entity of their own for the reason given above AssistedResult.
+enum WorkoutLogSchemaV8: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(8, 0, 0) }
+    static var models: [any PersistentModel.Type] {
+        [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self,
+         AerobicResult.self, DraftSession.self, AssistedResult.self]
+    }
+}
+
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self,
          WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self, WorkoutLogSchemaV5.self,
-         WorkoutLogSchemaV6.self, WorkoutLogSchemaV7.self]
+         WorkoutLogSchemaV6.self, WorkoutLogSchemaV7.self, WorkoutLogSchemaV8.self]
     }
     static var stages: [MigrationStage] {
-        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7]
+        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7, v7toV8]
     }
+
+    /// One new entity and one new column with a default — see
+    /// WorkoutLogSchemaV8.
+    static let v7toV8 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV7.self,
+        toVersion:   WorkoutLogSchemaV8.self
+    )
 
     /// One new entity, nothing else touched — see WorkoutLogSchemaV7.
     static let v6toV7 = MigrationStage.lightweight(

@@ -160,6 +160,10 @@ struct MacLogsView: View {
     private func sets(_ log: WorkoutLog) -> some View {
         let previous = LogComparison.previous(for: log.exerciseId, before: log.date, in: logs)
         let count = max(log.weights.count, log.reps.count)
+        // Half of this is the difference worth colouring — see
+        // LogComparison.tolerance. It matters for the assisted machines, whose
+        // logged weight moves with the user's body weight.
+        let incrementForLog = exercises.first(where: { $0.id == log.exerciseId })?.weightIncrement
         return HStack(spacing: 10) {
             ForEach(0..<count, id: \.self) { i in
                 let weight = i < log.weights.count ? log.weights[i] : 0
@@ -171,13 +175,15 @@ struct MacLogsView: View {
                 VStack(spacing: 0) {
                     Text("\(weight)")
                         .foregroundStyle(LogComparison.weightColour(current: weight,
-                                                                    previous: previousWeight))
+                                                                    previous: previousWeight,
+                                                                    increment: incrementForLog))
                     Text("\(reps)")
                         .font(.caption)
                         .foregroundStyle(LogComparison.repsColour(current: reps,
                                                                   previous: previousReps,
                                                                   currentWeight: weight,
-                                                                  previousWeight: previousWeight))
+                                                                  previousWeight: previousWeight,
+                                                                  increment: incrementForLog))
                 }
                 .monospacedDigit()
                 .frame(minWidth: 26)

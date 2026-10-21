@@ -226,7 +226,13 @@ struct ContentView: View {
         // as each set is logged would put the network in the middle of a
         // workout; only what is new is sent, so this stays cheap.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { uploadSharedDataIfConsented() }
+            if phase == .active {
+                uploadSharedDataIfConsented()
+                // This morning's weigh-in rather than last month's, for the
+                // machines that take weight off you. Does nothing unless the
+                // user asked for Health to be the source.
+                Task { await HealthBodyWeight.refresh() }
+            }
         }
         // When the workout session ends (finished or quit), pop back to the list.
         // Driven from here (not the log view's dismiss()) so it's reliable with

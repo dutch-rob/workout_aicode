@@ -416,6 +416,15 @@ struct EditExerciseView: View {
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
             } label: { Text("Weight increment") }
+
+            Toggle(isOn: $exercise.subtractsFromBodyWeight) {
+                Text("Subtracted from body weight")
+            }
+            if exercise.subtractsFromBodyWeight {
+                Text("For machines that take weight off you instead of adding it, such as an assisted chin-up or dip. The wheels show what you set on the machine; what is logged is what you lifted — your body weight less that setting — so the graphs and trends read the right way round. Your body weight comes from Settings.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             }
 
             // Shown whether or not the timer is switched on, so the value is
@@ -815,7 +824,8 @@ struct LogExerciseView: View {
                 if exercise.kind == .aerobic {
                     aerobicContent(for: exercise)
                 } else {
-                    Text("weight used").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(exercise.subtractsFromBodyWeight ? "set on the machine" : "weight used")
+                        .font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
                     weightPickers(for: exercise)
                     Text("repetitions").font(.system(size: 18)).frame(maxWidth: .infinity, alignment: .leading)
                     repsPickers(for: exercise)
@@ -1068,7 +1078,19 @@ struct LogExerciseView: View {
 
     private func prepareBuffers() {
         let last = store.lastEntries(for: workout)
-        weights = exerciseIds.map { exId in last[exId]?.weights ?? [] }
+        weights = exerciseIds.map { exId in
+            guard let log = last[exId] else { return [] }
+            // An assisted machine's wheel shows what you SET on it, so it has
+            // to open on last time's setting — the log holds what was lifted,
+            // which is a different number and would creep every session as
+            // body weight moved.
+            if allExercises.first(where: { $0.id == exId })?.subtractsFromBodyWeight == true,
+               let assisted = store.assistedResult(forLogId: log.id),
+               !assisted.machineSettings.isEmpty {
+                return assisted.machineSettings
+            }
+            return log.weights
+        }
         reps = exerciseIds.map { exId in last[exId]?.reps ?? [] }
         // Pre-filled from the last session of each aerobic exercise, so the
         // wheel opens where it was left, exactly like the weight wheels.
@@ -1156,12 +1178,7 @@ struct LogExerciseView: View {
         // If this is the last unlogged exercise, log and dismiss immediately
         if loggedIndices.count + 1 >= exerciseIds.count {
             loggedIndices.insert(currentIndex)
-            let log = WorkoutLog(workoutId: workout.id,
-                                 exerciseId: ex.id,
-                                 weights: weights[currentIndex],
-                                 reps: reps[currentIndex])
-            context.insert(log)
-            recordAerobicResult(for: ex, log: log)
+            writeLog(for: ex)
             handoff.noteActivity()
             // Pop first, then end the session and record to Health.
             let endedAt = Date()
@@ -1171,12 +1188,7 @@ struct LogExerciseView: View {
             return
         }
         loggedIndices.insert(currentIndex)
-        let log = WorkoutLog(workoutId: workout.id,
-                             exerciseId: ex.id,
-                             weights: weights[currentIndex],
-                             reps: reps[currentIndex])
-        context.insert(log)
-        recordAerobicResult(for: ex, log: log)
+        writeLog(for: ex)
         handoff.noteActivity()
 
         guard loggedIndices.count < exerciseIds.count else {
@@ -1240,6 +1252,38 @@ struct LogExerciseView: View {
     /// Store what an aerobic session measured beside the log that records it.
     /// Nothing is written for a strength exercise, and nothing for an aerobic
     /// one that was never actually run.
+    /// Writes the set to the store, converting an assisted machine's setting
+    /// into the weight actually lifted.
+    ///
+    /// The wheels hold what is ON THE MACHINE. For an assisted chin-up that is
+    /// how much of your own weight it is carrying, so what you lifted is your
+    /// body weight minus it — and that is what the log holds, because the
+    /// graphs, the trends and the one-rep-max estimates are all about the
+    /// weight lifted. What it was worked out from is kept beside it in an
+    /// `AssistedResult`, so the set still means something in a year when the
+    /// body weight has moved.
+    @discardableResult
+    private func writeLog(for exercise: ExerciseDef) -> WorkoutLog {
+        let onTheWheels = weights[currentIndex]
+        let assisted = exercise.subtractsFromBodyWeight
+        let bodyWeight = BodyWeight.currentKg
+        let lifted = assisted
+            ? onTheWheels.map { BodyWeight.liftedKg(bodyWeight: bodyWeight, machineSetting: $0) }
+            : onTheWheels
+        let log = WorkoutLog(workoutId: workout.id,
+                             exerciseId: exercise.id,
+                             weights: lifted,
+                             reps: reps[currentIndex])
+        context.insert(log)
+        if assisted {
+            context.insert(AssistedResult(logId: log.id,
+                                          bodyWeight: bodyWeight,
+                                          machineSettings: onTheWheels))
+        }
+        recordAerobicResult(for: exercise, log: log)
+        return log
+    }
+
     private func recordAerobicResult(for exercise: ExerciseDef, log: WorkoutLog) {
         guard exercise.kind == .aerobic else { return }
         // What was actually done, if a session ran. Otherwise what the wheel
@@ -1526,7 +1570,8 @@ struct LogsListView: View {
                     let current = i < log.weights.count ? log.weights[i] : 0
                     let prev = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
                     Text("\(current)")
-                        .foregroundStyle(colorForWeight(current: current, previous: prev))
+                        .foregroundStyle(colorForWeight(current: current, previous: prev,
+                                                        exerciseId: log.exerciseId))
                         .font(.headline)
                 }
             }
@@ -1538,7 +1583,9 @@ struct LogsListView: View {
                     let currentW = i < log.weights.count ? log.weights[i] : 0
                     let prevW = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
                     Text("\(current)")
-                        .foregroundStyle(colorForReps(current: current, previous: prevRep, currentWeight: currentW, previousWeight: prevW))
+                        .foregroundStyle(colorForReps(current: current, previous: prevRep,
+                                                      currentWeight: currentW, previousWeight: prevW,
+                                                      exerciseId: log.exerciseId))
                         .font(.headline)
                 }
             }
@@ -1554,13 +1601,22 @@ struct LogsListView: View {
         LogComparison.previous(for: exerciseId, before: date, in: logs)
     }
 
-    private func colorForWeight(current: Int, previous: Int?) -> Color {
-        LogComparison.weightColour(current: current, previous: previous)
+    /// The exercise's own increment, so a difference smaller than half of it
+    /// is left uncoloured — see `LogComparison.tolerance`.
+    private func increment(for exerciseId: UUID) -> Int? {
+        exercises.first(where: { $0.id == exerciseId })?.weightIncrement
     }
 
-    private func colorForReps(current: Int, previous: Int?, currentWeight: Int, previousWeight: Int?) -> Color {
+    private func colorForWeight(current: Int, previous: Int?, exerciseId: UUID) -> Color {
+        LogComparison.weightColour(current: current, previous: previous,
+                                   increment: increment(for: exerciseId))
+    }
+
+    private func colorForReps(current: Int, previous: Int?, currentWeight: Int,
+                              previousWeight: Int?, exerciseId: UUID) -> Color {
         LogComparison.repsColour(current: current, previous: previous,
-                                 currentWeight: currentWeight, previousWeight: previousWeight)
+                                 currentWeight: currentWeight, previousWeight: previousWeight,
+                                 increment: increment(for: exerciseId))
     }
 }
 
@@ -2227,6 +2283,18 @@ struct SettingsView: View {
     private var watchRecordsWorkouts: Bool {
         showsWatchSettings && watchWorkoutMode == .appleWorkout
     }
+    private var bodyWeightSource: BodyWeightSource {
+        BodyWeightSource(rawValue: bodyWeightSourceRaw) ?? .health
+    }
+    /// Only shown to people who have an exercise that needs it: a body weight
+    /// is of no interest to this app otherwise, and asking for one would look
+    /// like the start of something it does not do.
+    private var usesBodyWeight: Bool {
+        exercises.contains { $0.subtractsFromBodyWeight }
+    }
+    @AppStorage(BodyWeight.sourceKey) private var bodyWeightSourceRaw = BodyWeightSource.health.rawValue
+    @AppStorage(BodyWeight.manualKey) private var bodyWeightManual = BodyWeight.fallbackKg
+    @State private var bodyWeightFromHealth: Double? = BodyWeight.healthKg
     @AppStorage(WatchPreferences.zoneTintKey) private var zoneTint = WatchPreferences.defaultZoneTint
     @AppStorage(WatchPreferences.restTapsKey) private var restTaps = WatchPreferences.defaultRestTaps
     @AppStorage(WatchPreferences.wheelRowsKey) private var wheelRows = WatchPreferences.defaultWheelRows
@@ -2288,6 +2356,48 @@ struct SettingsView: View {
                 }
                 }
             }
+            }
+
+            if usesBodyWeight {
+                Section {
+                    Picker(selection: $bodyWeightSourceRaw) {
+                        ForEach(BodyWeightSource.allCases) { source in
+                            Text(source.label).tag(source.rawValue)
+                        }
+                    } label: {
+                        Label("Body weight", systemImage: "figure.stand")
+                    }
+                    .pickerStyle(.inline)
+                    .onChange(of: bodyWeightSourceRaw) { _, _ in
+                        Task {
+                            if bodyWeightSource == .health {
+                                await HealthBodyWeight.requestAuthorization()
+                                bodyWeightFromHealth = await HealthBodyWeight.refresh()
+                            }
+                            store.reloadAll()
+                        }
+                    }
+
+                    if bodyWeightSource == .manual {
+                        LabeledContent {
+                            TextField("", value: $bodyWeightManual, format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .onChange(of: bodyWeightManual) { _, _ in store.reloadAll() }
+                        } label: { Text("Your weight (kg)") }
+                    } else if let kg = bodyWeightFromHealth {
+                        LabeledContent {
+                            Text(kg.formatted(.number.precision(.fractionLength(0...1))) + " kg")
+                                .foregroundStyle(.secondary)
+                        } label: { Text("Latest in Health") }
+                    } else {
+                        Text("No weight found in Apple Health yet. Until one arrives, \(bodyWeightManual.formatted(.number.precision(.fractionLength(0...1)))) kg is used. Choose “Set here” to type your own.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("Used for exercises marked “subtracted from body weight”, such as an assisted chin-up: what you lifted is your body weight less what the machine was carrying. Taken from Apple Health it follows your weigh-ins on its own; set here it stays as you type it. Either way, the weight used is recorded with each set, so an old log still adds up.")
+                }
             }
 
             if showsWatchSettings {

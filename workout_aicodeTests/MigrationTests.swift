@@ -208,6 +208,36 @@ struct NewExerciseNumberTests {
 // back as their defaults. It looks exactly like a persistence bug: the value is
 // set, the save succeeds, and the row comes back with the default. Every one of
 // these tests opens a container, so they take turns.
+/// Half an increment of slack in the log's colours, so a kilo of body weight
+/// does not repaint every assisted set — see `LogComparison.tolerance`.
+@Test func aSmallChangeInBodyWeightLeavesTheLogUncoloured() {
+    // 5 kg increment: anything up to 2.5 kg is not a change worth colouring.
+    #expect(LogComparison.weightColour(current: 54, previous: 52, increment: 5) == .primary)
+    #expect(LogComparison.weightColour(current: 50, previous: 52, increment: 5) == .primary)
+    // Beyond it, the colour comes back.
+    #expect(LogComparison.weightColour(current: 55, previous: 52, increment: 5) == .green)
+    #expect(LogComparison.weightColour(current: 49, previous: 52, increment: 5) == .red)
+}
+
+@Test func anOrdinaryIncrementStillColoursEverySet() {
+    // The whole point of the slack is that ordinary training never meets it:
+    // weights move by whole increments, which always clear half of one.
+    #expect(LogComparison.weightColour(current: 55, previous: 50, increment: 5) == .green)
+    #expect(LogComparison.weightColour(current: 45, previous: 50, increment: 5) == .red)
+    #expect(LogComparison.weightColour(current: 50, previous: 50, increment: 5) == .primary)
+}
+
+@Test func anExtraRepSurvivesAWobbleInBodyWeight() {
+    // One more rep at a kilo less is still progress on an assisted machine.
+    #expect(LogComparison.repsColour(current: 9, previous: 8,
+                                     currentWeight: 51, previousWeight: 52,
+                                     increment: 5) == .green)
+    // Ten kilos less is not, slack or no slack.
+    #expect(LogComparison.repsColour(current: 9, previous: 8,
+                                     currentWeight: 42, previousWeight: 52,
+                                     increment: 5) == .primary)
+}
+
 @Suite(.serialized)
 struct SchemaMigrationTests {
 
@@ -229,8 +259,11 @@ struct SchemaMigrationTests {
     @MainActor private func logEditStore() throws -> ModelContext {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("logedit-\(UUID().uuidString).sqlite")
+        // The CURRENT schema, so these tests see what the app sees. On V7 the
+        // assisted-machine tests failed without a word: AssistedResult is not
+        // in that schema, so inserting one had nowhere to go.
         let container = try ModelContainer(
-            for: Schema(versionedSchema: WorkoutLogSchemaV7.self),
+            for: Schema(versionedSchema: WorkoutLogSchemaV8.self),
             configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
         return ModelContext(container)
     }
@@ -243,6 +276,66 @@ struct SchemaMigrationTests {
         context.insert(log)
         try? context.save()
         return log
+    }
+
+    // MARK: Machines that take weight off you
+    //
+    // An assisted chin-up is logged as the weight LIFTED — body weight less
+    // what the machine carried — while the wheels show the machine's own
+    // number. Getting that backwards would put a rising line on a graph every
+    // time the user got heavier, which is the opposite of the truth.
+
+    @MainActor @Test func anAssistedSetLogsTheWeightLiftedNotTheMachineSetting() throws {
+        let defaults = UserDefaults.standard
+        let oldSource = defaults.string(forKey: BodyWeight.sourceKey)
+        let oldManual = defaults.double(forKey: BodyWeight.manualKey)
+        defaults.set(BodyWeightSource.manual.rawValue, forKey: BodyWeight.sourceKey)
+        defaults.set(82.0, forKey: BodyWeight.manualKey)
+        defer {
+            if let oldSource { defaults.set(oldSource, forKey: BodyWeight.sourceKey) }
+            else { defaults.removeObject(forKey: BodyWeight.sourceKey) }
+            if oldManual > 0 { defaults.set(oldManual, forKey: BodyWeight.manualKey) }
+            else { defaults.removeObject(forKey: BodyWeight.manualKey) }
+        }
+
+        let context = try logEditStore()
+        let store = AppStore(context: context)
+        let chinUp = ExerciseDef(name: "Assisted chin-up", subtractsFromBodyWeight: true)
+        context.insert(chinUp)
+        try context.save()
+        store.reloadAll()
+
+        let logId = UUID()
+        store.addWatchLog(id: logId, date: Date(), workoutId: UUID(),
+                          exerciseId: chinUp.id,
+                          weights: [30, 35], reps: [8, 6])
+
+        let logs = try context.fetch(FetchDescriptor<WorkoutLog>())
+        let log = try #require(logs.first { $0.id == logId })
+        // 82 kg less the 30 the machine carried, and less the 35.
+        #expect(log.weights == [52, 47])
+
+        let assisted = try #require(store.assistedResult(forLogId: logId))
+        #expect(assisted.machineSettings == [30, 35])
+        #expect(assisted.bodyWeight == 82)
+    }
+
+    @MainActor @Test func anOrdinaryExerciseIsLoggedExactlyAsItWasSet() throws {
+        let context = try logEditStore()
+        let store = AppStore(context: context)
+        let press = ExerciseDef(name: "Chest press")
+        context.insert(press)
+        try context.save()
+        store.reloadAll()
+
+        let logId = UUID()
+        store.addWatchLog(id: logId, date: Date(), workoutId: UUID(),
+                          exerciseId: press.id, weights: [50, 55], reps: [10, 8])
+
+        let logs = try context.fetch(FetchDescriptor<WorkoutLog>())
+        let log = try #require(logs.first { $0.id == logId })
+        #expect(log.weights == [50, 55])
+        #expect(store.assistedResult(forLogId: logId) == nil)
     }
 
     // MARK: What a wheel opens on, after a routine is split
