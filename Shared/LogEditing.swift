@@ -176,6 +176,12 @@ enum LogEditing {
         guard let result = assistedResults(forLog: log.id, in: context).first,
               result.bodyWeight > 0,
               index < log.weights.count else { return }
+        // Only when the stored body weight can actually account for the new
+        // number. A set logged before the body weight was known holds one that
+        // is too small — correcting the weight to what was really lifted would
+        // then compute a NEGATIVE machine setting and clamp it to zero,
+        // throwing away the one number in that record still worth having.
+        guard result.bodyWeight > Double(log.weights[index]) else { return }
         var settings = result.machineSettings
         while settings.count <= index { settings.append(0) }
         settings[index] = max(0, Int((result.bodyWeight - Double(log.weights[index])).rounded()))

@@ -238,9 +238,9 @@ final class AppStore: ObservableObject {
         // here, in the one place that writes a log from the Watch.
         let exercise = exercises.first { $0.id == exerciseId }
         let assisted = exercise?.subtractsFromBodyWeight == true
-        let bodyWeight = BodyWeight.currentKg
+        let bodyWeight = BodyWeight.current
         let lifted = assisted
-            ? weights.map { BodyWeight.liftedKg(bodyWeight: bodyWeight, machineSetting: $0) }
+            ? weights.map { BodyWeight.lifted(bodyWeight: bodyWeight, machineSetting: $0) }
             : weights
 
         let log = WorkoutLog(id: id, date: date, workoutId: workoutId,

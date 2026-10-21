@@ -252,6 +252,21 @@ struct NewExerciseNumberTests {
 // back as their defaults. It looks exactly like a persistence bug: the value is
 // set, the save succeeds, and the row comes back with the default. Every one of
 // these tests opens a container, so they take turns.
+/// The bug this came from: body weight unknown (or in the other unit) made the
+/// subtraction negative, which was clamped to zero — so an assisted chin-up at
+/// a machine setting of 130 was logged as a set lifted at 0.
+@Test func anAssistedSetIsNotLoggableWithoutABodyWeight() {
+    #expect(BodyWeight.canCompute(machineSetting: 130) == false || BodyWeight.isKnown)
+}
+
+@Test func aMachineHeavierThanTheUserMeansTheUnitsDisagree() {
+    // 97 (kilograms) against a machine reading 130 (pounds): the sum is not
+    // one to log, whatever it comes to.
+    #expect(BodyWeight.lifted(bodyWeight: 97, machineSetting: 130) == 0)
+    // Which is why the caller asks first, rather than trusting the result.
+    #expect(BodyWeight.lifted(bodyWeight: 214, machineSetting: 130) == 84)
+}
+
 /// Half an increment of slack in the log's colours, so a kilo of body weight
 /// does not repaint every assisted set — see `LogComparison.tolerance`.
 @Test func aSmallChangeInBodyWeightLeavesTheLogUncoloured() {
@@ -345,6 +360,28 @@ struct SchemaMigrationTests {
         let result = try #require(LogEditing.assistedResults(forLog: log.id, in: context).first)
         #expect(result.machineSettings == [27])   // 82 - 55
         #expect(result.bodyWeight == 82)          // the day's weight, not today's
+    }
+
+    @MainActor @Test func correctingASetLoggedWithoutABodyWeightKeepsTheMachineSetting() throws {
+        let context = try logEditStore()
+        // What the bug produced: body weight unknown, so the subtraction was
+        // clamped to zero and the body weight recorded was the wrong one.
+        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: UUID(), exerciseId: UUID(),
+                             weights: [0], reps: [8])
+        context.insert(log)
+        context.insert(AssistedResult(logId: log.id, bodyWeight: 75, machineSettings: [130]))
+        try context.save()
+
+        // The user types what they actually lifted.
+        log.weights[0] = 84
+        LogEditing.realignAssisted(log: log, set: 0, in: context)
+        try context.save()
+
+        // 75 cannot account for 84, so the machine's own number is left alone
+        // rather than being recomputed into nonsense.
+        let result = try #require(LogEditing.assistedResults(forLog: log.id, in: context).first)
+        #expect(result.machineSettings == [130])
     }
 
     @MainActor @Test func discardingPutsAnAssistedSetBackAsItWas() throws {

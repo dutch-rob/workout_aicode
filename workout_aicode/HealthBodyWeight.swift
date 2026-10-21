@@ -24,19 +24,34 @@ enum HealthBodyWeight {
         try? await store.requestAuthorization(toShare: [], read: [bodyMass])
     }
 
-    /// The most recent reading, in kilograms, or nil when there is none or
-    /// Health will not say. HealthKit does not report a refused read, so this
-    /// cannot tell "no permission" from "never weighed yourself" — and does
-    /// not pretend to.
-    static func latestKilograms() async -> Double? {
+    /// The unit this user reads their own weight in — pounds, stones or
+    /// kilograms — as set in the Health app.
+    ///
+    /// This app has no unit of its own: its wheels are numbers, and a body
+    /// weight has to arrive in the same ones. Reading Health in kilograms for
+    /// someone whose machine says 130 pounds is how a set of an assisted
+    /// chin-up came to be logged as zero.
+    private static func preferredUnit(for type: HKQuantityType) async -> HKUnit {
+        await withCheckedContinuation { continuation in
+            store.preferredUnits(for: [type]) { units, _ in
+                continuation.resume(returning: units[type] ?? .gramUnit(with: .kilo))
+            }
+        }
+    }
+
+    /// The most recent reading, in the user's own unit, or nil when there is
+    /// none or Health will not say. HealthKit does not report a refused read,
+    /// so this cannot tell "no permission" from "never weighed yourself" — and
+    /// does not pretend to.
+    static func latestWeight() async -> Double? {
         guard HKHealthStore.isHealthDataAvailable(), let bodyMass else { return nil }
+        let unit = await preferredUnit(for: bodyMass)
         return await withCheckedContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
             let query = HKSampleQuery(sampleType: bodyMass, predicate: nil,
                                       limit: 1, sortDescriptors: [sort]) { _, samples, _ in
-                let kg = (samples?.first as? HKQuantitySample)?
-                    .quantity.doubleValue(for: .gramUnit(with: .kilo))
-                continuation.resume(returning: kg)
+                let weight = (samples?.first as? HKQuantitySample)?.quantity.doubleValue(for: unit)
+                continuation.resume(returning: weight)
             }
             store.execute(query)
         }
@@ -48,8 +63,8 @@ enum HealthBodyWeight {
     @discardableResult
     static func refresh() async -> Double? {
         guard BodyWeight.source == .health else { return nil }
-        guard let kg = await latestKilograms(), kg > 0 else { return nil }
-        UserDefaults.standard.set(kg, forKey: BodyWeight.healthCacheKey)
-        return kg
+        guard let weight = await latestWeight(), weight > 0 else { return nil }
+        UserDefaults.standard.set(weight, forKey: BodyWeight.healthCacheKey)
+        return weight
     }
 }

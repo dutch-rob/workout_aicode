@@ -134,11 +134,17 @@ enum DemoMode {
     /// the screens that only appear for one can be looked at without building
     /// a workout by hand. `-SRWDemo -SRWAssisted`.
     static func markFirstExerciseAssisted(in ctx: ModelContext) {
+        // The one the demo log screen opens on, not whichever the store hands
+        // back first: a fetch has no order, so this marked a different
+        // exercise from one run to the next.
         guard CommandLine.arguments.contains("-SRWAssisted"),
-              let first = try? ctx.fetch(FetchDescriptor<ExerciseDef>()).first(where: {
-                  $0.kind == .strength
-              }) else { return }
-        first.subtractsFromBodyWeight = true
+              let workout = try? ctx.fetch(FetchDescriptor<WorkoutDef>())
+                  .sorted(by: { $0.sortIndex < $1.sortIndex })
+                  .first(where: { !$0.exerciseOrder.isEmpty }),
+              let firstId = workout.exerciseOrder.first,
+              let exercise = try? ctx.fetch(FetchDescriptor<ExerciseDef>())
+                  .first(where: { $0.id == firstId }) else { return }
+        exercise.subtractsFromBodyWeight = true
         try? ctx.save()
     }
 

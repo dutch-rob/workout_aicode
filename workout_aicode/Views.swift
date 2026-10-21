@@ -820,6 +820,14 @@ struct LogExerciseView: View {
             buttonRow.padding(.trailing, sensorBand)
             Text(exercise?.name ?? "").font(.title2).bold()
                 .padding(.trailing, sensorBand)
+            if let exercise, let problem = bodyWeightProblem(for: exercise) {
+                Text(problem)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 8)
+                    .padding(.trailing, sensorBand)
+            }
             if let exercise {
                 if exercise.kind == .aerobic {
                     aerobicContent(for: exercise)
@@ -1015,8 +1023,32 @@ struct LogExerciseView: View {
     /// Nothing to log until a session has actually run: logging the wheel's
     /// number on its own would record a plan as though it were a measurement.
     private func canLog(_ exercise: ExerciseDef?) -> Bool {
-        guard let exercise, exercise.kind == .aerobic else { return true }
+        guard let exercise else { return true }
+        // An assisted machine's set cannot be logged until the app knows what
+        // to subtract it from. It used to log it anyway: body weight unknown
+        // (or in the other unit) made the subtraction negative, which was
+        // clamped to a logged weight of zero — a wrong number, silently, in
+        // the one record that cannot be reconstructed later.
+        if exercise.subtractsFromBodyWeight, bodyWeightProblem(for: exercise) != nil {
+            return false
+        }
+        guard exercise.kind == .aerobic else { return true }
         return summaryFor(currentIndex) != nil
+    }
+
+    /// Why an assisted set cannot be worked out yet, or nil when it can.
+    private func bodyWeightProblem(for exercise: ExerciseDef) -> String? {
+        guard exercise.subtractsFromBodyWeight else { return nil }
+        guard BodyWeight.isKnown else {
+            return "Set your body weight in Settings to log this exercise — what you lifted is your body weight less what the machine is carrying."
+        }
+        let onTheWheels = currentIndex < weights.count ? weights[currentIndex] : []
+        let heaviest = onTheWheels.max() ?? 0
+        guard BodyWeight.canCompute(machineSetting: heaviest) else {
+            let weight = BodyWeight.current.formatted(.number.precision(.fractionLength(0...1)))
+            return "The machine is set to \(heaviest), which is more than your body weight of \(weight). Check that both are in the same units — Settings holds your body weight."
+        }
+        return nil
     }
 
     /// What this exercise came to the last time it was logged, if anything.
@@ -1266,9 +1298,9 @@ struct LogExerciseView: View {
     private func writeLog(for exercise: ExerciseDef) -> WorkoutLog {
         let onTheWheels = weights[currentIndex]
         let assisted = exercise.subtractsFromBodyWeight
-        let bodyWeight = BodyWeight.currentKg
+        let bodyWeight = BodyWeight.current
         let lifted = assisted
-            ? onTheWheels.map { BodyWeight.liftedKg(bodyWeight: bodyWeight, machineSetting: $0) }
+            ? onTheWheels.map { BodyWeight.lifted(bodyWeight: bodyWeight, machineSetting: $0) }
             : onTheWheels
         let log = WorkoutLog(workoutId: workout.id,
                              exerciseId: exercise.id,
@@ -2340,8 +2372,8 @@ struct SettingsView: View {
         exercises.contains { $0.subtractsFromBodyWeight }
     }
     @AppStorage(BodyWeight.sourceKey) private var bodyWeightSourceRaw = BodyWeightSource.health.rawValue
-    @AppStorage(BodyWeight.manualKey) private var bodyWeightManual = BodyWeight.fallbackKg
-    @State private var bodyWeightFromHealth: Double? = BodyWeight.healthKg
+    @AppStorage(BodyWeight.manualKey) private var bodyWeightManual = 0
+    @State private var bodyWeightFromHealth: Double? = BodyWeight.health
     @AppStorage(WatchPreferences.zoneTintKey) private var zoneTint = WatchPreferences.defaultZoneTint
     @AppStorage(WatchPreferences.restTapsKey) private var restTaps = WatchPreferences.defaultRestTaps
     @AppStorage(WatchPreferences.wheelRowsKey) private var wheelRows = WatchPreferences.defaultWheelRows
@@ -2431,19 +2463,19 @@ struct SettingsView: View {
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .onChange(of: bodyWeightManual) { _, _ in store.reloadAll() }
-                        } label: { Text("Your weight (kg)") }
-                    } else if let kg = bodyWeightFromHealth {
+                        } label: { Text("Your weight") }
+                    } else if let weight = bodyWeightFromHealth {
                         LabeledContent {
-                            Text(kg.formatted(.number.precision(.fractionLength(0...1))) + " kg")
+                            Text(weight.formatted(.number.precision(.fractionLength(0...1))))
                                 .foregroundStyle(.secondary)
                         } label: { Text("Latest in Health") }
                     } else {
-                        Text("No weight found in Apple Health yet. Until one arrives, \(bodyWeightManual.formatted(.number.precision(.fractionLength(0...1)))) kg is used. Choose “Set here” to type your own.")
+                        Text("No weight found in Apple Health yet. Until one arrives, exercises that subtract from your body weight cannot be logged — choose “Set here” and type it in.")
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.orange)
                     }
                 } footer: {
-                    Text("Used for exercises marked “subtracted from body weight”, such as an assisted chin-up: what you lifted is your body weight less what the machine was carrying. Taken from Apple Health it follows your weigh-ins on its own; set here it stays as you type it. Either way, the weight used is recorded with each set, so an old log still adds up.")
+                    Text("Used for exercises marked “subtracted from body weight”, such as an assisted chin-up: what you lifted is your body weight less what the machine was carrying. **In the same units as your weights** — this app has no units of its own, so a body weight in kilograms against a machine set in pounds would be nonsense. From Apple Health it arrives in the units you read your weight in there, and follows your weigh-ins on its own. Either way, the weight used is recorded with each set, so an old log still adds up.")
                 }
             }
 

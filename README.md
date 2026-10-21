@@ -185,6 +185,8 @@ The wheels still show what you set on the machine, because that is what you do a
 
 Your body weight comes from Settings: from Apple Health, where it follows your weigh-ins on its own, or typed in and left alone. Nothing is ever written to Health.
 
+**In the same units as your weights.** This app has no units of its own — the wheels are numbers, and whether they mean kilograms or pounds is between you and your gym. A body weight in kilograms against a machine set in pounds is nonsense, so from Health it arrives in whichever unit you read your weight in there. Until a body weight is known, an exercise like this cannot be logged: the screen says so and the log button waits, rather than recording a set you did not do.
+
 One consequence worth knowing: because the logged weight moves with your body weight, the colours in your logs ignore any difference of half an increment or less. A kilo after breakfast is not a personal best.
 
 An exercise needs a name and a primary muscle group before it can be saved, and the name has to be one you are not already using. Without a muscle group an exercise cannot be found on the body picture or grouped with anything else. **quit** leaves without keeping your changes; on an exercise you have only just created, it removes it again rather than leaving a nameless one behind.
