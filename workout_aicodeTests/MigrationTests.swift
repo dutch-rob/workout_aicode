@@ -322,6 +322,53 @@ struct SchemaMigrationTests {
         return log
     }
 
+    // MARK: An edited assisted set stays self-consistent
+    //
+    // The Mac's log editor writes the weight LIFTED, which is what the column
+    // means. Left alone, the machine setting beside it would go on claiming a
+    // number that no longer adds up.
+
+    @MainActor @Test func correctingAnAssistedWeightMovesTheMachineSettingWithIt() throws {
+        let context = try logEditStore()
+        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: UUID(), exerciseId: UUID(),
+                             weights: [52], reps: [8])
+        context.insert(log)
+        context.insert(AssistedResult(logId: log.id, bodyWeight: 82, machineSettings: [30]))
+        try context.save()
+
+        // A typo corrected: it was 55 that was lifted, not 52.
+        log.weights[0] = 55
+        LogEditing.realignAssisted(log: log, set: 0, in: context)
+        try context.save()
+
+        let result = try #require(LogEditing.assistedResults(forLog: log.id, in: context).first)
+        #expect(result.machineSettings == [27])   // 82 - 55
+        #expect(result.bodyWeight == 82)          // the day's weight, not today's
+    }
+
+    @MainActor @Test func discardingPutsAnAssistedSetBackAsItWas() throws {
+        let context = try logEditStore()
+        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: UUID(), exerciseId: UUID(),
+                             weights: [52], reps: [8])
+        context.insert(log)
+        context.insert(AssistedResult(logId: log.id, bodyWeight: 82, machineSettings: [30]))
+        try context.save()
+
+        let snapshot = try LogEditing.snapshot(in: context)
+        log.weights[0] = 55
+        LogEditing.realignAssisted(log: log, set: 0, in: context)
+        try context.save()
+
+        _ = try LogEditing.restore(snapshot, in: context)
+        let restoredLog = try #require(
+            try context.fetch(FetchDescriptor<WorkoutLog>()).first { $0.id == log.id })
+        #expect(restoredLog.weights == [52])
+        let result = try #require(LogEditing.assistedResults(forLog: log.id, in: context).first)
+        #expect(result.machineSettings == [30])
+    }
+
     // MARK: Machines that take weight off you
     //
     // An assisted chin-up is logged as the weight LIFTED — body weight less

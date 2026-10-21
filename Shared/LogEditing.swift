@@ -29,6 +29,10 @@ struct LogSnapshot {
     /// way to end up unsure which is which.
     let logs: Data
     let aerobic: Data
+    /// The assisted sets' body weights and machine settings. Here for the same
+    /// reason the aerobic measurements are: editing a weight on an assisted
+    /// set rewrites one of these, and "discard" has to put that back too.
+    let assisted: Data
     /// What the logs looked like when this was taken, for telling whether
     /// anything actually changed.
     let signature: [String]
@@ -42,10 +46,12 @@ enum LogEditing {
     static func snapshot(in context: ModelContext) throws -> LogSnapshot {
         let logs = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
         let aerobic = (try? context.fetch(FetchDescriptor<AerobicResult>())) ?? []
+        let assisted = (try? context.fetch(FetchDescriptor<AssistedResult>())) ?? []
         let encoder = JSONEncoder()
         return LogSnapshot(takenAt: Date(),
                            logs: try encoder.encode(logs),
                            aerobic: try encoder.encode(aerobic),
+                           assisted: try encoder.encode(assisted),
                            signature: signature(of: logs))
     }
 
@@ -81,6 +87,7 @@ enum LogEditing {
         let decoder = JSONDecoder()
         let wanted = try decoder.decode([WorkoutLog].self, from: snapshot.logs)
         let wantedAerobic = try decoder.decode([AerobicResult].self, from: snapshot.aerobic)
+        let wantedAssisted = try decoder.decode([AssistedResult].self, from: snapshot.assisted)
 
         var restored = 0
         let current = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
@@ -102,6 +109,7 @@ enum LogEditing {
         // Whatever is left in byId was added after the copy was taken.
         for (id, log) in byId {
             for result in aerobicResults(forLog: id, in: context) { context.delete(result) }
+            for result in assistedResults(forLog: id, in: context) { context.delete(result) }
             context.delete(log)
         }
 
@@ -122,6 +130,22 @@ enum LogEditing {
         }
         for (_, result) in aerobicById { context.delete(result) }
 
+        // And the assisted sets' own numbers, which an edit to a weight here
+        // rewrites — see MacEditLogsView.
+        let currentAssisted = (try? context.fetch(FetchDescriptor<AssistedResult>())) ?? []
+        var assistedById = Dictionary(currentAssisted.map { ($0.id, $0) },
+                                      uniquingKeysWith: { a, _ in a })
+        for result in wantedAssisted {
+            if let existing = assistedById.removeValue(forKey: result.id) {
+                existing.logId = result.logId
+                existing.bodyWeight = result.bodyWeight
+                existing.machineSettings = result.machineSettings
+            } else {
+                context.insert(result)
+            }
+        }
+        for (_, result) in assistedById { context.delete(result) }
+
         try context.save()
         return restored
     }
@@ -131,6 +155,31 @@ enum LogEditing {
         let descriptor = FetchDescriptor<AerobicResult>(
             predicate: #Predicate<AerobicResult> { $0.logId == id })
         return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func assistedResults(forLog id: UUID,
+                                in context: ModelContext) -> [AssistedResult] {
+        let descriptor = FetchDescriptor<AssistedResult>(
+            predicate: #Predicate<AssistedResult> { $0.logId == id })
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    /// An assisted set's weight was edited. The log holds what was LIFTED, so
+    /// the machine's own number has to follow it or the two would contradict
+    /// each other: body weight 82, lifted 55, machine still saying 30.
+    ///
+    /// The body weight used is the one recorded WITH THAT SET, not today's —
+    /// the set happened at the weight the user was then, and correcting a typo
+    /// in it is not a reason to restate what they weighed.
+    static func realignAssisted(log: WorkoutLog, set index: Int,
+                                in context: ModelContext) {
+        guard let result = assistedResults(forLog: log.id, in: context).first,
+              result.bodyWeight > 0,
+              index < log.weights.count else { return }
+        var settings = result.machineSettings
+        while settings.count <= index { settings.append(0) }
+        settings[index] = max(0, Int((result.bodyWeight - Double(log.weights[index])).rounded()))
+        result.machineSettings = settings
     }
 
     // MARK: Keeping a row tidy

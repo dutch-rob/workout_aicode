@@ -294,6 +294,9 @@ struct MacEditLogsView: View {
                     guard let log = record(row.id) else { return }
                     LogEditing.extend(log, toSets: i + 1)
                     log.weights[i] = value
+                    // On an assisted machine this column is the weight lifted;
+                    // the machine's own number is kept in step with it.
+                    LogEditing.realignAssisted(log: log, set: i, in: context)
                 })
     }
 

@@ -351,6 +351,12 @@ struct MacExerciseForm: View {
                         TextField("", value: $exercise.weightIncrement, format: .number)
                             .frame(width: 80)
                     }
+                    Toggle("Subtracted from body weight", isOn: $exercise.subtractsFromBodyWeight)
+                    if exercise.subtractsFromBodyWeight {
+                        Text("For machines that take weight off you instead of adding it, such as an assisted chin-up. What is logged is what you lifted — your body weight less what you set on the machine. Your body weight is set on the iPhone.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 muscleSection
