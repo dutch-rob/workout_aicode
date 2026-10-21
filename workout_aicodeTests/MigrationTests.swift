@@ -267,6 +267,57 @@ struct NewExerciseNumberTests {
     #expect(BodyWeight.lifted(bodyWeight: 214, machineSetting: 130) == 84)
 }
 
+// MARK: - Units
+//
+// Weights are stored in grams so that switching between kilograms and pounds
+// re-presents the same history rather than rewriting it.
+
+@Test func aWeightSurvivesARoundTripThroughEitherUnit() {
+    for unit in WeightUnit.allCases {
+        for value in [0.0, 2.5, 20, 52.5, 130, 130.25, 214.75, 500] {
+            let grams = unit.grams(from: value)
+            #expect(unit.display(grams: grams) == value)
+        }
+    }
+}
+
+@Test func switchingUnitsShowsTheSameWeightDifferently() {
+    // 130 lb is 59 kg, near enough as makes no difference on a wheel.
+    let grams = WeightUnit.pounds.grams(from: 130)
+    #expect(WeightUnit.pounds.display(grams: grams) == 130)
+    #expect(WeightUnit.kilograms.display(grams: grams) == 59)
+}
+
+@Test func halfAndQuarterStepsSurviveTheirUnit() {
+    // Half-pound machines and quarter-kilogram plates both exist.
+    let halfPound = WeightUnit.pounds.grams(from: 130.5)
+    #expect(WeightUnit.pounds.display(grams: halfPound) == 130.5)
+    let quarterKilo = WeightUnit.kilograms.grams(from: 52.25)
+    #expect(WeightUnit.kilograms.display(grams: quarterKilo) == 52.25)
+}
+
+@Test func aWeightIsWrittenWithQuarterGlyphs() {
+    #expect(WeightText.string(130) == "130")
+    #expect(WeightText.string(130.25) == "130¼")
+    #expect(WeightText.string(130.5) == "130½")
+    #expect(WeightText.string(130.75) == "130¾")
+    // Anything finer lands on the nearest quarter: no machine is marked in
+    // tenths, so a tenth on a wheel is noise.
+    #expect(WeightText.string(130.6) == "130½")
+    #expect(WeightText.string(0.5) == "0½")
+}
+
+@Test func aTypedWeightIsReadBackHoweverItIsWritten() {
+    #expect(WeightText.value(from: "130") == 130)
+    #expect(WeightText.value(from: "130.5") == 130.5)
+    #expect(WeightText.value(from: "130,5") == 130.5)
+    #expect(WeightText.value(from: "130½") == 130.5)
+    #expect(WeightText.value(from: "130 ¼") == 130.25)
+    #expect(WeightText.value(from: "¾") == 0.75)
+    #expect(WeightText.value(from: "") == nil)
+    #expect(WeightText.value(from: "heavy") == nil)
+}
+
 /// Half an increment of slack in the log's colours, so a kilo of body weight
 /// does not repaint every assisted set — see `LogComparison.tolerance`.
 @Test func aSmallChangeInBodyWeightLeavesTheLogUncoloured() {
