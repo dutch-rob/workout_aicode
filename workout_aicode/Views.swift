@@ -1382,20 +1382,30 @@ struct HandoverPausedView: View {
 struct ZoneTintPreview: View {
     let tint: Double
 
+    /// Long enough to run through every block. No exercise has a name this
+    /// long, and the point is to judge white text against all five colours
+    /// rather than against the first two, so it borrows the printer's filler
+    /// that exists for exactly this.
+    private let sample = "Lorem ipsum dolor sit amet, consectetur adipiscing elit"
+
     var body: some View {
         ZStack(alignment: .leading) {
+            // The band is drawn on the Watch's black screen, and these colours
+            // are see-through at anything below full strength. Over a Form's
+            // own background they would be judged against the wrong thing —
+            // paler on a light phone, and a different colour entirely.
+            RoundedRectangle(cornerRadius: 3).fill(.black)
             HStack(spacing: 2) {
                 ForEach(1...HeartRateZones.zoneCount, id: \.self) { zone in
                     RoundedRectangle(cornerRadius: 3)
                         .fill(ZoneColour.colour(zone).opacity(tint))
                 }
             }
-            // Long enough to cross most of the band: a short name would be
-            // judged against two colours out of five.
-            Text("Incline dumbbell press")
+            Text(sample)
                 .font(.caption).bold()
                 .foregroundStyle(.white)
                 .lineLimit(1)
+                .truncationMode(.tail)
                 .padding(.leading, 4)
         }
         .frame(height: 24)
