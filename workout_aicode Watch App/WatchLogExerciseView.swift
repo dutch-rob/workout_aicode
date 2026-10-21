@@ -646,7 +646,7 @@ struct WatchLogExerciseView: View {
         // points at, and the rest belongs to the exercise just finished.
         let restAfter = exercise.restSeconds
         let restName = exercise.name
-        goToNextUnlogged()
+        slideToNextUnlogged()
         startRest(exercise: restName, seconds: restAfter)
     }
 
@@ -663,6 +663,21 @@ struct WatchLogExerciseView: View {
     private func startRest(exercise: String, seconds: Int) {
         guard session.restTimerEnabled else { return }
         WatchRestTimer.shared.setFinished(exercise: exercise, seconds: seconds)
+    }
+
+    /// Logging moves to the next exercise the way a swipe does: the one just
+    /// finished leaves to the left while the next comes in from the right.
+    ///
+    /// The index used to change on the spot, so the screen simply became a
+    /// different exercise — easy to miss mid-workout, and the phone has slid
+    /// since the carousel was built. The machinery is already here; it only
+    /// needed asking. `isHorizontalDrag` is set because the neighbouring pages
+    /// are built only while a drag is in progress, and `settle` clears it.
+    private func slideToNextUnlogged() {
+        let next = nextUnloggedIndex
+        guard next != currentIndex else { goToNextUnlogged(); return }
+        isHorizontalDrag = true
+        settle(to: -WKInterfaceDevice.current().screenBounds.width, landingOn: next)
     }
 
     private func goToNextUnlogged() {
