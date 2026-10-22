@@ -472,6 +472,66 @@ struct SchemaMigrationTests {
         #expect(result.machineSettings == [30])
     }
 
+    // MARK: Records that arrive after the question was answered
+    //
+    // The bug this is for: the conversion ran once at launch and recorded
+    // itself as done. A store that is empty at launch is not a user with
+    // nothing — on a fresh install the records arrive from iCloud a moment
+    // later, and from the Watch later still. Everything that landed after that
+    // instant kept no grams, so its wheels were empty and its sets logged as
+    // zero.
+
+    @MainActor @Test func somethingSyncingInLaterIsConvertedToo() throws {
+        let context = try logEditStore()
+        // The user answers with nothing in the store yet.
+        WeightHistory.adopt(.pounds, in: context)
+        #expect(WeightHistory.shouldAsk(in: context) == false)
+
+        // iCloud delivers an exercise and a log from the old world.
+        let exercise = ExerciseDef(name: "Lat pulldown")
+        exercise.lowestWeight = 20
+        exercise.highestWeight = 120
+        exercise.weightIncrement = 5
+        context.insert(exercise)
+        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: UUID(), exerciseId: exercise.id,
+                             weights: [50], reps: [10])
+        context.insert(log)
+        try context.save()
+
+        #expect(WeightHistory.pendingCount(in: context) == 2)
+        // No second question: the answer was about the history, not about that
+        // moment, so it applies to this too.
+        #expect(WeightHistory.shouldAsk(in: context) == false)
+
+        WeightHistory.catchUp(in: context)
+        #expect(WeightHistory.pendingCount(in: context) == 0)
+        #expect(exercise.lowestWeightGrams == WeightUnit.pounds.grams(from: 20))
+        let stored = try #require(
+            try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == log.id })
+        #expect(WeightUnit.pounds.display(grams: stored.grams[0]) == 50)
+    }
+
+    @MainActor @Test func anEmptyStoreAsksNothingAndConvertsNothing() throws {
+        let context = try logEditStore()
+        // Nothing to interpret, so nothing to ask — and crucially this is NOT
+        // recorded as an answer, or the records arriving next would keep none.
+        #expect(WeightHistory.pendingCount(in: context) == 0)
+        #expect(WeightHistory.shouldAsk(in: context) == false)
+    }
+
+    @MainActor @Test func anAerobicLogIsNotWaitingForAUnit() throws {
+        let context = try logEditStore()
+        // A ride has no weights and never had any; counting it as pending
+        // would ask a question that has no answer.
+        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: UUID(), exerciseId: UUID(),
+                             weights: [], reps: [])
+        context.insert(log)
+        try context.save()
+        #expect(WeightHistory.pendingCount(in: context) == 0)
+    }
+
     // MARK: Giving an old history a unit
     //
     // Numbers logged before units existed mean whatever the user meant. The

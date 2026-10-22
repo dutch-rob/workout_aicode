@@ -16,27 +16,64 @@ import SwiftData
 @MainActor
 enum WeightHistory {
 
-    /// Set once the user has said what their existing numbers meant — or
-    /// immediately, for somebody with nothing to convert.
+    /// What the user said their existing numbers were in. Nil until they say.
+    ///
+    /// Kept apart from the display unit: that one they may change whenever
+    /// they like, and changing it must never re-interpret a history that has
+    /// already been given a meaning.
+    static let statedUnitKey = "weightsHistoryUnit"
+
+    static var statedUnit: WeightUnit? {
+        UserDefaults.standard.string(forKey: statedUnitKey).flatMap(WeightUnit.init(rawValue:))
+    }
+
+    /// Written by the first version of this and no longer read. A device that
+    /// has it set was told the question was settled when it was not, which is
+    /// precisely the bug — so the new key is a different one, and everybody
+    /// gets asked once more.
     static let answeredKey = "weightsHaveAUnit"
 
-    static var isAnswered: Bool {
-        UserDefaults.standard.bool(forKey: answeredKey)
+    static var isAnswered: Bool { statedUnit != nil }
+
+    /// How much is still waiting for a unit: exercises whose wheel has no
+    /// range in grams, and logs whose weights are still only the old
+    /// unit-less numbers.
+    ///
+    /// Asked EVERY time rather than recorded once. The first version of this
+    /// settled the question at launch — and a store that is empty at launch is
+    /// not the same thing as a user with nothing: on a fresh install the
+    /// records arrive from iCloud a moment later, and on a Watch sync they
+    /// arrive later still. Everything that landed after that instant kept no
+    /// grams at all, which is why wheels came up empty and sets logged as
+    /// zero. Nothing about this is a one-off event, so nothing about it is
+    /// recorded as one.
+    static func pendingCount(in context: ModelContext) -> Int {
+        let exercises = (try? context.fetch(FetchDescriptor<ExerciseDef>())) ?? []
+        var pending = exercises.filter { $0.lowestWeightGrams == nil }.count
+
+        let logs = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
+        let haveWeights = Set(((try? context.fetch(FetchDescriptor<LogWeights>())) ?? [])
+            .map(\.logId))
+        // A log with no weights at all is an aerobic one, which never had any.
+        pending += logs.filter { !$0.weights.isEmpty && !haveWeights.contains($0.id) }.count
+        return pending
     }
 
-    /// Nothing logged and nothing defined: there is no history to interpret,
-    /// so there is nothing to ask about. The unit follows the region and the
-    /// user can change it in Settings like any other preference.
-    static func isNewUser(in context: ModelContext) -> Bool {
-        let exercises = (try? context.fetchCount(FetchDescriptor<ExerciseDef>())) ?? 0
-        let logs = (try? context.fetchCount(FetchDescriptor<WorkoutLog>())) ?? 0
-        return exercises == 0 && logs == 0
+    /// Fills in anything that arrived since the question was answered.
+    ///
+    /// Call it whenever the data may have changed. Once the user has stated a
+    /// unit, that answer is about their HISTORY, not about this moment, so it
+    /// applies just as well to a record that syncs in tomorrow.
+    @discardableResult
+    static func catchUp(in context: ModelContext) -> Int {
+        guard let unit = statedUnit, pendingCount(in: context) > 0 else { return 0 }
+        return adopt(unit, in: context)
     }
 
-    /// Answers the question for someone who never had to be asked.
-    static func settleForNewUser(in context: ModelContext) {
-        guard !isAnswered, isNewUser(in: context) else { return }
-        UserDefaults.standard.set(true, forKey: answeredKey)
+    /// Whether to put the question to the user: there is something without a
+    /// unit, and they have not said what it should be.
+    static func shouldAsk(in context: ModelContext) -> Bool {
+        statedUnit == nil && pendingCount(in: context) > 0
     }
 
     /// The user has said which unit their history was in. Fill in the grams
@@ -73,8 +110,14 @@ enum WeightHistory {
             filled += 1
         }
 
-        UserDefaults.standard.set(unit.rawValue, forKey: WeightUnit.key)
-        UserDefaults.standard.set(true, forKey: answeredKey)
+        // The answer about the history, which never changes again...
+        UserDefaults.standard.set(unit.rawValue, forKey: statedUnitKey)
+        // ...and the unit to show things in, which the user may change at will.
+        // Only set the first time, or switching to kilograms and then syncing
+        // an old record would read that record as kilograms.
+        if UserDefaults.standard.string(forKey: WeightUnit.key) == nil {
+            UserDefaults.standard.set(unit.rawValue, forKey: WeightUnit.key)
+        }
         try? context.save()
         return filled
     }

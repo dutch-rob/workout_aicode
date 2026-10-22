@@ -50,6 +50,7 @@ struct MacSettingsView: View {
                             }
                         }
                     }
+                    .onAppear { unitAnswered = !WeightHistory.shouldAsk(in: macContext) }
                 }
             } footer: {
                 Text(unitAnswered

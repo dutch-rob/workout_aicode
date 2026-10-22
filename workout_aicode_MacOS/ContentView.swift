@@ -9,6 +9,8 @@ import SwiftData
 
 struct ContentView: View {
     @EnvironmentObject private var setup: MacAppSetup
+    @Environment(\.modelContext) private var context
+    @Query private var exercises: [ExerciseDef]
     @State private var section: MacSection? = .workouts
 
     var body: some View {
@@ -28,6 +30,14 @@ struct ContentView: View {
         } detail: {
             detail
                 .frame(minWidth: 520, minHeight: 420)
+                // Records arrive over time, here as much as on the phone: this
+                // app syncs through iCloud by default. Anything that lands
+                // without grams is converted with the unit already stated —
+                // see WeightHistory.catchUp.
+                .task { WeightHistory.catchUp(in: context) }
+                .onChange(of: exercises.count) { _, _ in
+                    WeightHistory.catchUp(in: context)
+                }
         }
         .toolbar { DraftToolbar() }
     }

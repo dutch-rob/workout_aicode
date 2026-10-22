@@ -23,7 +23,11 @@ enum DemoMode {
     /// the old numbers meant does not apply to it.
     static func settleWeightUnit() {
         guard isEnabled else { return }
-        UserDefaults.standard.set(true, forKey: WeightHistory.answeredKey)
+        // The seeded history is in whatever unit the demo is read in, so it
+        // needs no question — and says so the way everything else does, by
+        // stating the unit rather than by setting a "do not ask" flag.
+        UserDefaults.standard.set(WeightUnit.regionDefault.rawValue,
+                                  forKey: WeightHistory.statedUnitKey)
     }
 
     // The rest-timer capture. Fixed numbers so the iPhone and the Watch shots

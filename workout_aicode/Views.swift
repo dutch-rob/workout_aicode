@@ -1083,6 +1083,11 @@ struct LogExerciseView: View {
     /// number on its own would record a plan as though it were a measurement.
     private func canLog(_ exercise: ExerciseDef?) -> Bool {
         guard let exercise else { return true }
+        // An exercise whose wheel has no range in grams has not been given a
+        // unit yet. Logging it would write zeros — which is exactly what
+        // happened once, and a zero in a log is indistinguishable from a set
+        // actually lifted at zero.
+        if exercise.kind == .strength, exercise.weightRangeGrams == nil { return false }
         // An assisted machine's set cannot be logged until the app knows what
         // to subtract it from. It used to log it anyway: body weight unknown
         // (or in the other unit) made the subtraction negative, which was
@@ -1095,8 +1100,11 @@ struct LogExerciseView: View {
         return summaryFor(currentIndex) != nil
     }
 
-    /// Why an assisted set cannot be worked out yet, or nil when it can.
+    /// Why a set cannot be written down yet, or nil when it can.
     private func bodyWeightProblem(for exercise: ExerciseDef) -> String? {
+        if exercise.kind == .strength, exercise.weightRangeGrams == nil {
+            return "This exercise's weights have no unit yet. Open the app's start screen and answer the kilograms-or-pounds question, or set the weights again on its edit screen."
+        }
         guard exercise.subtractsFromBodyWeight else { return nil }
         guard BodyWeight.isKnown else {
             return "Set your body weight in Settings to log this exercise — what you lifted is your body weight less what the machine is carrying."

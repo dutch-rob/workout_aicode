@@ -59,6 +59,14 @@ struct ContentView: View {
         #endif
     }
 
+    /// Converts anything still without a unit, and asks the question when
+    /// there is something to convert and no answer yet.
+    private func refreshWeightUnitState() {
+        guard !isDemoRun else { return }
+        WeightHistory.catchUp(in: modelContext)
+        askWeightUnit = WeightHistory.shouldAsk(in: modelContext)
+    }
+
     private func uploadSharedDataIfConsented() {
         guard shareWithDevelopers else { return }
         DeveloperDataSync.sync(consent: true, logs: allLogs, exercises: exercises,
@@ -223,8 +231,7 @@ struct ContentView: View {
             askDefaults = ExerciseDefaults.shouldAsk(existingExercises: exercises.count)
             // Somebody with nothing logged has no history to interpret, so
             // they are never asked; their unit follows their region.
-            WeightHistory.settleForNewUser(in: modelContext)
-            askWeightUnit = !WeightHistory.isAnswered && !isDemoRun
+            refreshWeightUnitState()
             survey.noteLaunch(earliestLogDate: allLogs.first?.date)
             uploadSharedDataIfConsented()
             // Finish any withdrawal that did not complete last time.
@@ -233,8 +240,16 @@ struct ContentView: View {
         // Workouts logged since the last launch go up on the next one. Uploading
         // as each set is logged would put the network in the middle of a
         // workout; only what is new is sent, so this stays cheap.
+        // Records arrive over time — from iCloud, from the Watch — and each
+        // one needs the unit the user already gave. Checked whenever the data
+        // may have moved rather than once at launch, which is the bug this
+        // replaces: anything that landed after that instant had no grams, so
+        // its wheels were empty and its sets logged as zero.
+        .onChange(of: exercises.count) { _, _ in refreshWeightUnitState() }
+        .onChange(of: allLogs.count) { _, _ in refreshWeightUnitState() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                refreshWeightUnitState()
                 uploadSharedDataIfConsented()
                 // This morning's weigh-in rather than last month's, for the
                 // machines that take weight off you. Does nothing unless the
