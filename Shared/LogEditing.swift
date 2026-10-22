@@ -33,6 +33,8 @@ struct LogSnapshot {
     /// reason the aerobic measurements are: editing a weight on an assisted
     /// set rewrites one of these, and "discard" has to put that back too.
     let assisted: Data
+    /// The weights themselves, which live beside the log — see LogWeights.
+    let weights: Data
     /// What the logs looked like when this was taken, for telling whether
     /// anything actually changed.
     let signature: [String]
@@ -47,11 +49,13 @@ enum LogEditing {
         let logs = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
         let aerobic = (try? context.fetch(FetchDescriptor<AerobicResult>())) ?? []
         let assisted = (try? context.fetch(FetchDescriptor<AssistedResult>())) ?? []
+        let weights = (try? context.fetch(FetchDescriptor<LogWeights>())) ?? []
         let encoder = JSONEncoder()
         return LogSnapshot(takenAt: Date(),
                            logs: try encoder.encode(logs),
                            aerobic: try encoder.encode(aerobic),
                            assisted: try encoder.encode(assisted),
+                           weights: try encoder.encode(weights),
                            signature: signature(of: logs))
     }
 
@@ -88,6 +92,7 @@ enum LogEditing {
         let wanted = try decoder.decode([WorkoutLog].self, from: snapshot.logs)
         let wantedAerobic = try decoder.decode([AerobicResult].self, from: snapshot.aerobic)
         let wantedAssisted = try decoder.decode([AssistedResult].self, from: snapshot.assisted)
+        let wantedWeights = try decoder.decode([LogWeights].self, from: snapshot.weights)
 
         var restored = 0
         let current = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
@@ -110,6 +115,7 @@ enum LogEditing {
         for (id, log) in byId {
             for result in aerobicResults(forLog: id, in: context) { context.delete(result) }
             for result in assistedResults(forLog: id, in: context) { context.delete(result) }
+            for record in weightRecords(forLog: id, in: context) { context.delete(record) }
             context.delete(log)
         }
 
@@ -146,6 +152,20 @@ enum LogEditing {
         }
         for (_, result) in assistedById { context.delete(result) }
 
+        // And the weights, which an edit here writes directly.
+        let currentWeights = (try? context.fetch(FetchDescriptor<LogWeights>())) ?? []
+        var weightsById = Dictionary(currentWeights.map { ($0.id, $0) },
+                                     uniquingKeysWith: { a, _ in a })
+        for record in wantedWeights {
+            if let existing = weightsById.removeValue(forKey: record.id) {
+                existing.logId = record.logId
+                existing.grams = record.grams
+            } else {
+                context.insert(record)
+            }
+        }
+        for (_, record) in weightsById { context.delete(record) }
+
         try context.save()
         return restored
     }
@@ -154,6 +174,12 @@ enum LogEditing {
                                        in context: ModelContext) -> [AerobicResult] {
         let descriptor = FetchDescriptor<AerobicResult>(
             predicate: #Predicate<AerobicResult> { $0.logId == id })
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    static func weightRecords(forLog id: UUID, in context: ModelContext) -> [LogWeights] {
+        let descriptor = FetchDescriptor<LogWeights>(
+            predicate: #Predicate<LogWeights> { $0.logId == id })
         return (try? context.fetch(descriptor)) ?? []
     }
 
@@ -174,43 +200,77 @@ enum LogEditing {
     static func realignAssisted(log: WorkoutLog, set index: Int,
                                 in context: ModelContext) {
         guard let result = assistedResults(forLog: log.id, in: context).first,
-              result.bodyWeight > 0,
-              index < log.weights.count else { return }
+              let bodyWeight = result.bodyWeightGrams, bodyWeight > 0 else { return }
+        let lifted = grams(for: log, in: context)
+        guard index < lifted.count else { return }
         // Only when the stored body weight can actually account for the new
         // number. A set logged before the body weight was known holds one that
         // is too small — correcting the weight to what was really lifted would
         // then compute a NEGATIVE machine setting and clamp it to zero,
         // throwing away the one number in that record still worth having.
-        guard result.bodyWeight > Double(log.weights[index]) else { return }
-        var settings = result.machineSettings
+        guard bodyWeight > lifted[index] else { return }
+        var settings = result.machineSettingsGrams ?? []
         while settings.count <= index { settings.append(0) }
-        settings[index] = max(0, Int((result.bodyWeight - Double(log.weights[index])).rounded()))
-        result.machineSettings = settings
+        settings[index] = max(0, bodyWeight - lifted[index])
+        result.machineSettingsGrams = settings
     }
 
     // MARK: Keeping a row tidy
+
+    // MARK: Weights, which live beside the log
+
+    /// The record holding this log's weights, made if it is not there yet.
+    ///
+    /// A log edited on a device that has only just learned about units may not
+    /// have one — the editor is as good a place as any to give it one.
+    static func weightsRecord(for log: WorkoutLog, in context: ModelContext) -> LogWeights {
+        let id = log.id
+        let descriptor = FetchDescriptor<LogWeights>(
+            predicate: #Predicate<LogWeights> { $0.logId == id })
+        if let existing = (try? context.fetch(descriptor))?.first { return existing }
+        let made = LogWeights(logId: log.id, grams: [])
+        context.insert(made)
+        return made
+    }
+
+    static func grams(for log: WorkoutLog, in context: ModelContext) -> [Int] {
+        weightsRecord(for: log, in: context).grams
+    }
+
+    /// Writes one set's weight, in grams, lengthening both arrays to reach it.
+    static func setGrams(_ value: Int, at index: Int,
+                         for log: WorkoutLog, in context: ModelContext) {
+        let record = weightsRecord(for: log, in: context)
+        var grams = record.grams
+        while grams.count <= index { grams.append(0) }
+        grams[index] = max(0, value)
+        record.grams = grams
+        while log.reps.count < grams.count { log.reps.append(0) }
+    }
 
     /// Drops trailing sets that are 0 × 0.
     ///
     /// Typing into the fifth set column of a three-set row has to lengthen the
     /// arrays to reach it, which leaves empty sets behind if the user changes
     /// their mind. A trailing 0 × 0 is not a set anybody did.
-    static func trimEmptyTrailingSets(_ log: WorkoutLog) {
-        var weights = log.weights
+    static func trimEmptyTrailingSets(_ log: WorkoutLog, in context: ModelContext) {
+        let record = weightsRecord(for: log, in: context)
+        var grams = record.grams
         var reps = log.reps
-        while let w = weights.last, let r = reps.last, w == 0, r == 0 {
-            weights.removeLast()
+        while let w = grams.last, let r = reps.last, w == 0, r == 0 {
+            grams.removeLast()
             reps.removeLast()
         }
-        if weights != log.weights { log.weights = weights }
+        if grams != record.grams { record.grams = grams }
         if reps != log.reps { log.reps = reps }
     }
 
     /// Makes both arrays at least `count` long, so set `count - 1` can be
     /// written. They are kept the same length: a weight without its reps is a
     /// row that every reader of the log has to guess about.
-    static func extend(_ log: WorkoutLog, toSets count: Int) {
-        while log.weights.count < count { log.weights.append(0) }
+    static func extend(_ log: WorkoutLog, toSets count: Int, in context: ModelContext) {
+        let record = weightsRecord(for: log, in: context)
+        while record.grams.count < count { record.grams.append(0) }
         while log.reps.count < count { log.reps.append(0) }
     }
 }

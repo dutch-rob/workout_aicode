@@ -198,9 +198,9 @@ final class AppStore: ObservableObject {
                 // exercise is sent last time's MACHINE SETTING — the weight
                 // lifted would creep with the user's body weight and is not a
                 // number anyone sets on a machine.
-                var wheels = log.weights
+                var wheels = weightsGrams(forLogId: log.id)
                 if assistedIds.contains(exId),
-                   let settings = assistedResult(forLogId: log.id)?.machineSettings,
+                   let settings = assistedResult(forLogId: log.id)?.machineSettingsGrams,
                    !settings.isEmpty {
                     wheels = settings
                 }
@@ -232,7 +232,10 @@ final class AppStore: ObservableObject {
                          restSeconds: $0.restSeconds,
                          kindRaw: $0.kindRaw,
                          aerobicActivityRaw: $0.aerobicActivityRaw,
-                         subtractsFromBodyWeight: $0.subtractsFromBodyWeight)
+                         subtractsFromBodyWeight: $0.subtractsFromBodyWeight,
+                         lowestGrams: $0.lowestWeightGrams ?? 0,
+                         highestGrams: $0.highestWeightGrams ?? 0,
+                         incrementGrams: $0.weightIncrementGrams ?? 0)
         }
 
         let payload = SyncPayload(
@@ -244,7 +247,8 @@ final class AppStore: ObservableObject {
             watchWorkoutMode: WatchWorkoutMode.current.rawValue,
             zoneTint: WatchPreferences.zoneTint,
             restTaps: WatchPreferences.restTaps,
-            wheelRows: WatchPreferences.wheelRows
+            wheelRows: WatchPreferences.wheelRows,
+            weightUnit: WeightUnit.current.rawValue
         )
         return try? JSONEncoder().encode(payload)
     }
@@ -267,20 +271,24 @@ final class AppStore: ObservableObject {
         // that back unchanged — it has no business knowing what the user
         // weighs — and the conversion to the weight actually lifted happens
         // here, in the one place that writes a log from the Watch.
+        // `weights` is in GRAMS: the Watch is sent grams and sends them back.
         let exercise = exercises.first { $0.id == exerciseId }
         let assisted = exercise?.subtractsFromBodyWeight == true
-        let bodyWeight = BodyWeight.current
+        let bodyWeightGrams = BodyWeight.currentGrams
         let lifted = assisted
-            ? weights.map { BodyWeight.lifted(bodyWeight: bodyWeight, machineSetting: $0) }
+            ? weights.map { max(0, bodyWeightGrams - $0) }
             : weights
 
         let log = WorkoutLog(id: id, date: date, workoutId: workoutId,
-                             exerciseId: exerciseId, weights: lifted, reps: reps)
+                             exerciseId: exerciseId, weights: [], reps: reps)
         context.insert(log)
+        context.insert(LogWeights(logId: log.id, grams: lifted))
         if assisted {
             context.insert(AssistedResult(logId: log.id,
-                                          bodyWeight: bodyWeight,
-                                          machineSettings: weights))
+                                          bodyWeight: 0,
+                                          machineSettings: [],
+                                          bodyWeightGrams: bodyWeightGrams,
+                                          machineSettingsGrams: weights))
         }
         // Only for an aerobic session, and only one that actually ran.
         if let durationSeconds, durationSeconds > 0 {

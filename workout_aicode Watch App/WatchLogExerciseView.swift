@@ -491,9 +491,10 @@ struct WatchLogExerciseView: View {
                         }
                     } else {
                         Picker("", selection: weightBinding(series: series,
-                                                            defaultValue: exercise.lowestWeight)) {
-                            ForEach(weightOptions(for: exercise), id: \.self) {
-                                Text("\($0)").tag($0)
+                                                            defaultValue: exercise.lowestGrams)) {
+                            ForEach(weightOptions(for: exercise), id: \.self) { grams in
+                                Text(WeightText.string(grams: grams, in: session.weightUnit))
+                                    .tag(grams)
                             }
                         }
                     }
@@ -536,14 +537,17 @@ struct WatchLogExerciseView: View {
         let prefix = mode == .reps ? "w" : "r"
         let values: [Int] = (0..<count).map { series in
             mode == .reps
-                ? safeValue(weights, index, series, default: exercise.lowestWeight)
+                ? safeValue(weights, index, series, default: exercise.lowestGrams)
                 : safeValue(reps, index, series, default: 0)
         }
+        let unit = session.weightUnit
         return HStack(spacing: 2) {
             // Reserve the vertical row-label column so values align with wheels.
             Color.clear.frame(width: rowLabelWidth, height: 1)
             ForEach(0..<count, id: \.self) { series in
-                Text("\(prefix)\(values[series])")
+                Text(mode == .reps
+                     ? "\(prefix)\(WeightText.string(grams: values[series], in: unit))"
+                     : "\(prefix)\(values[series])")
                     // Same size as the exercise title. Readability comes from the
                     // bright white + bold — .secondary was the real problem, not
                     // the size. (watchOS .footnote/.caption2 render alike, so a
@@ -730,11 +734,14 @@ struct WatchLogExerciseView: View {
         currentIndex = index
     }
 
+    /// In GRAMS, like the phone's. The Watch is sent the range in grams and
+    /// sends back whatever the wheel landed on; the unit is only how the
+    /// number is written, and arrives with the definitions.
     private func weightOptions(for exercise: SyncExercise) -> [Int] {
-        let increment = max(1, exercise.weightIncrement)
-        guard exercise.highestWeight >= exercise.lowestWeight else { return [exercise.lowestWeight] }
-        return Array(stride(from: exercise.lowestWeight,
-                            through: exercise.highestWeight,
+        let increment = max(1, exercise.incrementGrams)
+        guard exercise.highestGrams >= exercise.lowestGrams else { return [exercise.lowestGrams] }
+        return Array(stride(from: exercise.lowestGrams,
+                            through: exercise.highestGrams,
                             by: increment))
     }
 
@@ -753,7 +760,7 @@ struct WatchLogExerciseView: View {
             set: { newValue in
                 guard currentIndex < weights.count else { return }
                 ensureCapacity(&weights[currentIndex], upTo: series,
-                               fill: exerciseAt(currentIndex)?.lowestWeight ?? 0)
+                               fill: exerciseAt(currentIndex)?.lowestGrams ?? 0)
                 guard weights[currentIndex][series] != newValue else { return }
                 weights[currentIndex][series] = newValue
                 noteSetFinished()

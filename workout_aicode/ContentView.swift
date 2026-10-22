@@ -46,6 +46,7 @@ struct ContentView: View {
     }
     @ObservedObject private var survey = SurveyScheduler.shared
     @Query(sort: [SortDescriptor(\WorkoutLog.date)]) private var allLogs: [WorkoutLog]
+    @Query private var allLogWeights: [LogWeights]
     @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
     @AppStorage(StatsSettingsKey.formula) private var formulaRaw = OneRMFormula.epley.rawValue
 
@@ -61,6 +62,7 @@ struct ContentView: View {
     private func uploadSharedDataIfConsented() {
         guard shareWithDevelopers else { return }
         DeveloperDataSync.sync(consent: true, logs: allLogs, exercises: exercises,
+                             weightsByLog: LogWeightsIndex.byLogId(allLogWeights),
                              	  formula: OneRMFormula(rawValue: formulaRaw) ?? .epley)
     }
 

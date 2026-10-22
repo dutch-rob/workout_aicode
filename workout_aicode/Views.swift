@@ -293,6 +293,11 @@ struct EditWorkoutView: View {
 
 // MARK: - Edit Exercise Screen
 struct EditExerciseView: View {
+    /// Asked once, the first time any exercise is set to subtract from body
+    /// weight — see the alert below.
+    static let unitCheckedKey = "bodyWeightUnitChecked"
+    @State private var confirmUnit = false
+
     /// A weight field: typed in the user's unit, stored in grams.
     ///
     /// Nil means an exercise whose weights have not been given a unit yet —
@@ -448,6 +453,27 @@ struct EditExerciseView: View {
 
             Toggle(isOn: $exercise.subtractsFromBodyWeight) {
                 Text("Subtracted from body weight")
+            }
+            .onChange(of: exercise.subtractsFromBodyWeight) { _, on in
+                // The first exercise to use body weight is the first time the
+                // unit actually matters for arithmetic rather than for
+                // reading: body weight in one unit against a machine in the
+                // other is what logged a set at zero.
+                if on, !UserDefaults.standard.bool(forKey: Self.unitCheckedKey) {
+                    confirmUnit = true
+                }
+            }
+            .alert("Weights in \(WeightUnit.current.label)?", isPresented: $confirmUnit) {
+                Button("Yes, \(WeightUnit.current.label)") {
+                    UserDefaults.standard.set(true, forKey: Self.unitCheckedKey)
+                }
+                Button("No, switch to \(WeightUnit.current == .kilograms ? "lb" : "kg")") {
+                    let other: WeightUnit = WeightUnit.current == .kilograms ? .pounds : .kilograms
+                    UserDefaults.standard.set(other.rawValue, forKey: WeightUnit.key)
+                    UserDefaults.standard.set(true, forKey: Self.unitCheckedKey)
+                }
+            } message: {
+                Text("This exercise works out what you lifted from your body weight, so the two have to be in the same units. Your weights are currently shown in \(WeightUnit.current.label).")
             }
             if exercise.subtractsFromBodyWeight {
                 Text("For machines that take weight off you instead of adding it, such as an assisted chin-up or dip. The wheels show what you set on the machine; what is logged is what you lifted — your body weight less that setting — so the graphs and trends read the right way round. Your body weight comes from Settings.")
@@ -1728,6 +1754,7 @@ struct ImportExportView: View {
     @Query private var exercises: [ExerciseDef]
     @Query private var aerobicResults: [AerobicResult]
     @Query private var assistedResults: [AssistedResult]
+    @Query private var logWeights: [LogWeights]
 
     @State private var exportURL: URL?
 
@@ -1878,7 +1905,7 @@ struct ImportExportView: View {
     private func buildExportEnvelope() -> ExportEnvelope {
         let bundle = Bundle.main
         return ExportEnvelope(
-            exportVersion: "logJSON.3",
+            exportVersion: "logJSON.4",
             appIdentifier: bundle.bundleIdentifier ?? "",
             appVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
             build: bundle.infoDictionary?["CFBundleVersion"] as? String ?? "",
@@ -1900,7 +1927,8 @@ struct ImportExportView: View {
                 exercises: exercises,
                 logs: logs,
                 aerobicResults: aerobicResults,
-                assistedResults: assistedResults
+                assistedResults: assistedResults,
+                logWeights: logWeights
             )
         )
     }
@@ -1949,9 +1977,11 @@ struct ImportExportView: View {
         let version = (try? JSONDecoder().decode(VersionPeek.self, from: data))?.exportVersion ?? ""
 
         let decoder = JSONDecoder()
-        if version == "logJSON.2" || version == "logJSON.3" {
-            // The only difference is the two result arrays, which are optional:
-            // a logJSON.2 file decodes into the current shape with none.
+        if version == "logJSON.2" || version == "logJSON.3" || version == "logJSON.4" {
+            // Each version only ADDS optional arrays, so an older file decodes
+            // into the current shape with none of them. A file older than
+            // logJSON.4 holds weights without a unit; they are imported as
+            // they are and the app asks, once, what they meant.
             return try decoder.decode(ExportEnvelope.self, from: data)
         } else if version.hasPrefix("logJSON.1") {
             let legacy = try decoder.decode(LegacyExportEnvelope.self, from: data)
@@ -2101,6 +2131,9 @@ struct ImportExportView: View {
             if let existing = try? context.fetch(FetchDescriptor<AssistedResult>()) {
                 for result in existing { context.delete(result) }
             }
+            if let existing = try? context.fetch(FetchDescriptor<LogWeights>()) {
+                for record in existing { context.delete(record) }
+            }
             // Insert imported data
             for exercise in envelope.data.exercises {
                 context.insert(exercise)
@@ -2116,6 +2149,9 @@ struct ImportExportView: View {
             }
             for result in envelope.data.assistedResults ?? [] {
                 context.insert(result)
+            }
+            for record in envelope.data.logWeights ?? [] {
+                context.insert(record)
             }
             try context.save()
             // Notify store or reload
@@ -2213,6 +2249,11 @@ struct ImportExportView: View {
             for result in envelope.data.assistedResults ?? []
             where importedLogIds.contains(result.logId) && !existingAssistedIds.contains(result.id) {
                 context.insert(result)
+            }
+            let existingWeightIds = Set(logWeights.map(\.id))
+            for record in envelope.data.logWeights ?? []
+            where importedLogIds.contains(record.logId) && !existingWeightIds.contains(record.id) {
+                context.insert(record)
             }
             try context.save()
             NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
@@ -2447,6 +2488,7 @@ struct SettingsView: View {
     @EnvironmentObject private var setup: AppSetup
     @EnvironmentObject private var store: AppStore
     @Query private var logs: [WorkoutLog]
+    @Query private var logWeights: [LogWeights]
     @Query private var exercises: [ExerciseDef]
     @State private var showDeleteConfirm = false
 
@@ -2692,6 +2734,7 @@ struct SettingsView: View {
                 }
                 .onChange(of: shareWithDevelopers) { _, enabled in
                     DeveloperDataSync.sync(consent: enabled, logs: logs, exercises: exercises,
+                                           weightsByLog: LogWeightsIndex.byLogId(logWeights),
                                            formula: OneRMFormula(rawValue: formulaRaw) ?? .epley)
                 }
             } footer: {

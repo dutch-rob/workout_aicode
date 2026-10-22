@@ -378,11 +378,12 @@ struct SchemaMigrationTests {
     @MainActor private func logEditStore() throws -> ModelContext {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("logedit-\(UUID().uuidString).sqlite")
-        // The CURRENT schema, so these tests see what the app sees. On V7 the
-        // assisted-machine tests failed without a word: AssistedResult is not
-        // in that schema, so inserting one had nowhere to go.
+        // The CURRENT schema, so these tests see what the app sees. This has
+        // now caught the same thing twice: a store pinned to an older version
+        // has nowhere to put a newly added entity, and the insert fails in
+        // silence — first AssistedResult on V7, then LogWeights on V8.
         let container = try ModelContainer(
-            for: Schema(versionedSchema: WorkoutLogSchemaV8.self),
+            for: Schema(versionedSchema: WorkoutLogSchemaV9.self),
             configurations: ModelConfiguration(url: url, cloudKitDatabase: .none))
         return ModelContext(container)
     }
@@ -405,21 +406,26 @@ struct SchemaMigrationTests {
 
     @MainActor @Test func correctingAnAssistedWeightMovesTheMachineSettingWithIt() throws {
         let context = try logEditStore()
+        let unit = WeightUnit.current
         let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
                              workoutId: UUID(), exerciseId: UUID(),
-                             weights: [52], reps: [8])
+                             weights: [], reps: [8])
         context.insert(log)
-        context.insert(AssistedResult(logId: log.id, bodyWeight: 82, machineSettings: [30]))
+        context.insert(LogWeights(logId: log.id, grams: [unit.grams(from: 52)]))
+        context.insert(AssistedResult(logId: log.id, bodyWeight: 0, machineSettings: [],
+                                      bodyWeightGrams: unit.grams(from: 82),
+                                      machineSettingsGrams: [unit.grams(from: 30)]))
         try context.save()
 
         // A typo corrected: it was 55 that was lifted, not 52.
-        log.weights[0] = 55
+        LogEditing.setGrams(unit.grams(from: 55), at: 0, for: log, in: context)
         LogEditing.realignAssisted(log: log, set: 0, in: context)
         try context.save()
 
         let result = try #require(LogEditing.assistedResults(forLog: log.id, in: context).first)
-        #expect(result.machineSettings == [27])   // 82 - 55
-        #expect(result.bodyWeight == 82)          // the day's weight, not today's
+        // 82 - 55, and the day's body weight, not today's.
+        #expect(result.machineSettingsGrams?.map { unit.display(grams: $0) } == [27])
+        #expect(result.bodyWeightGrams == unit.grams(from: 82))
     }
 
     @MainActor @Test func correctingASetLoggedWithoutABodyWeightKeepsTheMachineSetting() throws {
@@ -466,6 +472,52 @@ struct SchemaMigrationTests {
         #expect(result.machineSettings == [30])
     }
 
+    // MARK: Giving an old history a unit
+    //
+    // Numbers logged before units existed mean whatever the user meant. The
+    // app asks once and fills in the grams from the answer; getting this wrong
+    // rescales a training history by 2.2 without a single number looking odd.
+
+    @MainActor @Test func answeringTheQuestionFillsInTheGrams() throws {
+        let context = try logEditStore()
+        let exercise = ExerciseDef(name: "Lat pulldown")
+        exercise.lowestWeight = 20
+        exercise.highestWeight = 120
+        exercise.weightIncrement = 5
+        context.insert(exercise)
+        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: UUID(), exerciseId: exercise.id,
+                             weights: [50, 55], reps: [12, 10])
+        context.insert(log)
+        try context.save()
+
+        WeightHistory.adopt(.pounds, in: context)
+
+        // The face value is unchanged — 50 is still 50 to someone reading in
+        // pounds — but it now means something.
+        #expect(exercise.lowestWeightGrams == WeightUnit.pounds.grams(from: 20))
+        let stored = try #require(
+            try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == log.id })
+        #expect(WeightUnit.pounds.display(grams: stored.grams[0]) == 50)
+        // And the same weight read in kilograms is the same weight.
+        #expect(WeightUnit.kilograms.display(grams: stored.grams[0]) == 22.75)
+    }
+
+    @MainActor @Test func answeringTwiceCannotDoubleConvert() throws {
+        let context = try logEditStore()
+        let exercise = ExerciseDef(name: "Chest press")
+        exercise.lowestWeight = 20
+        context.insert(exercise)
+        try context.save()
+
+        WeightHistory.adopt(.kilograms, in: context)
+        let first = exercise.lowestWeightGrams
+        // A second pass — a sync arriving, the question answered on two
+        // devices — must leave what is already converted alone.
+        WeightHistory.adopt(.kilograms, in: context)
+        #expect(exercise.lowestWeightGrams == first)
+    }
+
     // MARK: Machines that take weight off you
     //
     // An assisted chin-up is logged as the weight LIFTED — body weight less
@@ -493,19 +545,22 @@ struct SchemaMigrationTests {
         try context.save()
         store.reloadAll()
 
+        let unit = WeightUnit.current
         let logId = UUID()
         store.addWatchLog(id: logId, date: Date(), workoutId: UUID(),
                           exerciseId: chinUp.id,
-                          weights: [30, 35], reps: [8, 6])
+                          weights: [unit.grams(from: 30), unit.grams(from: 35)],
+                          reps: [8, 6])
 
-        let logs = try context.fetch(FetchDescriptor<WorkoutLog>())
-        let log = try #require(logs.first { $0.id == logId })
-        // 82 kg less the 30 the machine carried, and less the 35.
-        #expect(log.weights == [52, 47])
+        // 82 less the 30 the machine carried, and less the 35 — in grams
+        // underneath, and in the user's own unit on screen.
+        let stored = try #require(
+            try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == logId })
+        #expect(stored.grams.map { unit.display(grams: $0) } == [52, 47])
 
         let assisted = try #require(store.assistedResult(forLogId: logId))
-        #expect(assisted.machineSettings == [30, 35])
-        #expect(assisted.bodyWeight == 82)
+        #expect(assisted.machineSettingsGrams?.map { unit.display(grams: $0) } == [30, 35])
+        #expect(assisted.bodyWeightGrams == unit.grams(from: 82))
     }
 
     @MainActor @Test func anOrdinaryExerciseIsLoggedExactlyAsItWasSet() throws {
@@ -516,13 +571,16 @@ struct SchemaMigrationTests {
         try context.save()
         store.reloadAll()
 
+        let unit = WeightUnit.current
         let logId = UUID()
         store.addWatchLog(id: logId, date: Date(), workoutId: UUID(),
-                          exerciseId: press.id, weights: [50, 55], reps: [10, 8])
+                          exerciseId: press.id,
+                          weights: [unit.grams(from: 50), unit.grams(from: 55)],
+                          reps: [10, 8])
 
-        let logs = try context.fetch(FetchDescriptor<WorkoutLog>())
-        let log = try #require(logs.first { $0.id == logId })
-        #expect(log.weights == [50, 55])
+        let stored = try #require(
+            try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == logId })
+        #expect(stored.grams.map { unit.display(grams: $0) } == [50, 55])
         #expect(store.assistedResult(forLogId: logId) == nil)
     }
 
@@ -695,25 +753,28 @@ struct SchemaMigrationTests {
         let context = try logEditStore()
         // Reaching set 4 to type in it lengthens the arrays; changing your
         // mind must not leave two sets of nothing behind.
-        let log = addLog(context, weights: [60, 60, 0, 0], reps: [10, 8, 0, 0])
-        LogEditing.trimEmptyTrailingSets(log)
-        #expect(log.weights == [60, 60])
+        let log = addLog(context, weights: [], reps: [10, 8, 0, 0])
+        context.insert(LogWeights(logId: log.id, grams: [60, 60, 0, 0]))
+        LogEditing.trimEmptyTrailingSets(log, in: context)
+        #expect(LogEditing.grams(for: log, in: context) == [60, 60])
         #expect(log.reps == [10, 8])
 
-        // A bodyweight set is 0 kg for real reps, and is not an empty set.
-        let bodyweight = addLog(context, weights: [0, 0], reps: [12, 10])
-        LogEditing.trimEmptyTrailingSets(bodyweight)
+        // A bodyweight set is 0 for real reps, and is not an empty set.
+        let bodyweight = addLog(context, weights: [], reps: [12, 10])
+        context.insert(LogWeights(logId: bodyweight.id, grams: [0, 0]))
+        LogEditing.trimEmptyTrailingSets(bodyweight, in: context)
         #expect(bodyweight.reps == [12, 10])
     }
 
     @MainActor @Test func reachingAnEmptyColumnKeepsWeightsAndRepsTheSameLength() throws {
         let context = try logEditStore()
-        let log = addLog(context, weights: [60], reps: [10])
-        LogEditing.extend(log, toSets: 4)
-        #expect(log.weights.count == 4)
+        let log = addLog(context, weights: [], reps: [10])
+        context.insert(LogWeights(logId: log.id, grams: [60]))
+        LogEditing.extend(log, toSets: 4, in: context)
+        #expect(LogEditing.grams(for: log, in: context).count == 4)
         #expect(log.reps.count == 4)
         // A weight with no reps beside it is a row every reader has to guess at.
-        #expect(log.weights.count == log.reps.count)
+        #expect(LogEditing.grams(for: log, in: context).count == log.reps.count)
     }
 
 

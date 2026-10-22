@@ -33,6 +33,7 @@ struct MacEditLogsView: View {
     @Query(sort: [SortDescriptor(\ExerciseDef.name)]) private var exercises: [ExerciseDef]
     @Query private var aerobicResults: [AerobicResult]
     @Query private var assistedResults: [AssistedResult]
+    @Query private var logWeights: [LogWeights]
 
     @State private var leaving = false
     @State private var failure: String?
@@ -76,11 +77,16 @@ struct MacEditLogsView: View {
                                         .map { ($0.logId, $0.durationSeconds) },
                                    uniquingKeysWith: { a, _ in a })
         let machines = Dictionary(assistedResults.filter { !$0.isDeleted }
-                                        .map { ($0.logId, $0.machineSettings) },
+                                        .compactMap { result -> (UUID, [Int])? in
+                                            guard let grams = result.machineSettingsGrams
+                                            else { return nil }
+                                            return (result.logId, grams)
+                                        },
                                   uniquingKeysWith: { a, _ in a })
+        let weightsByLog = LogWeightsIndex.byLogId(logWeights)
         return logs.filter { !$0.isDeleted }.map {
             Row(id: $0.id, workoutId: $0.workoutId, exerciseId: $0.exerciseId,
-                date: $0.date, weights: $0.weights, reps: $0.reps,
+                date: $0.date, weights: weightsByLog[$0.id] ?? [], reps: $0.reps,
                 aerobicSeconds: durations[$0.id],
                 machineSettings: machines[$0.id] ?? [])
         }
@@ -283,7 +289,7 @@ struct MacEditLogsView: View {
         .frame(width: 190)
     }
 
-    private func setPair(weight: Binding<Int>, reps: Binding<Int>,
+    private func setPair(weight: Binding<Double>, reps: Binding<Int>,
                          machine: Int? = nil) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 2) {
@@ -298,7 +304,7 @@ struct MacEditLogsView: View {
             // here would be two ways to say the same thing, which is how the
             // two come to disagree.
             if let machine {
-                Text("machine \(machine)")
+                Text("machine \(WeightText.string(grams: machine, in: WeightUnit.current))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -309,23 +315,29 @@ struct MacEditLogsView: View {
 
     /// Reads the row's own copy, writes to the record behind it — which may be
     /// gone by the time a field commits, hence the lookup on every write.
-    private func weightBinding(_ row: Row, _ i: Int) -> Binding<Int> {
-        Binding(get: { i < row.weights.count ? row.weights[i] : 0 },
-                set: { value in
-                    guard let log = record(row.id) else { return }
-                    LogEditing.extend(log, toSets: i + 1)
-                    log.weights[i] = value
-                    // On an assisted machine this column is the weight lifted;
-                    // the machine's own number is kept in step with it.
-                    LogEditing.realignAssisted(log: log, set: i, in: context)
-                })
+    /// Reads and writes in the user's unit; what is stored is grams.
+    private func weightBinding(_ row: Row, _ i: Int) -> Binding<Double> {
+        let unit = WeightUnit.current
+        return Binding(
+            get: {
+                let grams = i < row.weights.count ? row.weights[i] : 0
+                return unit.display(grams: grams)
+            },
+            set: { value in
+                guard let log = record(row.id) else { return }
+                LogEditing.setGrams(unit.grams(from: max(0, value)), at: i,
+                                    for: log, in: context)
+                // On an assisted machine this column is the weight lifted;
+                // the machine's own number is kept in step with it.
+                LogEditing.realignAssisted(log: log, set: i, in: context)
+            })
     }
 
     private func repsBinding(_ row: Row, _ i: Int) -> Binding<Int> {
         Binding(get: { i < row.reps.count ? row.reps[i] : 0 },
                 set: { value in
                     guard let log = record(row.id) else { return }
-                    LogEditing.extend(log, toSets: i + 1)
+                    LogEditing.extend(log, toSets: i + 1, in: context)
                     log.reps[i] = value
                 })
     }
@@ -333,9 +345,18 @@ struct MacEditLogsView: View {
     /// The bottom row is not a log yet, so its cells write to state rather
     /// than to a record. Both arrays grow together, for the same reason a
     /// log's do.
-    private func newWeightBinding(_ i: Int) -> Binding<Int> {
-        Binding(get: { i < newWeights.count ? newWeights[i] : 0 },
-                set: { value in growNewRow(to: i + 1); newWeights[i] = value })
+    /// The row being typed at the bottom. `newWeights` holds GRAMS, like
+    /// everything stored; the cell shows and takes the user's unit.
+    private func newWeightBinding(_ i: Int) -> Binding<Double> {
+        let unit = WeightUnit.current
+        return Binding(
+            get: {
+                unit.display(grams: i < newWeights.count ? newWeights[i] : 0)
+            },
+            set: { value in
+                growNewRow(to: i + 1)
+                newWeights[i] = unit.grams(from: max(0, value))
+            })
     }
 
     private func newRepsBinding(_ i: Int) -> Binding<Int> {
@@ -361,9 +382,12 @@ struct MacEditLogsView: View {
         while let w = weights.last, let r = reps.last, w == 0, r == 0 {
             weights.removeLast(); reps.removeLast()
         }
+        // The weights go beside the log, in grams; the log's own field is the
+        // original unit-less one and is not written any more.
         let log = WorkoutLog(date: newDate, workoutId: workoutId,
-                             exerciseId: exerciseId, weights: weights, reps: reps)
+                             exerciseId: exerciseId, weights: [], reps: reps)
         context.insert(log)
+        context.insert(LogWeights(logId: log.id, grams: weights))
         DraftMode.note(log: log.id, in: context)
         try? context.save()
 
@@ -387,7 +411,9 @@ struct MacEditLogsView: View {
     // MARK: Leaving
 
     private func finish() {
-        for log in logs where !log.isDeleted { LogEditing.trimEmptyTrailingSets(log) }
+        for log in logs where !log.isDeleted {
+            LogEditing.trimEmptyTrailingSets(log, in: context)
+        }
         try? context.save()
 
         if changed {

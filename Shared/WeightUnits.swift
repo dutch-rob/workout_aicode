@@ -1,5 +1,9 @@
 import Foundation
 
+// A BYTE-IDENTICAL COPY of this file lives in the Watch target, which does not
+// compile Shared/. Edit the two together: a Watch that disagreed with its
+// phone about what a gram is would show the right number in the wrong unit.
+
 // MARK: - Units, and what a stored weight means
 //
 // Until now a weight was a bare number: the wheels held integers and whether

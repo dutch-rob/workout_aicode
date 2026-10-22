@@ -300,6 +300,18 @@ struct MacExercisesView: View {
 // MARK: - One exercise
 
 struct MacExerciseForm: View {
+    /// A weight field: typed in the user's unit, stored in grams. Zero while
+    /// the exercise has no unit yet — see `WeightHistory`.
+    private func weightField(_ keyPath: ReferenceWritableKeyPath<ExerciseDef, Int?>) -> Binding<Double> {
+        Binding(
+            get: {
+                guard let grams = exercise[keyPath: keyPath] else { return 0 }
+                return WeightUnit.current.display(grams: grams)
+            },
+            set: { exercise[keyPath: keyPath] = WeightUnit.current.grams(from: max(0, $0)) }
+        )
+    }
+
     @Bindable var exercise: ExerciseDef
 
     /// Fifteen names, and how many more may be added.
@@ -339,17 +351,29 @@ struct MacExerciseForm: View {
                                 .frame(width: 60)
                         }
                     }
+                    // Typed in the user's unit, stored in grams, with the
+                    // unit written beside it — this is where a weight is
+                    // typed rather than rolled.
                     LabeledContent("Lowest weight") {
-                        TextField("", value: $exercise.lowestWeight, format: .number)
-                            .frame(width: 80)
+                        HStack(spacing: 4) {
+                            TextField("", value: weightField(\.lowestWeightGrams), format: .number)
+                                .frame(width: 80)
+                            Text(WeightUnit.current.label).foregroundStyle(.secondary)
+                        }
                     }
                     LabeledContent("Highest weight") {
-                        TextField("", value: $exercise.highestWeight, format: .number)
-                            .frame(width: 80)
+                        HStack(spacing: 4) {
+                            TextField("", value: weightField(\.highestWeightGrams), format: .number)
+                                .frame(width: 80)
+                            Text(WeightUnit.current.label).foregroundStyle(.secondary)
+                        }
                     }
                     LabeledContent("Increment") {
-                        TextField("", value: $exercise.weightIncrement, format: .number)
-                            .frame(width: 80)
+                        HStack(spacing: 4) {
+                            TextField("", value: weightField(\.weightIncrementGrams), format: .number)
+                                .frame(width: 80)
+                            Text(WeightUnit.current.label).foregroundStyle(.secondary)
+                        }
                     }
                     Toggle("Subtracted from body weight", isOn: $exercise.subtractsFromBodyWeight)
                     if exercise.subtractsFromBodyWeight {

@@ -1056,15 +1056,23 @@ struct ExportEnvelope: Codable {
         /// machine setting it came from.
         let aerobicResults: [AerobicResult]?
         let assistedResults: [AssistedResult]?
+        /// Each log's weights, in grams — they live beside the log, not on it.
+        ///
+        /// A file without them is from before weights had a unit: its logs
+        /// carry bare numbers in `WorkoutLog.weights`, whose meaning only the
+        /// person who exported it knows.
+        let logWeights: [LogWeights]?
 
         init(workouts: [WorkoutDef], exercises: [ExerciseDef], logs: [WorkoutLog],
              aerobicResults: [AerobicResult]? = nil,
-             assistedResults: [AssistedResult]? = nil) {
+             assistedResults: [AssistedResult]? = nil,
+             logWeights: [LogWeights]? = nil) {
             self.workouts = workouts
             self.exercises = exercises
             self.logs = logs
             self.aerobicResults = aerobicResults
             self.assistedResults = assistedResults
+            self.logWeights = logWeights
         }
     }
 }

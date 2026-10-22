@@ -48,17 +48,25 @@ struct SyncExercise: Codable, Identifiable, Hashable {
     /// only needs it to label the row: the wheels show what is set on the
     /// machine either way, and the phone turns that into the weight lifted.
     var subtractsFromBodyWeight: Bool
+    /// The wheel's range, in grams. The three unit-less fields above are the
+    /// originals and are no longer written; a Watch on an older build still
+    /// reads them, which is why they are still sent.
+    var lowestGrams: Int
+    var highestGrams: Int
+    var incrementGrams: Int
 
     enum CodingKeys: String, CodingKey {
         case id, name, numberOfSeries, lowestWeight, highestWeight, weightIncrement
         case restSeconds, kindRaw, aerobicActivityRaw, subtractsFromBodyWeight
+        case lowestGrams, highestGrams, incrementGrams
     }
     init(id: String, name: String, numberOfSeries: Int, lowestWeight: Int,
          highestWeight: Int, weightIncrement: Int,
          restSeconds: Int = SyncDefaults.restSeconds,
          kindRaw: String = SyncDefaults.strengthKind,
          aerobicActivityRaw: String? = nil,
-         subtractsFromBodyWeight: Bool = false) {
+         subtractsFromBodyWeight: Bool = false,
+         lowestGrams: Int = 0, highestGrams: Int = 0, incrementGrams: Int = 0) {
         self.id = id
         self.name = name
         self.numberOfSeries = numberOfSeries
@@ -69,6 +77,9 @@ struct SyncExercise: Codable, Identifiable, Hashable {
         self.kindRaw = kindRaw
         self.aerobicActivityRaw = aerobicActivityRaw
         self.subtractsFromBodyWeight = subtractsFromBodyWeight
+        self.lowestGrams = lowestGrams
+        self.highestGrams = highestGrams
+        self.incrementGrams = incrementGrams
     }
     // Lenient, because the two apps update independently: a Watch on the new
     // build can be handed a payload from the old phone build for as long as it
@@ -94,6 +105,9 @@ struct SyncExercise: Codable, Identifiable, Hashable {
         // weight rather than take it off.
         subtractsFromBodyWeight = try c.decodeIfPresent(
             Bool.self, forKey: .subtractsFromBodyWeight) ?? false
+        lowestGrams = try c.decodeIfPresent(Int.self, forKey: .lowestGrams) ?? 0
+        highestGrams = try c.decodeIfPresent(Int.self, forKey: .highestGrams) ?? 0
+        incrementGrams = try c.decodeIfPresent(Int.self, forKey: .incrementGrams) ?? 0
     }
 
     /// Whether this is one the Watch should offer a duration and a workout for
@@ -320,6 +334,9 @@ struct SyncPayload: Codable {
     var zoneTint: Double
     var restTaps: Int
     var wheelRows: Int
+    /// Which unit to WRITE weights in. The numbers themselves are grams, as
+    /// they are on the phone; this is only how they are read out.
+    var weightUnit: String
 
     static func lastEntryKey(workoutId: String, exerciseId: String) -> String {
         "\(workoutId)|\(exerciseId)"
@@ -327,7 +344,7 @@ struct SyncPayload: Codable {
 
     enum CodingKeys: String, CodingKey {
         case workouts, exercises, lastEntries, healthSharingEnabled, restTimerEnabled
-        case watchWorkoutMode, zoneTint, restTaps, wheelRows
+        case watchWorkoutMode, zoneTint, restTaps, wheelRows, weightUnit
     }
     init(workouts: [SyncWorkout], exercises: [SyncExercise],
          lastEntries: [String: SyncLastEntry], healthSharingEnabled: Bool = false,
@@ -335,7 +352,8 @@ struct SyncPayload: Codable {
          watchWorkoutMode: String = WatchWorkoutMode.handover.rawValue,
          zoneTint: Double = WatchPreferences.defaultZoneTint,
          restTaps: Int = WatchPreferences.defaultRestTaps,
-         wheelRows: Int = WatchPreferences.defaultWheelRows) {
+         wheelRows: Int = WatchPreferences.defaultWheelRows,
+         weightUnit: String = WeightUnit.regionDefault.rawValue) {
         self.workouts = workouts
         self.exercises = exercises
         self.lastEntries = lastEntries
@@ -345,6 +363,7 @@ struct SyncPayload: Codable {
         self.zoneTint = zoneTint
         self.restTaps = restTaps
         self.wheelRows = wheelRows
+        self.weightUnit = weightUnit
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -361,5 +380,7 @@ struct SyncPayload: Codable {
             try c.decodeIfPresent(Int.self, forKey: .restTaps) ?? WatchPreferences.defaultRestTaps)
         wheelRows = WatchPreferences.clampRows(
             try c.decodeIfPresent(Int.self, forKey: .wheelRows) ?? WatchPreferences.defaultWheelRows)
+        weightUnit = try c.decodeIfPresent(String.self, forKey: .weightUnit)
+            ?? WeightUnit.regionDefault.rawValue
     }
 }

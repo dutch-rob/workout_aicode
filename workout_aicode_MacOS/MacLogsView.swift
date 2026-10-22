@@ -16,6 +16,7 @@ struct MacLogsView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
     @Query private var workouts: [WorkoutDef]
     @Query private var exercises: [ExerciseDef]
+    @Query private var logWeights: [LogWeights]
     @Query private var aerobicResults: [AerobicResult]
 
     @State private var search = ""
@@ -159,21 +160,26 @@ struct MacLogsView: View {
     /// time this exercise was done.
     private func sets(_ log: WorkoutLog) -> some View {
         let previous = LogComparison.previous(for: log.exerciseId, before: log.date, in: logs)
-        let count = max(log.weights.count, log.reps.count)
+        // Grams, from beside the log, written in the user's unit.
+        let byLog = LogWeightsIndex.byLogId(logWeights)
+        let grams = byLog[log.id] ?? []
+        let previousGrams = previous.flatMap { byLog[$0.id] } ?? []
+        let unit = WeightUnit.current
+        let count = max(grams.count, log.reps.count)
         // Half of this is the difference worth colouring — see
         // LogComparison.tolerance. It matters for the assisted machines, whose
         // logged weight moves with the user's body weight.
-        let incrementForLog = exercises.first(where: { $0.id == log.exerciseId })?.weightIncrement
+        let incrementForLog = exercises.first(where: { $0.id == log.exerciseId })?.weightIncrementGrams
         return HStack(spacing: 10) {
             ForEach(0..<count, id: \.self) { i in
-                let weight = i < log.weights.count ? log.weights[i] : 0
+                let weight = i < grams.count ? grams[i] : 0
                 let reps = i < log.reps.count ? log.reps[i] : 0
-                let previousWeight = previous?.weights.indices.contains(i) == true
-                    ? previous!.weights[i] : nil
+                let previousWeight = previousGrams.indices.contains(i)
+                    ? previousGrams[i] : nil
                 let previousReps = previous?.reps.indices.contains(i) == true
                     ? previous!.reps[i] : nil
                 VStack(spacing: 0) {
-                    Text("\(weight)")
+                    Text(WeightText.string(grams: weight, in: unit))
                         .foregroundStyle(LogComparison.weightColour(current: weight,
                                                                     previous: previousWeight,
                                                                     increment: incrementForLog))

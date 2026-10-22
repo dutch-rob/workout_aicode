@@ -33,6 +33,8 @@ final class WatchSessionManager: NSObject, ObservableObject {
     @Published private(set) var zoneTint = WatchPreferences.defaultZoneTint
     @Published private(set) var restTaps = WatchPreferences.defaultRestTaps
     @Published private(set) var wheelRows = WatchPreferences.defaultWheelRows
+    /// Which unit to write weights in. The numbers are grams either way.
+    @Published private(set) var weightUnit = WeightUnit.regionDefault
     private var lastEntries: [String: SyncLastEntry] = [:]
 
     // MARK: Handover session state
@@ -101,6 +103,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
             zoneTint = payload.zoneTint
             restTaps = payload.restTaps
             wheelRows = payload.wheelRows
+            weightUnit = WeightUnit(rawValue: payload.weightUnit) ?? .regionDefault
         }
         // Left by the phone for a Watch app that was not running when the
         // aerobic session began — which is the usual way it begins.

@@ -93,17 +93,22 @@ enum DeveloperDataSync {
         let bestOneRM: Double?
         let hardSets: Int
 
-        init(log: WorkoutLog, exercise: ExerciseDef?, formula: OneRMFormula) {
+        /// `weightsGrams` is the log's weights — they live beside it now, so
+        /// they are handed in rather than read off the log. Shared in GRAMS,
+        /// which is the first time this data has had a unit at all: before,
+        /// one user's 130 and another's 130 were not the same weight.
+        init(log: WorkoutLog, weightsGrams: [Int], exercise: ExerciseDef?,
+             formula: OneRMFormula) {
             self.id = log.id.uuidString
             self.date = log.date
-            self.weights = log.weights
+            self.weights = weightsGrams
             self.reps = log.reps
             self.libraryKey = exercise?.libraryKey
             self.exerciseHash = hashedName(exercise?.name ?? "")
             self.primaryMuscle = exercise?.primaryMuscle?.rawValue
             self.secondaryMuscles = exercise?.secondaryMuscles.map(\.rawValue) ?? []
             let session = ExerciseSession(id: log.id, date: log.date,
-                                          weights: log.weights, reps: log.reps,
+                                          weights: weightsGrams, reps: log.reps,
                                           formula: formula)
             self.bestOneRM = session?.m1RM
             self.hardSets = session?.hardSetCount ?? 0
@@ -133,13 +138,20 @@ enum DeveloperDataSync {
     /// Upload anything not yet sent when consent is on; delete everything this
     /// install ever sent when consent is off.
     static func sync(consent: Bool, logs: [WorkoutLog], exercises: [ExerciseDef],
-                     formula: OneRMFormula) {
+                     weightsByLog: [UUID: [Int]], formula: OneRMFormula) {
         guard consent else {
             Task { await withdraw() }
             return
         }
         let byId = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let snapshot = logs.map { LogLite(log: $0, exercise: byId[$0.exerciseId], formula: formula) }
+        // Only logs whose weights have a unit. One from before that, not yet
+        // filled in, would be shared as a bare number again — which is the
+        // thing this is fixing.
+        let snapshot = logs.compactMap { log -> LogLite? in
+            guard let grams = weightsByLog[log.id], !grams.isEmpty else { return nil }
+            return LogLite(log: log, weightsGrams: grams,
+                           exercise: byId[log.exerciseId], formula: formula)
+        }
         Task { await upload(logs: snapshot, formula: formula) }
     }
 

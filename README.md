@@ -178,6 +178,17 @@ Deleting an exercise removes it from your list *and* from any workout that used 
 ## Editing an exercise
 On the *edit exercise* screen you set the name, the number of sets, the lowest weight, the highest weight and the increment that determine the numbers on its wheel, the rest this exercise gets when the rest timer is on, and the muscle groups it works. Underneath, **In these workouts** shows which workouts contain it, and you can add or remove it from any of them right there — the same relationship, editable from either end.
 
+### Kilograms or pounds
+Settings › *Weights in*. Pounds to start with in the United States and Canada, kilograms elsewhere, and you can change it whenever you like.
+
+Your weights are stored in a form that has no unit at all, so switching re-presents everything you have ever logged in the other one. Nothing is recalculated, nothing drifts, and switching back and forth costs nothing.
+
+The unit is written only where you type a weight — on the *edit exercise* screen, beside each of the three numbers. The wheels, your logs and the graphs leave it off: the unit is the same down the whole screen there, and the space is worth more than the repetition.
+
+Weights can be halves and quarters, which is what machines are actually marked in: a half-pound increment, a quarter-kilogram plate. They are written with the short forms — 130, 130¼, 130½, 130¾ — because "130.25" is wider than a wheel wants to be.
+
+If you were using the app before it knew about units, it asks once what the weights you have already logged were in. Your numbers do not change: 130 stays 130, and the answer only says what it means.
+
 ### Machines that take weight off you
 An assisted chin-up or dip works the other way round from everything else: the number you set is how much of your own weight the machine carries, so a *bigger* number is an *easier* set. Tick **subtracted from body weight** on the exercise and the app handles that.
 
@@ -188,6 +199,8 @@ Your body weight comes from Settings: from Apple Health, where it follows your w
 **In the same units as your weights.** This app has no units of its own — the wheels are numbers, and whether they mean kilograms or pounds is between you and your gym. A body weight in kilograms against a machine set in pounds is nonsense, so from Health it arrives in whichever unit you read your weight in there. Until a body weight is known, an exercise like this cannot be logged: the screen says so and the log button waits, rather than recording a set you did not do.
 
 One consequence worth knowing: because the logged weight moves with your body weight, the colours in your logs ignore any difference of half an increment or less. A kilo after breakfast is not a personal best.
+
+**An ordinary chin-up or dip** — no machine, no assistance — is the same thing with nothing taken off: tick *subtracted from body weight* and leave the machine setting at 0. What gets logged is your body weight, which is what you lifted, and it follows your weight as it changes.
 
 An exercise needs a name and a primary muscle group before it can be saved, and the name has to be one you are not already using. Without a muscle group an exercise cannot be found on the body picture or grouped with anything else. **quit** leaves without keeping your changes; on an exercise you have only just created, it removes it again rather than leaving a nameless one behind.
 
@@ -246,6 +259,7 @@ The settings screen has:
    - **Rest timer** — counts your rest after every set and after each exercise you log. Off by default, see [The rest timer](#the-rest-timer) above. With a Watch, **taps on the wrist** sets how many taps mark the end of a rest, from one to five.
 
    - **Workouts on the Watch** — hand over between devices, or record a Watch workout as a real Apple workout. See [The Apple Watch app](#the-apple-watch-app) above. Handing over by default.
+   - **Weights in** — kilograms or pounds. See [Kilograms or pounds](#kilograms-or-pounds) above. Follows your region to begin with.
    - **Body weight** — from Apple Health or set by hand, used only by exercises marked *subtracted from body weight*. Shown only when you have one. See [Machines that take weight off you](#machines-that-take-weight-off-you) above.
    - **Wheels on the Watch** — one row with a reps/weights toggle, or both rows at once. See [The Apple Watch app](#the-apple-watch-app) above. One row by default.
    - **Heart rate band** — how strongly the zone colours are drawn behind the exercise name on the Watch, from barely there to full strength, with a preview to judge it against. Only shown when the Watch records Apple workouts.

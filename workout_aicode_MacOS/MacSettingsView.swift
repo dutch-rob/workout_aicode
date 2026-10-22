@@ -2,6 +2,11 @@ import SwiftUI
 import SwiftData
 
 struct MacSettingsView: View {
+    @Environment(\.modelContext) private var macContext
+    @AppStorage(WeightUnit.key) private var weightUnitRaw = WeightUnit.regionDefault.rawValue
+    /// Redrawn after the question below is answered.
+    @State private var unitAnswered = WeightHistory.isAnswered
+
     @Environment(\.modelContext) private var context
     @Query private var drafts: [DraftSession]
     @State private var syncOn = MacAppSetup.syncEnabled
@@ -21,6 +26,37 @@ struct MacSettingsView: View {
 
     var body: some View {
         Form {
+            Section {
+                if unitAnswered {
+                    Picker("Weights in", selection: $weightUnitRaw) {
+                        ForEach(WeightUnit.allCases) { unit in
+                            Text(unit == .kilograms ? "Kilograms (kg)" : "Pounds (lb)")
+                                .tag(unit.rawValue)
+                        }
+                    }
+                } else {
+                    // The same question the iPhone asks, for whoever opens
+                    // this app first. Weights are kept in a form that has no
+                    // unit, and nothing can be shown until somebody says what
+                    // the numbers logged so far were in.
+                    Text("The weights you have logged so far — what were they in?")
+                        .font(.callout).bold()
+                    HStack {
+                        ForEach(WeightUnit.allCases) { unit in
+                            Button(unit == .kilograms ? "Kilograms" : "Pounds") {
+                                WeightHistory.adopt(unit, in: macContext)
+                                weightUnitRaw = unit.rawValue
+                                unitAnswered = true
+                            }
+                        }
+                    }
+                }
+            } footer: {
+                Text(unitAnswered
+                     ? "Your weights are kept without a unit, so switching here re-presents everything you have logged in the other one — nothing is recalculated and nothing is lost."
+                     : "Until this is answered your weights cannot be shown: the numbers are there, but what they mean is not.")
+            }
+
             Section {
                 Toggle("Share data through iCloud", isOn: $syncOn)
                     .onChange(of: syncOn) { _, on in
