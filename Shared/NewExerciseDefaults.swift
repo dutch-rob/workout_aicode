@@ -84,15 +84,19 @@ enum ExerciseDefaults {
                              secondary: [MuscleGroup] = [],
                              libraryKey: String? = nil) -> ExerciseDef {
         let d = current
-        return ExerciseDef(name: name,
-                           numberOfSeries: d.sets,
-                           lowestWeight: d.lowest,
-                           highestWeight: d.highest,
-                           weightIncrement: d.increment,
-                           primaryMuscle: primary,
-                           secondaryMuscles: secondary,
-                           libraryKey: libraryKey,
-                           restSeconds: restSeconds)
+        let exercise = ExerciseDef(name: name,
+                                   numberOfSeries: d.sets,
+                                   primaryMuscle: primary,
+                                   secondaryMuscles: secondary,
+                                   libraryKey: libraryKey,
+                                   restSeconds: restSeconds)
+        // The user's numbers are in the user's unit; what is stored is grams.
+        // The legacy lowestWeight/highestWeight/weightIncrement are left at
+        // their defaults and never written again.
+        exercise.setWeightRange(lowest: Double(d.lowest),
+                                highest: Double(d.highest),
+                                increment: Double(d.increment))
+        return exercise
     }
 
     /// Only for someone who has not been asked yet. An existing user updating

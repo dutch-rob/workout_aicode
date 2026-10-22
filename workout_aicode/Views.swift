@@ -293,6 +293,21 @@ struct EditWorkoutView: View {
 
 // MARK: - Edit Exercise Screen
 struct EditExerciseView: View {
+    /// A weight field: typed in the user's unit, stored in grams.
+    ///
+    /// Nil means an exercise whose weights have not been given a unit yet —
+    /// see `WeightHistory`. It reads as zero until the user answers, which is
+    /// the one honest thing to show for a number whose meaning is unknown.
+    private func weightField(_ keyPath: ReferenceWritableKeyPath<ExerciseDef, Int?>) -> Binding<Double> {
+        Binding(
+            get: {
+                guard let grams = exercise[keyPath: keyPath] else { return 0 }
+                return WeightUnit.current.display(grams: grams)
+            },
+            set: { exercise[keyPath: keyPath] = WeightUnit.current.grams(from: max(0, $0)) }
+        )
+    }
+
     @Bindable var exercise: ExerciseDef
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
@@ -399,22 +414,36 @@ struct EditExerciseView: View {
                 // would break existing databases and exports for a word.
             } label: { Text("Number of sets") }
 
+            // In the user's unit, with the unit written beside it — this is
+            // the one screen where a weight is typed rather than rolled, and
+            // the one place the question "kilograms or pounds?" actually
+            // arises. The wheels, logs and graphs are left unlabelled: the
+            // unit is the same down the whole screen and the space is not.
             LabeledContent {
-                TextField("", value: $exercise.lowestWeight, format: .number)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
+                HStack(spacing: 4) {
+                    TextField("", value: weightField(\.lowestWeightGrams), format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                    Text(WeightUnit.current.label).foregroundStyle(.secondary)
+                }
             } label: { Text("Lowest weight") }
 
             LabeledContent {
-                TextField("", value: $exercise.highestWeight, format: .number)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
+                HStack(spacing: 4) {
+                    TextField("", value: weightField(\.highestWeightGrams), format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                    Text(WeightUnit.current.label).foregroundStyle(.secondary)
+                }
             } label: { Text("Highest weight") }
 
             LabeledContent {
-                TextField("", value: $exercise.weightIncrement, format: .number)
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
+                HStack(spacing: 4) {
+                    TextField("", value: weightField(\.weightIncrementGrams), format: .number)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                    Text(WeightUnit.current.label).foregroundStyle(.secondary)
+                }
             } label: { Text("Weight increment") }
 
             Toggle(isOn: $exercise.subtractsFromBodyWeight) {
@@ -451,16 +480,15 @@ struct EditExerciseView: View {
 
             WorkoutMembershipSection(exercise: exercise)
         }
-        .onChange(of: exercise.lowestWeight) { _, newValue in
-            if newValue < 1 { exercise.lowestWeight = 1 }
-            if exercise.highestWeight < newValue { exercise.highestWeight = newValue }
+        .onChange(of: exercise.lowestWeightGrams) { _, newValue in
+            guard let newValue else { return }
+            if (exercise.highestWeightGrams ?? 0) < newValue {
+                exercise.highestWeightGrams = newValue
+            }
         }
-        .onChange(of: exercise.highestWeight) { _, newValue in
-            if newValue < 1 { exercise.highestWeight = 1 }
-            if newValue < exercise.lowestWeight { exercise.lowestWeight = newValue }
-        }
-        .onChange(of: exercise.weightIncrement) { _, newValue in
-            if newValue < 1 { exercise.weightIncrement = 1 }
+        .onChange(of: exercise.highestWeightGrams) { _, newValue in
+            guard let newValue, let lowest = exercise.lowestWeightGrams else { return }
+            if newValue < lowest { exercise.lowestWeightGrams = newValue }
         }
         .navigationTitle("edit exercise")
         .navigationBarBackButtonHidden(true)
@@ -926,13 +954,18 @@ struct LogExerciseView: View {
     @State private var pickerHeight: CGFloat = 180
 
     private func weightPickers(for exercise: ExerciseDef) -> some View {
-        let weightOptions = Array(stride(from: exercise.lowestWeight, through: exercise.highestWeight, by: exercise.weightIncrement))
+        // In GRAMS: what the wheel offers is exactly what gets stored, so a
+        // set logged at 130½ lb is the same number next week rather than one
+        // converted down and back again. The unit is only how it is written.
+        let weightOptions = WeightWheel.values(for: exercise)
         let count = max(1, exercise.numberOfSeries)
+        let unit = WeightUnit.current
         return HStack(spacing: wheelSpacing) {
             ForEach(0..<count, id: \.self) { series in
-                Picker("", selection: weightBinding(series: series, defaultValue: exercise.lowestWeight)) {
-                    ForEach(weightOptions, id: \.self) { weight in
-                        Text("\(weight)").tag(weight)
+                Picker("", selection: weightBinding(series: series,
+                                                    defaultValue: weightOptions.first ?? 0)) {
+                    ForEach(weightOptions, id: \.self) { grams in
+                        Text(WeightText.string(grams: grams, in: unit)).tag(grams)
                     }
                 }
                 .pickerStyle(.wheel)
@@ -1044,9 +1077,9 @@ struct LogExerciseView: View {
         }
         let onTheWheels = currentIndex < weights.count ? weights[currentIndex] : []
         let heaviest = onTheWheels.max() ?? 0
-        guard BodyWeight.canCompute(machineSetting: heaviest) else {
-            let weight = BodyWeight.current.formatted(.number.precision(.fractionLength(0...1)))
-            return "The machine is set to \(heaviest), which is more than your body weight of \(weight). Check that both are in the same units — Settings holds your body weight."
+        guard BodyWeight.canCompute(machineSettingGrams: heaviest) else {
+            let unit = WeightUnit.current
+            return "The machine is set to \(WeightText.string(grams: heaviest, in: unit)) \(unit.label), which is more than your body weight of \(WeightText.string(BodyWeight.current)) \(unit.label). Settings holds your body weight."
         }
         return nil
     }
@@ -1110,18 +1143,25 @@ struct LogExerciseView: View {
 
     private func prepareBuffers() {
         let last = store.lastEntries(for: workout)
-        weights = exerciseIds.map { exId in
+        weights = exerciseIds.map { exId -> [Int] in
             guard let log = last[exId] else { return [] }
+            let exercise = allExercises.first(where: { $0.id == exId })
+            // Put last time's numbers on this wheel's steps, so the wheel
+            // opens where it is expected to rather than at its lowest value.
+            func snapped(_ grams: [Int]) -> [Int] {
+                guard let exercise else { return grams }
+                return grams.map { WeightWheel.snap($0, for: exercise) }
+            }
             // An assisted machine's wheel shows what you SET on it, so it has
             // to open on last time's setting — the log holds what was lifted,
             // which is a different number and would creep every session as
             // body weight moved.
-            if allExercises.first(where: { $0.id == exId })?.subtractsFromBodyWeight == true,
+            if exercise?.subtractsFromBodyWeight == true,
                let assisted = store.assistedResult(forLogId: log.id),
-               !assisted.machineSettings.isEmpty {
-                return assisted.machineSettings
+               let settings = assisted.machineSettingsGrams, !settings.isEmpty {
+                return snapped(settings)
             }
-            return log.weights
+            return snapped(store.weightsGrams(forLogId: log.id))
         }
         reps = exerciseIds.map { exId in last[exId]?.reps ?? [] }
         // Pre-filled from the last session of each aerobic exercise, so the
@@ -1148,7 +1188,8 @@ struct LogExerciseView: View {
     }
 
     private func setWeight(_ value: Int, series: Int) {
-        ensureSeriesCapacity(&weights[currentIndex], upTo: series, fill: exerciseAt(currentIndex)?.lowestWeight ?? 0)
+        ensureSeriesCapacity(&weights[currentIndex], upTo: series,
+                             fill: exerciseAt(currentIndex)?.lowestWeightGrams ?? 0)
         guard weights[currentIndex][series] != value else { return }
         weights[currentIndex][series] = value
         // Belt and braces: a wheel left on a new number is the end of a set
@@ -1296,21 +1337,27 @@ struct LogExerciseView: View {
     /// body weight has moved.
     @discardableResult
     private func writeLog(for exercise: ExerciseDef) -> WorkoutLog {
+        // All in grams. The log's own `weights` is deliberately left empty:
+        // it is the original unit-less field, and a device still on the old
+        // build reading grams there would see a weight 2.2 times too big.
         let onTheWheels = weights[currentIndex]
         let assisted = exercise.subtractsFromBodyWeight
-        let bodyWeight = BodyWeight.current
+        let bodyWeightGrams = BodyWeight.currentGrams
         let lifted = assisted
-            ? onTheWheels.map { BodyWeight.lifted(bodyWeight: bodyWeight, machineSetting: $0) }
+            ? onTheWheels.map { max(0, bodyWeightGrams - $0) }
             : onTheWheels
         let log = WorkoutLog(workoutId: workout.id,
                              exerciseId: exercise.id,
-                             weights: lifted,
+                             weights: [],
                              reps: reps[currentIndex])
         context.insert(log)
+        context.insert(LogWeights(logId: log.id, grams: lifted))
         if assisted {
             context.insert(AssistedResult(logId: log.id,
-                                          bodyWeight: bodyWeight,
-                                          machineSettings: onTheWheels))
+                                          bodyWeight: 0,
+                                          machineSettings: [],
+                                          bodyWeightGrams: bodyWeightGrams,
+                                          machineSettingsGrams: onTheWheels))
         }
         recordAerobicResult(for: exercise, log: log)
         return log
@@ -1494,6 +1541,7 @@ struct LogsListView: View {
     @Query private var workouts: [WorkoutDef]
     @Query private var exercises: [ExerciseDef]
     @Query private var aerobicResults: [AerobicResult]
+    @Query private var logWeights: [LogWeights]
 
     var body: some View {
         if logs.isEmpty {
@@ -1604,14 +1652,21 @@ struct LogsListView: View {
 
     private func weightsRepsColumns(for log: WorkoutLog, at date: Date) -> some View {
         let previous = previousEntry(for: log.exerciseId, before: date)
-        let maxCount = max(log.weights.count, log.reps.count)
+        // Grams, from beside the log. The unit is only how they are written —
+        // no "kg" or "lb" here, where every column is already as narrow as it
+        // can be and the unit is the same down the whole screen.
+        let byLog = LogWeightsIndex.byLogId(logWeights)
+        let grams = byLog[log.id] ?? []
+        let previousGrams = previous.flatMap { byLog[$0.id] } ?? []
+        let unit = WeightUnit.current
+        let maxCount = max(grams.count, log.reps.count)
         return Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 4) {
             GridRow {
                 Text("w").font(.headline)
                 ForEach(0..<maxCount, id: \.self) { i in
-                    let current = i < log.weights.count ? log.weights[i] : 0
-                    let prev = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
-                    Text("\(current)")
+                    let current = i < grams.count ? grams[i] : 0
+                    let prev = previousGrams.indices.contains(i) ? previousGrams[i] : nil
+                    Text(WeightText.string(grams: current, in: unit))
                         .foregroundStyle(colorForWeight(current: current, previous: prev,
                                                         exerciseId: log.exerciseId))
                         .font(.headline)
@@ -1622,8 +1677,8 @@ struct LogsListView: View {
                 ForEach(0..<maxCount, id: \.self) { i in
                     let current = i < log.reps.count ? log.reps[i] : 0
                     let prevRep = previous?.reps.indices.contains(i) == true ? previous!.reps[i] : nil
-                    let currentW = i < log.weights.count ? log.weights[i] : 0
-                    let prevW = previous?.weights.indices.contains(i) == true ? previous!.weights[i] : nil
+                    let currentW = i < grams.count ? grams[i] : 0
+                    let prevW = previousGrams.indices.contains(i) ? previousGrams[i] : nil
                     Text("\(current)")
                         .foregroundStyle(colorForReps(current: current, previous: prevRep,
                                                       currentWeight: currentW, previousWeight: prevW,
@@ -1646,7 +1701,7 @@ struct LogsListView: View {
     /// The exercise's own increment, so a difference smaller than half of it
     /// is left uncoloured — see `LogComparison.tolerance`.
     private func increment(for exerciseId: UUID) -> Int? {
-        exercises.first(where: { $0.id == exerciseId })?.weightIncrement
+        exercises.first(where: { $0.id == exerciseId })?.weightIncrementGrams
     }
 
     private func colorForWeight(current: Int, previous: Int?, exerciseId: UUID) -> Color {
@@ -2371,6 +2426,7 @@ struct SettingsView: View {
     private var usesBodyWeight: Bool {
         exercises.contains { $0.subtractsFromBodyWeight }
     }
+    @AppStorage(WeightUnit.key) private var weightUnitRaw = WeightUnit.regionDefault.rawValue
     @AppStorage(BodyWeight.sourceKey) private var bodyWeightSourceRaw = BodyWeightSource.health.rawValue
     @AppStorage(BodyWeight.manualKey) private var bodyWeightManual = 0
     @State private var bodyWeightFromHealth: Double? = BodyWeight.health
@@ -2435,6 +2491,25 @@ struct SettingsView: View {
                 }
                 }
             }
+            }
+
+            Section {
+                Picker(selection: $weightUnitRaw) {
+                    ForEach(WeightUnit.allCases) { unit in
+                        Text(unit == .kilograms ? "Kilograms (kg)" : "Pounds (lb)")
+                            .tag(unit.rawValue)
+                    }
+                } label: {
+                    Label("Weights in", systemImage: "scalemass")
+                }
+                .pickerStyle(.inline)
+                .onChange(of: weightUnitRaw) { _, _ in
+                    // Nothing is converted: weights are stored in grams, so
+                    // this changes how they are written and nothing else.
+                    store.reloadAll()
+                }
+            } footer: {
+                Text("Your weights are kept in a form that has no unit, so switching here re-presents everything you have ever logged in the other one — nothing is recalculated and nothing is lost. Weights are written to the nearest quarter: 130, 130¼, 130½, 130¾.")
             }
 
             if usesBodyWeight {

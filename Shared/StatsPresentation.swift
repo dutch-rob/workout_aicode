@@ -31,11 +31,20 @@ struct StatsInputs {
         self.smoothing = smoothing
     }
 
-    func analyze(logs: [WorkoutLog], exercises: [ExerciseDef]) -> [ExerciseStats] {
+    /// `weightsByLog` is the grams for each log — see `LogWeightsIndex`.
+    ///
+    /// Everything downstream of here is therefore in grams: the estimates, the
+    /// trends per week, the best-ever numbers. They are converted to the
+    /// user's unit where they are written on screen, and nowhere else. A log
+    /// with no grams yet — one from before weights had a unit, not yet filled
+    /// in — is left out rather than read as if it were kilograms.
+    func analyze(logs: [WorkoutLog], exercises: [ExerciseDef],
+                 weightsByLog: [UUID: [Int]]) -> [ExerciseStats] {
         let names = Dictionary(exercises.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
-        let inputs = logs.map {
-            StatsEngine.LogInput(id: $0.id, exerciseId: $0.exerciseId, date: $0.date,
-                                 weights: $0.weights, reps: $0.reps)
+        let inputs = logs.compactMap { log -> StatsEngine.LogInput? in
+            guard let grams = weightsByLog[log.id], !grams.isEmpty else { return nil }
+            return StatsEngine.LogInput(id: log.id, exerciseId: log.exerciseId, date: log.date,
+                                        weights: grams, reps: log.reps)
         }
         return StatsEngine.analyze(logs: inputs, names: names,
                                    formula: formula, window: window, smoothing: smoothing)
@@ -53,6 +62,15 @@ struct StatsInputs {
             }
             .sorted { $0.count > $1.count }
     }
+}
+
+/// A computed weight — a one-rep-max estimate, a best — as the user reads it.
+///
+/// Everything the statistics produce is in grams, because everything they are
+/// computed from is. Trends are percentages and need none of this; absolute
+/// numbers do.
+func displayWeight(_ grams: Double, in unit: WeightUnit = .current) -> Double {
+    unit.display(grams: Int(grams.rounded()))
 }
 
 /// Formats a trend as a percentage per week, the scale people plan in.

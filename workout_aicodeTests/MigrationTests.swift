@@ -90,10 +90,13 @@ struct NewExerciseNumberTests {
     @Test func newExerciseUsesTheChosenDefaults() {
         withDefaults(sets: 4, lowest: 10, highest: 80, increment: 2) {
             let e = ExerciseDefaults.makeExercise(name: "Curl")
+            let unit = WeightUnit.current
             #expect(e.numberOfSeries == 4)
-            #expect(e.lowestWeight == 10)
-            #expect(e.highestWeight == 80)
-            #expect(e.weightIncrement == 2)
+            // Stored in grams now; what the user chose is what comes back in
+            // the unit they chose it in.
+            #expect(e.lowestWeightGrams == unit.grams(from: 10))
+            #expect(e.highestWeightGrams == unit.grams(from: 80))
+            #expect(e.weightIncrementGrams == unit.grams(from: 2))
         }
     }
 
@@ -104,10 +107,11 @@ struct NewExerciseNumberTests {
         withDefaults(sets: 5, lowest: 15, highest: 90, increment: 2) {
             let taken = ExerciseLibrary.take(ExerciseLibrary.entry(key: "biceps-curl")!,
                                              existingNames: [])
+            let unit = WeightUnit.current
             #expect(taken.numberOfSeries == 5)
-            #expect(taken.lowestWeight == 15)
-            #expect(taken.highestWeight == 90)
-            #expect(taken.weightIncrement == 2)
+            #expect(taken.lowestWeightGrams == unit.grams(from: 15))
+            #expect(taken.highestWeightGrams == unit.grams(from: 90))
+            #expect(taken.weightIncrementGrams == unit.grams(from: 2))
         }
     }
 
@@ -256,15 +260,20 @@ struct NewExerciseNumberTests {
 /// subtraction negative, which was clamped to zero — so an assisted chin-up at
 /// a machine setting of 130 was logged as a set lifted at 0.
 @Test func anAssistedSetIsNotLoggableWithoutABodyWeight() {
-    #expect(BodyWeight.canCompute(machineSetting: 130) == false || BodyWeight.isKnown)
+    // In grams, like everything stored: 130 lb of assistance.
+    let machine = WeightUnit.pounds.grams(from: 130)
+    #expect(BodyWeight.canCompute(machineSettingGrams: machine) == false || BodyWeight.isKnown)
 }
 
-@Test func aMachineHeavierThanTheUserMeansTheUnitsDisagree() {
-    // 97 (kilograms) against a machine reading 130 (pounds): the sum is not
-    // one to log, whatever it comes to.
-    #expect(BodyWeight.lifted(bodyWeight: 97, machineSetting: 130) == 0)
-    // Which is why the caller asks first, rather than trusting the result.
-    #expect(BodyWeight.lifted(bodyWeight: 214, machineSetting: 130) == 84)
+@Test func theUnitsCannotDisagreeAnyMore() {
+    // The bug this came from: 97 kg read against a machine set to 130 lb. In
+    // grams the two are the same kind of number, and the subtraction is the
+    // one the user meant — 214 lb less 130 lb is 84 lb.
+    let body = WeightUnit.pounds.grams(from: 214)
+    let machine = WeightUnit.pounds.grams(from: 130)
+    #expect(WeightUnit.pounds.display(grams: body - machine) == 84)
+    // And the same body weight read in kilograms is the same body weight.
+    #expect(WeightUnit.kilograms.display(grams: body) == 97)
 }
 
 // MARK: - Units

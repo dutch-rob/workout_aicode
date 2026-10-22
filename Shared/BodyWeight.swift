@@ -51,12 +51,19 @@ enum BodyWeight {
         return stored > 0 ? stored : nil
     }
 
-    /// What the app believes you weigh, or 0 when it does not know.
+    /// What the app believes you weigh, in the user's own unit, or 0 when it
+    /// does not know. Stored that way because it is typed and read in that
+    /// unit; `currentGrams` is what the arithmetic uses.
     static var current: Double {
         switch source {
         case .health: return health ?? manual
         case .manual: return manual
         }
+    }
+
+    /// The same, in grams — the unit everything is stored and computed in.
+    static var currentGrams: Int {
+        WeightUnit.current.grams(from: current)
     }
 
     static var isKnown: Bool { current > 0 }
@@ -66,8 +73,9 @@ enum BodyWeight {
     /// two numbers is in the wrong unit, or the body weight was never set —
     /// either way the subtraction is meaningless and must not be logged as if
     /// it were a set lifted at zero.
-    static func canCompute(machineSetting: Int) -> Bool {
-        isKnown && current > Double(machineSetting)
+    /// `machineSetting` is in GRAMS, like everything else stored.
+    static func canCompute(machineSettingGrams: Int) -> Bool {
+        isKnown && currentGrams > machineSettingGrams
     }
 
     /// What was actually lifted on an assisted machine: your weight, less what

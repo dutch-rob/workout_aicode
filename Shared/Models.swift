@@ -177,6 +177,22 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     /// when the rest timer is switched on in Settings.
     var restSeconds: Int = defaultRestSeconds
 
+    // MARK: Weights, in grams
+    //
+    // The three fields above them — lowestWeight, highestWeight,
+    // weightIncrement — are the ORIGINAL unit-less integers, and are now
+    // legacy. They are not written any more. They cannot be deleted either:
+    // a field that has been in a CloudKit schema is there for good.
+    //
+    // Nil means "not filled in yet", which is the state every exercise is in
+    // until the user has said whether their history was in kilograms or
+    // pounds. Until they answer, the app has no way to know what the old
+    // number meant, and guessing is how a training history gets rescaled by
+    // a factor of 2.2 without anybody noticing.
+    var lowestWeightGrams: Int? = nil
+    var highestWeightGrams: Int? = nil
+    var weightIncrementGrams: Int? = nil
+
     /// Machines that take weight OFF you rather than adding it — an assisted
     /// chin-up or dip. What you set on the machine is how much of your own
     /// weight it carries, so the weight actually lifted is your body weight
@@ -691,18 +707,25 @@ final class AssistedResult: Identifiable, Codable {
     /// moment the set was logged — from Health, or typed in Settings.
     var bodyWeight: Double = 0
     /// What was set on the machine, per series: how much of the body weight it
-    /// was carrying. Same length as the log's weights.
+    /// was carrying. Same length as the log's weights. Legacy, unit-less.
     var machineSettings: [Int] = []
+    /// The same two in grams, which is what is written now. Nil on a record
+    /// made before the units existed, until it is filled in.
+    var bodyWeightGrams: Int? = nil
+    var machineSettingsGrams: [Int]? = nil
 
-    init(id: UUID = UUID(), logId: UUID, bodyWeight: Double, machineSettings: [Int]) {
+    init(id: UUID = UUID(), logId: UUID, bodyWeight: Double, machineSettings: [Int],
+         bodyWeightGrams: Int? = nil, machineSettingsGrams: [Int]? = nil) {
         self.id = id
         self.logId = logId
         self.bodyWeight = bodyWeight
         self.machineSettings = machineSettings
+        self.bodyWeightGrams = bodyWeightGrams
+        self.machineSettingsGrams = machineSettingsGrams
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, logId, bodyWeight, machineSettings
+        case id, logId, bodyWeight, machineSettings, bodyWeightGrams, machineSettingsGrams
     }
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -710,7 +733,9 @@ final class AssistedResult: Identifiable, Codable {
             id:              try c.decode(UUID.self, forKey: .id),
             logId:           try c.decode(UUID.self, forKey: .logId),
             bodyWeight:      try c.decodeIfPresent(Double.self, forKey: .bodyWeight) ?? 0,
-            machineSettings: try c.decodeIfPresent([Int].self, forKey: .machineSettings) ?? []
+            machineSettings: try c.decodeIfPresent([Int].self, forKey: .machineSettings) ?? [],
+            bodyWeightGrams: try c.decodeIfPresent(Int.self, forKey: .bodyWeightGrams),
+            machineSettingsGrams: try c.decodeIfPresent([Int].self, forKey: .machineSettingsGrams)
         )
     }
     func encode(to encoder: Encoder) throws {
@@ -719,6 +744,47 @@ final class AssistedResult: Identifiable, Codable {
         try c.encode(logId, forKey: .logId)
         try c.encode(bodyWeight, forKey: .bodyWeight)
         try c.encode(machineSettings, forKey: .machineSettings)
+        try c.encodeIfPresent(bodyWeightGrams, forKey: .bodyWeightGrams)
+        try c.encodeIfPresent(machineSettingsGrams, forKey: .machineSettingsGrams)
+    }
+}
+
+/// One log's weights, in grams.
+///
+/// `WorkoutLog.weights` holds the original unit-less integers and is not
+/// written any more. This could not be another column on WorkoutLog for the
+/// reason given above WorkoutLogSchemaV6: its live class is V2's, and a new
+/// class of the same name has its new properties silently dropped. So the
+/// weights live beside the log, exactly as the aerobic measurements and the
+/// assisted numbers do.
+///
+/// Reps are not here. They have never had a unit and never will.
+@Model
+final class LogWeights: Identifiable, Codable {
+    var id: UUID = UUID()
+    /// The WorkoutLog this belongs to.
+    var logId: UUID = UUID()
+    /// One per set, in grams.
+    var grams: [Int] = []
+
+    init(id: UUID = UUID(), logId: UUID, grams: [Int]) {
+        self.id = id
+        self.logId = logId
+        self.grams = grams
+    }
+
+    enum CodingKeys: String, CodingKey { case id, logId, grams }
+    convenience init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id:    try c.decode(UUID.self, forKey: .id),
+                  logId: try c.decode(UUID.self, forKey: .logId),
+                  grams: try c.decodeIfPresent([Int].self, forKey: .grams) ?? [])
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(logId, forKey: .logId)
+        try c.encode(grams, forKey: .grams)
     }
 }
 
@@ -825,15 +891,36 @@ enum WorkoutLogSchemaV8: VersionedSchema {
     }
 }
 
+// V9 gives weights a unit at last. Everything it adds is additive: three
+// optional gram fields on ExerciseDef, two on AssistedResult, and LogWeights
+// to hold a log's weights. The ORIGINAL fields are left exactly where they
+// are — they cannot be removed from a CloudKit schema, and leaving them is
+// what lets a device still on the old build read its own data rather than
+// reading grams as if they were kilograms.
+enum WorkoutLogSchemaV9: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(9, 0, 0) }
+    static var models: [any PersistentModel.Type] {
+        [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self,
+         AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self]
+    }
+}
+
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self,
          WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self, WorkoutLogSchemaV5.self,
-         WorkoutLogSchemaV6.self, WorkoutLogSchemaV7.self, WorkoutLogSchemaV8.self]
+         WorkoutLogSchemaV6.self, WorkoutLogSchemaV7.self, WorkoutLogSchemaV8.self,
+         WorkoutLogSchemaV9.self]
     }
     static var stages: [MigrationStage] {
-        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7, v7toV8]
+        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7, v7toV8, v8toV9]
     }
+
+    /// Additive only — see WorkoutLogSchemaV9.
+    static let v8toV9 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV8.self,
+        toVersion:   WorkoutLogSchemaV9.self
+    )
 
     /// One new entity and one new column with a default — see
     /// WorkoutLogSchemaV8.

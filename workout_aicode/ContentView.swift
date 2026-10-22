@@ -25,6 +25,8 @@ struct ContentView: View {
     // are looked up only where they are about to be drawn.
     @State private var path: [UUID] = []
     @State private var askDefaults = false
+    /// Set at launch when there is a history whose unit nobody has stated.
+    @State private var askWeightUnit = false
     /// Once per launch. See the resume in `.task`.
     @State private var triedResume = false
 
@@ -217,6 +219,10 @@ struct ContentView: View {
             DeveloperDataSync.sendTestSurveyIfRequested()
             #endif
             askDefaults = ExerciseDefaults.shouldAsk(existingExercises: exercises.count)
+            // Somebody with nothing logged has no history to interpret, so
+            // they are never asked; their unit follows their region.
+            WeightHistory.settleForNewUser(in: modelContext)
+            askWeightUnit = !WeightHistory.isAnswered && !isDemoRun
             survey.noteLaunch(earliestLogDate: allLogs.first?.date)
             uploadSharedDataIfConsented()
             // Finish any withdrawal that did not complete last time.
@@ -242,6 +248,9 @@ struct ContentView: View {
         }
         // A workout active on the Watch shows here as a Paused screen; the
         // session only moves over when the user taps "Continue here".
+        .sheet(isPresented: $askWeightUnit) {
+            WeightUnitPrompt { askWeightUnit = false }
+        }
         .overlay {
             if handoff.role == .paused {
                 if handoff.remoteAppleWorkout {

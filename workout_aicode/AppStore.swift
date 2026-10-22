@@ -101,6 +101,16 @@ final class AppStore: ObservableObject {
 
     /// For each exercise in the workout, the most recent log row (used to
     /// pre-fill the picker wheels). Returns at most one row per exercise.
+    /// The last logged set per exercise, as grams — what the wheels open on.
+    func lastGrams(for workout: WorkoutDef,
+                   acrossWorkouts: Bool = PrefillScope.acrossWorkouts) -> [UUID: [Int]] {
+        lastEntries(for: workout, acrossWorkouts: acrossWorkouts)
+            .compactMapValues { log -> [Int]? in
+                let grams = weightsGrams(forLogId: log.id)
+                return grams.isEmpty ? nil : grams
+            }
+    }
+
     /// The last logged set per exercise in `workout`, to open the wheels on.
     ///
     /// `acrossWorkouts` decides whether an exercise remembers its own history
@@ -135,6 +145,27 @@ final class AppStore: ObservableObject {
             return map
         } catch {
             return [:]
+        }
+    }
+
+    /// A log's weights, in grams. Empty for a log written before weights had
+    /// a unit and not yet filled in — see `WeightHistory`.
+    func weightsGrams(forLogId logId: UUID) -> [Int] {
+        let descriptor = FetchDescriptor<LogWeights>(
+            predicate: #Predicate<LogWeights> { $0.logId == logId })
+        return (try? context.fetch(descriptor))?.first?.grams ?? []
+    }
+
+    /// Records a log's weights. The log's own `weights` is left alone: it is
+    /// the original unit-less field, and writing it would hand a device still
+    /// on the old build a number in the wrong scale.
+    func setWeightsGrams(_ grams: [Int], forLogId logId: UUID) {
+        let descriptor = FetchDescriptor<LogWeights>(
+            predicate: #Predicate<LogWeights> { $0.logId == logId })
+        if let existing = (try? context.fetch(descriptor))?.first {
+            existing.grams = grams
+        } else {
+            context.insert(LogWeights(logId: logId, grams: grams))
         }
     }
 

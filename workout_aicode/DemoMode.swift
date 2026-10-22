@@ -19,6 +19,13 @@ enum DemoMode {
 
     static var isEnabled: Bool { CommandLine.arguments.contains("-SRWDemo") }
 
+    /// A screenshot run has its own seeded history, so the question about what
+    /// the old numbers meant does not apply to it.
+    static func settleWeightUnit() {
+        guard isEnabled else { return }
+        UserDefaults.standard.set(true, forKey: WeightHistory.answeredKey)
+    }
+
     // The rest-timer capture. Fixed numbers so the iPhone and the Watch shots
     // show the same rest, and a remaining time that leaves the ring obviously
     // part-way round rather than nearly full or nearly empty.
@@ -55,9 +62,11 @@ enum DemoMode {
         let config = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         // swiftlint:disable:next force_try
         let container = try! ModelContainer(
-            for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self,
+            for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self,
+                 DraftSession.self, AssistedResult.self, LogWeights.self,
             configurations: config
         )
+        settleWeightUnit()
         seed(into: container.mainContext)
         markFirstExerciseAssisted(in: container.mainContext)
         return container
@@ -153,10 +162,13 @@ enum DemoMode {
         var ids: [UUID] = []
         for r in rows {
             let ex = ExerciseDef(name: r.0, numberOfSeries: r.1,
-                                 lowestWeight: r.2, highestWeight: r.3, weightIncrement: r.4,
                                  primaryMuscle: r.7,
                                  secondaryMuscles: r.8.flatMap { ExerciseLibrary.entry(key: $0)?.secondary } ?? [],
                                  libraryKey: r.8)
+            // Demo numbers are in whatever unit the demo is being read in:
+            // the point of a screenshot is what the app looks like, and 50 is
+            // 50 on the wheel either way.
+            ex.setWeightRange(lowest: Double(r.2), highest: Double(r.3), increment: Double(r.4))
             ctx.insert(ex)
             ids.append(ex.id)
         }
@@ -200,11 +212,15 @@ enum DemoMode {
                     max(1, idx == 0 ? rep + nudge : rep)
                 }
                 let date = start.addingTimeInterval(Double(i) * 240)
-                ctx.insert(WorkoutLog(date: date,
-                                      workoutId: workout.id,
-                                      exerciseId: workout.exerciseOrder[i],
-                                      weights: weights,
-                                      reps: reps))
+                let log = WorkoutLog(date: date,
+                                     workoutId: workout.id,
+                                     exerciseId: workout.exerciseOrder[i],
+                                     weights: [],
+                                     reps: reps)
+                ctx.insert(log)
+                let unit = WeightUnit.current
+                ctx.insert(LogWeights(logId: log.id,
+                                      grams: weights.map { unit.grams(from: Double($0)) }))
             }
         }
     }

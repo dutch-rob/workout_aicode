@@ -65,6 +65,7 @@ struct LogsStatsView: View {
 struct StrengthGraphsView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .forward)]) private var logs: [WorkoutLog]
     @Query private var exercises: [ExerciseDef]
+    @Query private var logWeights: [LogWeights]
 
     @AppStorage(StatsSettingsKey.formula)   private var formulaRaw = OneRMFormula.epley.rawValue
     @AppStorage(StatsSettingsKey.window)    private var window = StatsEngine.defaultWindow
@@ -75,7 +76,8 @@ struct StrengthGraphsView: View {
     }
 
     var body: some View {
-        let stats = inputs.analyze(logs: logs, exercises: exercises)
+        let stats = inputs.analyze(logs: logs, exercises: exercises,
+                                   weightsByLog: LogWeightsIndex.byLogId(logWeights))
         let pending = inputs.pending(logs: logs, exercises: exercises)
 
         if stats.isEmpty {
@@ -128,7 +130,7 @@ struct ExerciseChart: View {
             Chart {
                 ForEach(Array(stat.plotPoints.enumerated()), id: \.offset) { _, point in
                     PointMark(x: .value("Date", point.date),
-                              y: .value("Best 1RM", point.value))
+                              y: .value("Best 1RM", displayWeight(point.value)))
                         .foregroundStyle(.blue)
                 }
                 if let fit = stat.fit,
@@ -138,11 +140,11 @@ struct ExerciseChart: View {
                     // deliberately NOT fitted to the smoothed dots, so smoothing
                     // changes how the dots read but never moves the trend.
                     LineMark(x: .value("Date", first),
-                             y: .value("Trend", fit.value(at: first)),
+                             y: .value("Trend", displayWeight(fit.value(at: first))),
                              series: .value("Series", "trend"))
                         .foregroundStyle(.orange)
                     LineMark(x: .value("Date", last),
-                             y: .value("Trend", fit.value(at: last)),
+                             y: .value("Trend", displayWeight(fit.value(at: last))),
                              series: .value("Series", "trend"))
                         .foregroundStyle(.orange)
                 }
@@ -173,12 +175,14 @@ struct ExerciseChart: View {
     /// the dots and the trendline at opposite edges despite being equal. So a
     /// flat series is given a band around its value instead.
     private var yDomain: ClosedRange<Double> {
-        var values = stat.plotPoints.map(\.value)
+        // In the user's unit, like the marks themselves: a domain in grams
+        // under points in pounds draws an empty chart.
+        var values = stat.plotPoints.map { displayWeight($0.value) }
         if let fit = stat.fit,
            let first = stat.sessions.first?.date,
            let last = stat.sessions.last?.date {
-            values.append(fit.value(at: first))
-            values.append(fit.value(at: last))
+            values.append(displayWeight(fit.value(at: first)))
+            values.append(displayWeight(fit.value(at: last)))
         }
         guard let low = values.min(), let high = values.max() else { return 0...1 }
 
@@ -193,6 +197,7 @@ struct ExerciseChart: View {
 struct StrengthProgressView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .forward)]) private var logs: [WorkoutLog]
     @Query private var exercises: [ExerciseDef]
+    @Query private var logWeights: [LogWeights]
 
     @AppStorage(StatsSettingsKey.formula)   private var formulaRaw = OneRMFormula.epley.rawValue
     @AppStorage(StatsSettingsKey.window)    private var window = StatsEngine.defaultWindow
@@ -200,7 +205,8 @@ struct StrengthProgressView: View {
 
     var body: some View {
         let inputs = StatsInputs(formulaRaw: formulaRaw, window: window, smoothing: smoothing)
-        let stats = inputs.analyze(logs: logs, exercises: exercises)
+        let stats = inputs.analyze(logs: logs, exercises: exercises,
+                                   weightsByLog: LogWeightsIndex.byLogId(logWeights))
 
         if stats.isEmpty {
             ContentUnavailableView {
@@ -233,7 +239,7 @@ struct StrengthProgressView: View {
     }
 
     private func detail(for stat: ExerciseStats) -> String {
-        let best = stat.sessions.last?.m1RM ?? 0
+        let best = displayWeight(stat.sessions.last?.m1RM ?? 0)
         let hard = Double(stat.sessions.map(\.hardSetCount).reduce(0, +)) / Double(stat.sessions.count)
         return String(format: "last best %.0f · %.1f hard sets per workout", best, hard)
     }

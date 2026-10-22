@@ -19,6 +19,7 @@ import Charts
 struct MacGraphsView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .forward)]) private var logs: [WorkoutLog]
     @Query private var exercises: [ExerciseDef]
+    @Query private var logWeights: [LogWeights]
 
     @AppStorage(StatsSettingsKey.formula)   private var formulaRaw = OneRMFormula.epley.rawValue
     @AppStorage(StatsSettingsKey.window)    private var window = StatsEngine.defaultWindow
@@ -29,7 +30,8 @@ struct MacGraphsView: View {
     }
 
     var body: some View {
-        let stats = inputs.analyze(logs: logs, exercises: exercises)
+        let stats = inputs.analyze(logs: logs, exercises: exercises,
+                                   weightsByLog: LogWeightsIndex.byLogId(logWeights))
         let pending = inputs.pending(logs: logs, exercises: exercises)
 
         Group {
@@ -100,7 +102,7 @@ struct MacExerciseChart: View {
             Chart {
                 ForEach(Array(stat.plotPoints.enumerated()), id: \.offset) { _, point in
                     PointMark(x: .value("Date", point.date),
-                              y: .value("Best 1RM", point.value))
+                              y: .value("Best 1RM", displayWeight(point.value)))
                         .foregroundStyle(.blue)
                 }
                 if let fit = stat.fit,
@@ -110,11 +112,11 @@ struct MacExerciseChart: View {
                     // fitted to the smoothed dots, so smoothing changes how the
                     // dots read but never moves the trend.
                     LineMark(x: .value("Date", first),
-                             y: .value("Trend", fit.value(at: first)),
+                             y: .value("Trend", displayWeight(fit.value(at: first))),
                              series: .value("Series", "trend"))
                         .foregroundStyle(.orange)
                     LineMark(x: .value("Date", last),
-                             y: .value("Trend", fit.value(at: last)),
+                             y: .value("Trend", displayWeight(fit.value(at: last))),
                              series: .value("Series", "trend"))
                         .foregroundStyle(.orange)
                 }
@@ -147,12 +149,13 @@ struct MacExerciseChart: View {
     /// the dots and the trendline at opposite edges despite being equal. So a
     /// flat series is given a band around its value instead.
     private var yDomain: ClosedRange<Double> {
-        var values = stat.plotPoints.map(\.value)
+        // In the user's unit, like the marks themselves.
+        var values = stat.plotPoints.map { displayWeight($0.value) }
         if let fit = stat.fit,
            let first = stat.sessions.first?.date,
            let last = stat.sessions.last?.date {
-            values.append(fit.value(at: first))
-            values.append(fit.value(at: last))
+            values.append(displayWeight(fit.value(at: first)))
+            values.append(displayWeight(fit.value(at: last)))
         }
         guard let low = values.min(), let high = values.max() else { return 0...1 }
 
@@ -167,6 +170,7 @@ struct MacExerciseChart: View {
 struct MacProgressView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .forward)]) private var logs: [WorkoutLog]
     @Query private var exercises: [ExerciseDef]
+    @Query private var logWeights: [LogWeights]
 
     @AppStorage(StatsSettingsKey.formula)   private var formulaRaw = OneRMFormula.epley.rawValue
     @AppStorage(StatsSettingsKey.window)    private var window = StatsEngine.defaultWindow
@@ -174,7 +178,8 @@ struct MacProgressView: View {
 
     var body: some View {
         let inputs = StatsInputs(formulaRaw: formulaRaw, window: window, smoothing: smoothing)
-        let stats = inputs.analyze(logs: logs, exercises: exercises)
+        let stats = inputs.analyze(logs: logs, exercises: exercises,
+                                   weightsByLog: LogWeightsIndex.byLogId(logWeights))
 
         Group {
             if stats.isEmpty {
@@ -197,7 +202,9 @@ struct MacProgressView: View {
                         }
                         .width(110)
                         TableColumn("Last best") { stat in
-                            Text(stat.sessions.last.map { String(format: "%.0f", $0.m1RM) } ?? "—")
+                            Text(stat.sessions.last.map {
+                                String(format: "%.0f", displayWeight($0.m1RM))
+                            } ?? "—")
                                 .monospacedDigit()
                         }
                         .width(80)
