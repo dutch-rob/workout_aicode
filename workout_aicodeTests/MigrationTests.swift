@@ -472,6 +472,88 @@ struct SchemaMigrationTests {
         #expect(result.machineSettings == [30])
     }
 
+    /// Runs the body with no stated unit, and puts back whatever was there.
+    ///
+    /// `WeightHistory.adopt` writes to UserDefaults.standard, which the whole
+    /// test process shares: a test that adopts a unit makes every later test
+    /// believe the question has been answered. This one passed alone and
+    /// failed in the suite until it said so out loud.
+    @MainActor private func withNoStatedUnit(_ body: () throws -> Void) rethrows {
+        let defaults = UserDefaults.standard
+        let saved = defaults.string(forKey: WeightHistory.statedUnitKey)
+        defaults.removeObject(forKey: WeightHistory.statedUnitKey)
+        defer {
+            if let saved { defaults.set(saved, forKey: WeightHistory.statedUnitKey) }
+            else { defaults.removeObject(forKey: WeightHistory.statedUnitKey) }
+        }
+        try body()
+    }
+
+    // MARK: Weights that were zeroed rather than left unset
+    //
+    // Reported from a real device: no question, and every weight zero. An edit
+    // field shows 0 for a value that is not there, SwiftUI commits what it
+    // shows, and the stored 0/0/0 then satisfied every check that only asked
+    // "is it nil?". A wheel with one value on it logs every set at zero.
+
+    @MainActor @Test func anExerciseZeroedByAnEditFieldIsNotTreatedAsSetUp() throws { try withNoStatedUnit {
+            let context = try logEditStore()
+            let exercise = ExerciseDef(name: "Lat pulldown")
+            exercise.lowestWeight = 20
+            exercise.highestWeight = 120
+            exercise.weightIncrement = 5
+            // What the form wrote: present, and useless.
+            exercise.lowestWeightGrams = 0
+            exercise.highestWeightGrams = 0
+            exercise.weightIncrementGrams = 0
+            context.insert(exercise)
+            try context.save()
+
+            #expect(exercise.weightRangeGrams == nil)
+            #expect(WeightWheel.values(for: exercise).isEmpty)
+            #expect(WeightHistory.pendingCount(in: context) == 1)
+            #expect(WeightHistory.shouldAsk(in: context) == true)
+        }
+    }
+
+    @MainActor @Test func answeringRepairsAZeroedExerciseFromTheOldNumbers() throws {
+        let context = try logEditStore()
+        let exercise = ExerciseDef(name: "Lat pulldown")
+        exercise.lowestWeight = 20
+        exercise.highestWeight = 120
+        exercise.weightIncrement = 5
+        exercise.lowestWeightGrams = 0
+        exercise.highestWeightGrams = 0
+        exercise.weightIncrementGrams = 0
+        context.insert(exercise)
+        try context.save()
+
+        // The unit-less numbers were never written to, so they are still
+        // there to rebuild from.
+        WeightHistory.adopt(.pounds, in: context)
+        let range = try #require(exercise.weightRangeGrams)
+        #expect(WeightUnit.pounds.display(grams: range.lowest) == 20)
+        #expect(WeightUnit.pounds.display(grams: range.highest) == 120)
+        #expect(WeightUnit.pounds.display(grams: range.increment) == 5)
+        #expect(WeightWheel.values(for: exercise).count == 21)
+    }
+
+    @MainActor @Test func theTopOfTheRangeIsAlwaysOnTheWheel() throws {
+        let context = try logEditStore()
+        let exercise = ExerciseDef(name: "Lat pulldown")
+        // 20 to 120 by 5. Each end rounds to grams on its own, so the steps
+        // stop a gram short of the top — which used to leave 115 as the
+        // heaviest weight this exercise could be logged at.
+        exercise.setWeightRange(lowest: 20, highest: 120, increment: 5, unit: .pounds)
+        context.insert(exercise)
+        try context.save()
+
+        let values = WeightWheel.values(for: exercise)
+        let top = try #require(values.last)
+        #expect(WeightUnit.pounds.display(grams: top) == 120)
+        #expect(WeightUnit.pounds.display(grams: values[0]) == 20)
+    }
+
     // MARK: Records that arrive after the question was answered
     //
     // The bug this is for: the conversion ran once at launch and recorded
@@ -481,43 +563,45 @@ struct SchemaMigrationTests {
     // instant kept no grams, so its wheels were empty and its sets logged as
     // zero.
 
-    @MainActor @Test func somethingSyncingInLaterIsConvertedToo() throws {
-        let context = try logEditStore()
-        // The user answers with nothing in the store yet.
-        WeightHistory.adopt(.pounds, in: context)
-        #expect(WeightHistory.shouldAsk(in: context) == false)
+    @MainActor @Test func somethingSyncingInLaterIsConvertedToo() throws { try withNoStatedUnit {
+            let context = try logEditStore()
+            // The user answers with nothing in the store yet.
+            WeightHistory.adopt(.pounds, in: context)
+            #expect(WeightHistory.shouldAsk(in: context) == false)
 
-        // iCloud delivers an exercise and a log from the old world.
-        let exercise = ExerciseDef(name: "Lat pulldown")
-        exercise.lowestWeight = 20
-        exercise.highestWeight = 120
-        exercise.weightIncrement = 5
-        context.insert(exercise)
-        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
-                             workoutId: UUID(), exerciseId: exercise.id,
-                             weights: [50], reps: [10])
-        context.insert(log)
-        try context.save()
+            // iCloud delivers an exercise and a log from the old world.
+            let exercise = ExerciseDef(name: "Lat pulldown")
+            exercise.lowestWeight = 20
+            exercise.highestWeight = 120
+            exercise.weightIncrement = 5
+            context.insert(exercise)
+            let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                                 workoutId: UUID(), exerciseId: exercise.id,
+                                 weights: [50], reps: [10])
+            context.insert(log)
+            try context.save()
 
-        #expect(WeightHistory.pendingCount(in: context) == 2)
-        // No second question: the answer was about the history, not about that
-        // moment, so it applies to this too.
-        #expect(WeightHistory.shouldAsk(in: context) == false)
+            #expect(WeightHistory.pendingCount(in: context) == 2)
+            // No second question: the answer was about the history, not about that
+            // moment, so it applies to this too.
+            #expect(WeightHistory.shouldAsk(in: context) == false)
 
-        WeightHistory.catchUp(in: context)
-        #expect(WeightHistory.pendingCount(in: context) == 0)
-        #expect(exercise.lowestWeightGrams == WeightUnit.pounds.grams(from: 20))
-        let stored = try #require(
-            try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == log.id })
-        #expect(WeightUnit.pounds.display(grams: stored.grams[0]) == 50)
+            WeightHistory.catchUp(in: context)
+            #expect(WeightHistory.pendingCount(in: context) == 0)
+            #expect(exercise.lowestWeightGrams == WeightUnit.pounds.grams(from: 20))
+            let stored = try #require(
+                try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == log.id })
+            #expect(WeightUnit.pounds.display(grams: stored.grams[0]) == 50)
+        }
     }
 
-    @MainActor @Test func anEmptyStoreAsksNothingAndConvertsNothing() throws {
-        let context = try logEditStore()
-        // Nothing to interpret, so nothing to ask — and crucially this is NOT
-        // recorded as an answer, or the records arriving next would keep none.
-        #expect(WeightHistory.pendingCount(in: context) == 0)
-        #expect(WeightHistory.shouldAsk(in: context) == false)
+    @MainActor @Test func anEmptyStoreAsksNothingAndConvertsNothing() throws { try withNoStatedUnit {
+            let context = try logEditStore()
+            // Nothing to interpret, so nothing to ask — and crucially this is NOT
+            // recorded as an answer, or the records arriving next would keep none.
+            #expect(WeightHistory.pendingCount(in: context) == 0)
+            #expect(WeightHistory.shouldAsk(in: context) == false)
+        }
     }
 
     @MainActor @Test func anAerobicLogIsNotWaitingForAUnit() throws {
@@ -538,29 +622,30 @@ struct SchemaMigrationTests {
     // app asks once and fills in the grams from the answer; getting this wrong
     // rescales a training history by 2.2 without a single number looking odd.
 
-    @MainActor @Test func answeringTheQuestionFillsInTheGrams() throws {
-        let context = try logEditStore()
-        let exercise = ExerciseDef(name: "Lat pulldown")
-        exercise.lowestWeight = 20
-        exercise.highestWeight = 120
-        exercise.weightIncrement = 5
-        context.insert(exercise)
-        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
-                             workoutId: UUID(), exerciseId: exercise.id,
-                             weights: [50, 55], reps: [12, 10])
-        context.insert(log)
-        try context.save()
+    @MainActor @Test func answeringTheQuestionFillsInTheGrams() throws { try withNoStatedUnit {
+            let context = try logEditStore()
+            let exercise = ExerciseDef(name: "Lat pulldown")
+            exercise.lowestWeight = 20
+            exercise.highestWeight = 120
+            exercise.weightIncrement = 5
+            context.insert(exercise)
+            let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                                 workoutId: UUID(), exerciseId: exercise.id,
+                                 weights: [50, 55], reps: [12, 10])
+            context.insert(log)
+            try context.save()
 
-        WeightHistory.adopt(.pounds, in: context)
+            WeightHistory.adopt(.pounds, in: context)
 
-        // The face value is unchanged — 50 is still 50 to someone reading in
-        // pounds — but it now means something.
-        #expect(exercise.lowestWeightGrams == WeightUnit.pounds.grams(from: 20))
-        let stored = try #require(
-            try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == log.id })
-        #expect(WeightUnit.pounds.display(grams: stored.grams[0]) == 50)
-        // And the same weight read in kilograms is the same weight.
-        #expect(WeightUnit.kilograms.display(grams: stored.grams[0]) == 22.75)
+            // The face value is unchanged — 50 is still 50 to someone reading in
+            // pounds — but it now means something.
+            #expect(exercise.lowestWeightGrams == WeightUnit.pounds.grams(from: 20))
+            let stored = try #require(
+                try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == log.id })
+            #expect(WeightUnit.pounds.display(grams: stored.grams[0]) == 50)
+            // And the same weight read in kilograms is the same weight.
+            #expect(WeightUnit.kilograms.display(grams: stored.grams[0]) == 22.75)
+        }
     }
 
     @MainActor @Test func answeringTwiceCannotDoubleConvert() throws {

@@ -49,7 +49,7 @@ enum WeightHistory {
     /// recorded as one.
     static func pendingCount(in context: ModelContext) -> Int {
         let exercises = (try? context.fetch(FetchDescriptor<ExerciseDef>())) ?? []
-        var pending = exercises.filter { $0.lowestWeightGrams == nil }.count
+        var pending = exercises.filter { $0.weightRangeGrams == nil }.count
 
         let logs = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
         let haveWeights = Set(((try? context.fetch(FetchDescriptor<LogWeights>())) ?? [])
@@ -86,7 +86,9 @@ enum WeightHistory {
         var filled = 0
 
         let exercises = (try? context.fetch(FetchDescriptor<ExerciseDef>())) ?? []
-        for exercise in exercises where exercise.lowestWeightGrams == nil {
+        // `weightRangeGrams == nil` rather than "has no grams": an exercise
+        // whose grams were zeroed is repaired from the numbers beside them.
+        for exercise in exercises where exercise.weightRangeGrams == nil {
             exercise.lowestWeightGrams = unit.grams(from: Double(exercise.lowestWeight))
             exercise.highestWeightGrams = unit.grams(from: Double(exercise.highestWeight))
             exercise.weightIncrementGrams = unit.grams(from: Double(exercise.weightIncrement))
@@ -127,11 +129,21 @@ enum WeightHistory {
 
 extension ExerciseDef {
     /// The wheel's range in grams, or nil while the history has no unit yet.
+    /// Nil when this exercise has no usable range — unset, or ZEROED.
+    ///
+    /// Zero matters as much as nil here. An edit field showing a placeholder 0
+    /// for an unset value writes that 0 back the moment the form commits, and
+    /// a stored 0/0/0 is not "no range yet" to anything that only checks for
+    /// nil: it is a wheel with one value on it, which logs every set at zero.
+    /// That is exactly what happened, so a range has to be POSITIVE to count,
+    /// not merely present. The old unit-less numbers are untouched beside it,
+    /// so an exercise in this state can always be rebuilt from them.
     var weightRangeGrams: (lowest: Int, highest: Int, increment: Int)? {
         guard let lowest = lowestWeightGrams,
               let highest = highestWeightGrams,
-              let increment = weightIncrementGrams else { return nil }
-        return (lowest, max(lowest, highest), max(1, increment))
+              let increment = weightIncrementGrams,
+              increment > 0, highest > 0, highest >= lowest else { return nil }
+        return (lowest, highest, increment)
     }
 
     /// Writes a range the user chose in their own unit.
@@ -181,6 +193,14 @@ enum WeightWheel {
         while grams <= range.highest, values.count < 2000 {
             values.append(grams)
             grams += range.increment
+        }
+        // The top of the range is a number the user chose, so it belongs on
+        // the wheel. Each end converts to grams on its own and rounds on its
+        // own, so the steps can stop a gram or two short of the maximum —
+        // 20 to 120 by 5 pounds ended at 115, with 120 nowhere to be found.
+        if let last = values.last, last < range.highest,
+           range.highest - last < range.increment {
+            values.append(range.highest)
         }
         return values.isEmpty ? [range.lowest] : values
     }

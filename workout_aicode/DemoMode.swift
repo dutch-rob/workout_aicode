@@ -143,6 +143,40 @@ enum DemoMode {
         }
     }
 
+    /// DEBUG only: puts data into the REAL store that looks like it came from
+    /// before weights had a unit — legacy numbers, no grams — and the zeroed
+    /// variant a committed edit field produced. For walking the recovery path
+    /// the way a user meets it, rather than asserting about it in a test.
+    ///
+    ///     -SRWLegacySeed        exercises with no grams at all
+    ///     -SRWLegacySeed zeroed exercises whose grams were written as 0
+    static func seedLegacyData(into ctx: ModelContext) {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "-SRWLegacySeed") else { return }
+        let zeroed = i + 1 < args.count && args[i + 1] == "zeroed"
+        guard ((try? ctx.fetchCount(FetchDescriptor<ExerciseDef>())) ?? 0) == 0 else { return }
+
+        let exercise = ExerciseDef(name: "Lat pulldown")
+        exercise.lowestWeight = 20
+        exercise.highestWeight = 120
+        exercise.weightIncrement = 5
+        if zeroed {
+            exercise.lowestWeightGrams = 0
+            exercise.highestWeightGrams = 0
+            exercise.weightIncrementGrams = 0
+        }
+        ctx.insert(exercise)
+
+        let workout = WorkoutDef(name: "Upper body", exerciseOrder: [exercise.id])
+        ctx.insert(workout)
+
+        let log = WorkoutLog(date: Date().addingTimeInterval(-86_400),
+                             workoutId: workout.id, exerciseId: exercise.id,
+                             weights: [50, 55], reps: [12, 10])
+        ctx.insert(log)
+        try? ctx.save()
+    }
+
     /// Screenshot/demo only: makes the first exercise an assisted machine, so
     /// the screens that only appear for one can be looked at without building
     /// a workout by hand. `-SRWDemo -SRWAssisted`.

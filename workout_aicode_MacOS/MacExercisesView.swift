@@ -308,7 +308,16 @@ struct MacExerciseForm: View {
                 guard let grams = exercise[keyPath: keyPath] else { return 0 }
                 return WeightUnit.current.display(grams: grams)
             },
-            set: { exercise[keyPath: keyPath] = WeightUnit.current.grams(from: max(0, $0)) }
+            set: { typed in
+                // A field with nothing in it shows 0, and SwiftUI commits what
+                // it shows — which turned "no unit yet" into a stored zero,
+                // and a stored zero into a wheel with one value on it. Writing
+                // the placeholder back is therefore refused: only a number the
+                // user actually put there counts.
+                let grams = WeightUnit.current.grams(from: max(0, typed))
+                guard grams > 0 || exercise[keyPath: keyPath] != nil else { return }
+                exercise[keyPath: keyPath] = grams
+            }
         )
     }
 

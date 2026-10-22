@@ -231,6 +231,9 @@ struct ContentView: View {
             askDefaults = ExerciseDefaults.shouldAsk(existingExercises: exercises.count)
             // Somebody with nothing logged has no history to interpret, so
             // they are never asked; their unit follows their region.
+            #if DEBUG
+            DemoMode.seedLegacyData(into: modelContext)
+            #endif
             refreshWeightUnitState()
             survey.noteLaunch(earliestLogDate: allLogs.first?.date)
             uploadSharedDataIfConsented()

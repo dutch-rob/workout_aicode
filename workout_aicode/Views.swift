@@ -309,7 +309,16 @@ struct EditExerciseView: View {
                 guard let grams = exercise[keyPath: keyPath] else { return 0 }
                 return WeightUnit.current.display(grams: grams)
             },
-            set: { exercise[keyPath: keyPath] = WeightUnit.current.grams(from: max(0, $0)) }
+            set: { typed in
+                // A field with nothing in it shows 0, and SwiftUI commits what
+                // it shows — which turned "no unit yet" into a stored zero,
+                // and a stored zero into a wheel with one value on it. Writing
+                // the placeholder back is therefore refused: only a number the
+                // user actually put there counts.
+                let grams = WeightUnit.current.grams(from: max(0, typed))
+                guard grams > 0 || exercise[keyPath: keyPath] != nil else { return }
+                exercise[keyPath: keyPath] = grams
+            }
         )
     }
 
@@ -2472,9 +2481,19 @@ struct SettingsView: View {
     /// Only shown to people who have an exercise that needs it: a body weight
     /// is of no interest to this app otherwise, and asking for one would look
     /// like the start of something it does not do.
+    /// What the app makes of the weights it holds: how many exercises and
+    /// logs still have no unit, and what the user said theirs were in.
+    private var weightUnitStateDescription: String {
+        let pending = WeightHistory.pendingCount(in: settingsContext)
+        let stated = WeightHistory.statedUnit?.label ?? "not stated"
+        if pending == 0 { return "all · history: \(stated)" }
+        return "\(pending) waiting · history: \(stated)"
+    }
+
     private var usesBodyWeight: Bool {
         exercises.contains { $0.subtractsFromBodyWeight }
     }
+    @Environment(\.modelContext) private var settingsContext
     @AppStorage(WeightUnit.key) private var weightUnitRaw = WeightUnit.regionDefault.rawValue
     @AppStorage(BodyWeight.sourceKey) private var bodyWeightSourceRaw = BodyWeightSource.health.rawValue
     @AppStorage(BodyWeight.manualKey) private var bodyWeightManual = 0
@@ -2557,6 +2576,11 @@ struct SettingsView: View {
                     // Nothing is converted: weights are stored in grams, so
                     // this changes how they are written and nothing else.
                     store.reloadAll()
+                }
+                // Plainly, because the alternative is guessing from a
+                // screenshot. This is what the app believes right now.
+                LabeledContent("Weights with a unit") {
+                    Text(weightUnitStateDescription).foregroundStyle(.secondary)
                 }
             } footer: {
                 Text("Your weights are kept in a form that has no unit, so switching here re-presents everything you have ever logged in the other one — nothing is recalculated and nothing is lost. Weights are written to the nearest quarter: 130, 130¼, 130½, 130¾.")
