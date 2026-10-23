@@ -27,6 +27,8 @@ struct ContentView: View {
     @State private var askDefaults = false
     /// Set at launch when there is a history whose unit nobody has stated.
     @State private var askWeightUnit = false
+    /// The workout just ended, while the offer to schedule the next one is up.
+    @State private var scheduleOffer: PhoneSessionManager.FinishedWorkout? = nil
     /// Once per launch. See the resume in `.task`.
     @State private var triedResume = false
 
@@ -271,6 +273,26 @@ struct ContentView: View {
         // session only moves over when the user taps "Continue here".
         .sheet(isPresented: $askWeightUnit) {
             WeightUnitPrompt { askWeightUnit = false }
+        }
+        // Offered after the workout screen has closed, not over it: the last
+        // thing somebody does in the gym is put their phone away, and a sheet
+        // on top of the log screen is in the way of that.
+        .sheet(item: $scheduleOffer) { finished in
+            if let workout = workouts.first(where: { $0.id == finished.workoutId }) {
+                ScheduleNextWorkoutSheet(workoutName: workout.name,
+                                         workoutId: workout.id,
+                                         finished: finished) {
+                    scheduleOffer = nil
+                }
+            }
+        }
+        .onChange(of: handoff.justFinished) { _, finished in
+            guard let finished, WorkoutSchedule.isEnabled else {
+                handoff.justFinished = nil
+                return
+            }
+            handoff.justFinished = nil
+            scheduleOffer = finished
         }
         .overlay {
             if handoff.role == .paused {

@@ -604,7 +604,8 @@ struct WatchLogExerciseView: View {
                 let endedAt = Date()
                 onEndSession()
                 session.leaveSession()
-                session.finishWorkout(startedAt: startedAt, endedAt: endedAt)
+                session.finishWorkout(startedAt: startedAt, endedAt: endedAt,
+                                  workoutId: workout.id)
             }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
@@ -656,7 +657,8 @@ struct WatchLogExerciseView: View {
             let endedAt = Date()
             onEndSession()
             session.leaveSession()
-            session.finishWorkout(startedAt: startedAt, endedAt: endedAt)
+            session.finishWorkout(startedAt: startedAt, endedAt: endedAt,
+                                  workoutId: workout.id)
             return
         }
         // Read before moving on — goToNextUnlogged changes what currentIndex

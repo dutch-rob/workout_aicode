@@ -6,6 +6,8 @@
 	<string>SetsRepsWheels reads your heart rate, and your resting heart rate and date of birth, while a workout or an aerobic countdown is running on your Apple Watch, so it can show your current heart rate and which zone you are in. If you ask it to, it also reads your body weight, which is needed to work out what you lifted on a machine that takes weight off you, such as an assisted chin-up. Those readings stay on your devices, are never sent anywhere, and are never included in the anonymous data you can choose to share with the developer. Nothing else in Apple Health is read.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>When you turn on “Save workouts to Apple Health” in Settings, SetsRepsWheels saves each workout you finish as a Traditional Strength Training session, recording only its start time, end time and duration. Nothing else is shared, and no data is sent anywhere outside your devices.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>When you turn on “Schedule the next workout” in Settings, SetsRepsWheels offers to put your next workout in a calendar you choose, as an ordinary timed event. It needs full access rather than add-only so that it can find the events it added itself and move or remove them when you reschedule — otherwise every change would leave the old event behind. It only ever looks for its own events, never reads anything else in your calendars, and never sends anything anywhere.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

@@ -230,17 +230,21 @@ final class WatchSessionManager: NSObject, ObservableObject {
     /// Except in Apple-workout mode, where the Watch has been recording a real
     /// HKWorkout all along and finishes it here. Asking the phone to write one
     /// too would put the same workout in Health twice.
-    func finishWorkout(startedAt: Date, endedAt: Date) {
+    func finishWorkout(startedAt: Date, endedAt: Date, workoutId: String = "") {
         if workoutMode == .appleWorkout {
             Task { @MainActor in await WatchStrengthWorkout.shared.finish() }
             return
         }
         let session = WCSession.default
         guard session.activationState == .activated else { return }
+        // Which workout it was, so the phone can offer to put the next one in
+        // the calendar. Absent from a Watch on an older build, and the phone
+        // then simply does not offer.
         let msg: [String: Any] = [
             "type": "workoutFinished",
             "startedAt": startedAt.timeIntervalSince1970,
-            "endedAt": endedAt.timeIntervalSince1970
+            "endedAt": endedAt.timeIntervalSince1970,
+            "workoutId": workoutId
         ]
         if session.isReachable {
             session.sendMessage(msg, replyHandler: nil, errorHandler: { _ in

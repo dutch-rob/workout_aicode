@@ -269,12 +269,22 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     /// The workout ended on THIS (phone) device — either by finishing every
     /// exercise or by quitting early. Both count as a workout, so both are saved
     /// (as long as at least one set was actually logged).
-    func finishWorkoutHere(startedAt: Date, endedAt: Date) {
+    func finishWorkoutHere(startedAt: Date, endedAt: Date, workoutId: UUID? = nil) {
         let hadActivity = openWorkout.map { $0.lastActivityAt > $0.startedAt } ?? false
         openWorkout = nil
         // Said "done" or "quit": this is the one ending that means it. Anything
         // else that closes the screen leaves the session resumable.
         forgetUnfinishedSession()
+
+        // The moment to ask about the next one: they have just done this one
+        // and are still standing in the gym. Only after a workout that
+        // actually happened — being offered a next session for a screen you
+        // opened and closed again is noise.
+        if let workoutId, hadActivity, endedAt > startedAt {
+            justFinished = FinishedWorkout(workoutId: workoutId,
+                                           startedAt: startedAt, endedAt: endedAt)
+        }
+
         guard healthEnabled, hadActivity, endedAt > startedAt else { return }
         // Deferred on purpose: HealthKit may put its permission sheet on screen,
         // and must never block the log screen from closing first.
@@ -282,6 +292,19 @@ final class PhoneSessionManager: NSObject, ObservableObject {
             HealthWorkoutLogger.shared.saveStrengthWorkout(start: startedAt, end: endedAt)
         }
     }
+
+    /// A workout that has just ended, for whatever wants to offer something at
+    /// the end of one. Cleared as soon as it has been dealt with.
+    struct FinishedWorkout: Equatable, Identifiable {
+        let workoutId: UUID
+        let startedAt: Date
+        let endedAt: Date
+        /// The workout AND when it ended: finishing the same routine twice in
+        /// a day is two different endings, and a sheet keyed on the workout
+        /// alone would not open again for the second.
+        var id: String { "\(workoutId.uuidString)-\(endedAt.timeIntervalSince1970)" }
+    }
+    @Published var justFinished: FinishedWorkout? = nil
 
     /// A prior workout was left open and superseded/abandoned — save it capped at
     /// its last activity, then forget it.
@@ -784,9 +807,12 @@ extension PhoneSessionManager: WCSessionDelegate {
             // writer, so record it here using the times the Watch reported.
             let started = (message["startedAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
             let ended = (message["endedAt"] as? Double).map { Date(timeIntervalSince1970: $0) } ?? Date()
+            let finishedId = (message["workoutId"] as? String).flatMap(UUID.init(uuidString:))
             DispatchQueue.main.async {
-                if let started { self.finishWorkoutHere(startedAt: started, endedAt: ended) }
-                else { self.openWorkout = nil }
+                if let started {
+                    self.finishWorkoutHere(startedAt: started, endedAt: ended,
+                                           workoutId: finishedId)
+                } else { self.openWorkout = nil }
             }
         default:
             DispatchQueue.main.async { self.handleIncomingLog(message) }

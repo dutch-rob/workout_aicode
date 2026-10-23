@@ -941,7 +941,8 @@ struct LogExerciseView: View {
                 let endedAt = Date()
                 onEndSession()
                 handoff.leaveSession()
-                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt)
+                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt,
+                                          workoutId: workout.id)
             } label: {
                 VStack(spacing: 2) {
                     Text("Done")
@@ -983,7 +984,8 @@ struct LogExerciseView: View {
                 let endedAt = Date()
                 onEndSession()
                 handoff.leaveSession()
-                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt)
+                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt,
+                                          workoutId: workout.id)
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
@@ -1342,7 +1344,8 @@ struct LogExerciseView: View {
                 let endedAt = Date()
                 onEndSession()
                 handoff.leaveSession()
-                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt)
+                handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt,
+                                          workoutId: workout.id)
             } else {
                 goToNextUnlogged()
             }
@@ -1357,7 +1360,8 @@ struct LogExerciseView: View {
             let endedAt = Date()
             onEndSession()
             handoff.leaveSession()
-            handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt)
+            handoff.finishWorkoutHere(startedAt: startedAt, endedAt: endedAt,
+                                          workoutId: workout.id)
             return
         }
         loggedIndices.insert(currentIndex)
@@ -2795,6 +2799,16 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text("The sets, weight range, increment and rest each new exercise starts with. Exercises you already have are not changed.")
+            }
+
+            Section {
+                NavigationLink {
+                    ScheduleSettings()
+                } label: {
+                    Label("Schedule the next workout", systemImage: "calendar")
+                }
+            } footer: {
+                Text("Whether to be offered, at the end of a workout, to put the next one in your calendar — and how far ahead.")
             }
 
             Section {
