@@ -818,16 +818,37 @@ struct LogExerciseView: View {
     // MARK: - Handover helpers
 
     private func currentSnapshot() -> SessionSnapshot {
-        SessionSnapshot(workoutId: workout.id.uuidString,
-                        currentIndex: currentIndex,
-                        weights: weights,
-                        reps: reps,
-                        loggedIndices: Array(loggedIndices),
-                        startedAt: startedAt.timeIntervalSince1970)
+        // Grams for a Watch on this build, and the unit-less numbers beside
+        // them for one that has not updated: a hand-over in the middle of a
+        // workout is exactly where the two builds meet.
+        let legacyUnit = WeightHistory.statedUnit ?? .current
+        let legacy = weights.enumerated().map { index, row in
+            WeightHistory.legacyNumbers(for: row, of: exerciseAt(index), in: legacyUnit)
+        }
+        return SessionSnapshot(workoutId: workout.id.uuidString,
+                               currentIndex: currentIndex,
+                               weights: legacy,
+                               reps: reps,
+                               loggedIndices: Array(loggedIndices),
+                               startedAt: startedAt.timeIntervalSince1970,
+                               weightsGrams: weights)
+    }
+
+    /// A snapshot's wheels in grams: as sent when the other device knew grams,
+    /// and otherwise its unit-less numbers read through each exercise's wheel.
+    private func snapshotGrams(_ snap: SessionSnapshot) -> [[Int]] {
+        guard snap.weightsGrams.isEmpty else { return snap.weightsGrams }
+        let legacyUnit = WeightHistory.statedUnit ?? .current
+        return snap.weights.enumerated().map { index, row in
+            let exercise = exerciseAt(index)
+            return row.map {
+                WeightHistory.grams(fromLegacy: $0, of: exercise, in: legacyUnit)
+            }
+        }
     }
 
     private func adopt(_ snap: SessionSnapshot) {
-        weights       = snap.weights
+        weights       = snapshotGrams(snap)
         reps          = snap.reps
         loggedIndices = Set(snap.loggedIndices)
         startedAt     = Date(timeIntervalSince1970: snap.startedAt)
@@ -1424,18 +1445,24 @@ struct LogExerciseView: View {
         let lifted = assisted
             ? onTheWheels.map { max(0, bodyWeightGrams - $0) }
             : onTheWheels
+        // The unit-less numbers go in beside the grams, for every device that
+        // cannot read grams yet — see WeightHistory.legacyNumbers.
+        let legacyUnit = WeightHistory.statedUnit ?? .current
         let log = WorkoutLog(workoutId: workout.id,
                              exerciseId: exercise.id,
-                             weights: [],
+                             weights: WeightHistory.legacyNumbers(
+                                for: lifted, of: exercise, in: legacyUnit),
                              reps: displayed(reps, for: exercise, default: 0))
         context.insert(log)
         context.insert(LogWeights(logId: log.id, grams: lifted))
         if assisted {
-            context.insert(AssistedResult(logId: log.id,
-                                          bodyWeight: 0,
-                                          machineSettings: [],
-                                          bodyWeightGrams: bodyWeightGrams,
-                                          machineSettingsGrams: onTheWheels))
+            context.insert(AssistedResult(
+                logId: log.id,
+                bodyWeight: legacyUnit.display(grams: bodyWeightGrams),
+                machineSettings: WeightHistory.legacyNumbers(
+                    for: onTheWheels, of: exercise, in: legacyUnit),
+                bodyWeightGrams: bodyWeightGrams,
+                machineSettingsGrams: onTheWheels))
         }
         recordAerobicResult(for: exercise, log: log)
         return log

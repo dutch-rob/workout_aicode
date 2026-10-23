@@ -84,6 +84,26 @@ final class WatchSessionManager: NSObject, ObservableObject {
         lastEntries[SyncPayload.lastEntryKey(workoutId: workoutId, exerciseId: exerciseId)]
     }
 
+    /// Where to open an exercise's wheels, in grams — which is what the Watch
+    /// works in. A phone on an older build sends only the unit-less numbers,
+    /// and those are read through the exercise's own wheel rather than taken
+    /// for grams, which would open every wheel at the bottom.
+    func lastWeightsGrams(workoutId: String, exerciseId: String) -> [Int] {
+        guard let entry = lastEntry(workoutId: workoutId, exerciseId: exerciseId) else {
+            return []
+        }
+        return entry.grams(for: exercise(id: exerciseId), in: weightUnit)
+    }
+
+    /// A weight the Watch is about to send back, as the unit-less number a
+    /// phone on an older build expects to receive.
+    func legacyWeights(_ grams: [Int], exerciseId: String) -> [Int] {
+        guard let exercise = exercise(id: exerciseId) else {
+            return grams.map { Int(weightUnit.display(grams: $0).rounded()) }
+        }
+        return grams.map { exercise.legacy(fromGrams: $0, in: weightUnit) }
+    }
+
     // MARK: - Ingest phone application context (definitions + session stash)
     private func ingest(context: [String: Any]) {
         #if DEBUG
@@ -95,8 +115,13 @@ final class WatchSessionManager: NSObject, ObservableObject {
         #endif
         if let data = context["payload"] as? Data,
            let payload = try? JSONDecoder().decode(SyncPayload.self, from: data) {
+            let unit = WeightUnit(rawValue: payload.weightUnit) ?? .regionDefault
             workouts    = payload.workouts
-            exercises   = payload.exercises
+            // A phone that has not updated yet sends no gram range at all, and
+            // the wheels are built in grams — without this every exercise
+            // would come up with a single value on its wheel. The unit-less
+            // numbers it does send are enough to rebuild the range.
+            exercises   = payload.exercises.map { $0.repairingGramRange(in: unit) }
             lastEntries = payload.lastEntries
             restTimerEnabled = payload.restTimerEnabled
             workoutMode = WatchWorkoutMode(rawValue: payload.watchWorkoutMode) ?? .handover
@@ -131,13 +156,20 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
 
     // MARK: - Send a completed set
+    /// `weights` is in GRAMS, as everything on the Watch is.
+    ///
+    /// Both numbers go out: the grams under their own key for a phone on this
+    /// build, and the unit-less ones under "weights", where they have always
+    /// been, for a phone that has not updated. A phone reading grams out of
+    /// "weights" would record a 130 lb set as 130 g.
     func logSet(workoutId: String, exerciseId: String, weights: [Int], reps: [Int],
                 aerobic: WatchAerobicWorkout.Summary? = nil) {
         var info: [String: Any] = [
             "type": "logSet", "id": UUID().uuidString,
             "date": Date().timeIntervalSince1970,
             "workoutId": workoutId, "exerciseId": exerciseId,
-            "weights": weights, "reps": reps
+            "weights": legacyWeights(weights, exerciseId: exerciseId),
+            "weightsGrams": weights, "reps": reps
         ]
         if let aerobic {
             info["durationSeconds"] = aerobic.durationSeconds

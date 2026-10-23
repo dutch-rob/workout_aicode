@@ -246,6 +246,24 @@ enum LogEditing {
         grams[index] = max(0, value)
         record.grams = grams
         while log.reps.count < grams.count { log.reps.append(0) }
+        writeLegacyNumbers(for: log, grams: grams, in: context)
+    }
+
+    /// Keeps the log's old unit-less field in step with the grams.
+    ///
+    /// An edit that moved only the grams left the other field holding the
+    /// weight as it was BEFORE the edit, which the Mac app and any device yet
+    /// to update would go on showing. A stale number is worse than a blank:
+    /// there is nothing about it to notice.
+    private static func writeLegacyNumbers(for log: WorkoutLog, grams: [Int],
+                                           in context: ModelContext) {
+        let exerciseId = log.exerciseId
+        let descriptor = FetchDescriptor<ExerciseDef>(
+            predicate: #Predicate<ExerciseDef> { $0.id == exerciseId })
+        let exercise = (try? context.fetch(descriptor))?.first
+        let unit = WeightHistory.statedUnit ?? .current
+        let numbers = WeightHistory.legacyNumbers(for: grams, of: exercise, in: unit)
+        if log.weights != numbers { log.weights = numbers }
     }
 
     /// Drops trailing sets that are 0 × 0.
@@ -263,6 +281,7 @@ enum LogEditing {
         }
         if grams != record.grams { record.grams = grams }
         if reps != log.reps { log.reps = reps }
+        writeLegacyNumbers(for: log, grams: grams, in: context)
     }
 
     /// Makes both arrays at least `count` long, so set `count - 1` can be
@@ -272,5 +291,6 @@ enum LogEditing {
         let record = weightsRecord(for: log, in: context)
         while record.grams.count < count { record.grams.append(0) }
         while log.reps.count < count { log.reps.append(0) }
+        writeLegacyNumbers(for: log, grams: record.grams, in: context)
     }
 }

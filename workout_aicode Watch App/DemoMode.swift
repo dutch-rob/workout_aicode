@@ -67,11 +67,17 @@ enum DemoMode {
                             incrementGrams: unit.grams(from: 5))
     }
 
+    /// Both numbers, as a real phone sends them: the grams the wheels open on,
+    /// and the plain ones beside them. Putting grams in `weights` made the
+    /// Watch read them as pounds and convert them a second time.
     static var lastEntries: [String: SyncLastEntry] {
         [
-            "\(workoutId)|d1": SyncLastEntry(weights: grams([50, 55]), reps: [12, 10]),
-            "\(workoutId)|d2": SyncLastEntry(weights: grams([40, 45]), reps: [12, 10]),
-            "\(workoutId)|d3": SyncLastEntry(weights: grams([45, 50]), reps: [12, 9]),
+            "\(workoutId)|d1": SyncLastEntry(weights: [50, 55], reps: [12, 10],
+                                             weightsGrams: grams([50, 55])),
+            "\(workoutId)|d2": SyncLastEntry(weights: [40, 45], reps: [12, 10],
+                                             weightsGrams: grams([40, 45])),
+            "\(workoutId)|d3": SyncLastEntry(weights: [45, 50], reps: [12, 9],
+                                             weightsGrams: grams([45, 50])),
         ]
     }
 }

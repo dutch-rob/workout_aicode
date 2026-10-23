@@ -5,9 +5,12 @@ import SwiftData
 //
 // Every weight in this app is now kept in grams, in fields that sit BESIDE the
 // original unit-less ones rather than replacing them (see WorkoutLogSchemaV9).
-// Nothing writes the old fields any more; a device still on the old build
-// reads its own data unchanged and sees nothing at all for anything newer,
-// which is a blank rather than a weight that is wrong by a factor of 2.2.
+// BOTH are written. The grams are what this build reads; the unit-less numbers
+// beside them are for the devices that cannot — the Mac app until its own App
+// Store entry updates, a Watch until it next charges, a phone rolled back to
+// the shipping version. They are converted by counting steps of the exercise's
+// own wheel, in the unit the user stated for their history, so they are the
+// numbers that build would have stored itself.
 //
 // There is one moment of doubt in all this: the numbers somebody logged before
 // today. The app cannot know what they meant. So it asks, once, and until it
@@ -21,9 +24,12 @@ enum WeightHistory {
     /// Kept apart from the display unit: that one they may change whenever
     /// they like, and changing it must never re-interpret a history that has
     /// already been given a meaning.
-    static let statedUnitKey = "weightsHistoryUnit"
+    nonisolated static let statedUnitKey = "weightsHistoryUnit"
 
-    static var statedUnit: WeightUnit? {
+    /// Not isolated: it reads one string out of UserDefaults, and the models
+    /// themselves have to ask — `setWeightRange` writes the unit-less fields
+    /// in this unit, and a model is not on the main actor.
+    nonisolated static var statedUnit: WeightUnit? {
         UserDefaults.standard.string(forKey: statedUnitKey).flatMap(WeightUnit.init(rawValue:))
     }
 
@@ -71,8 +77,8 @@ enum WeightHistory {
     /// A weight that is NOT a step of its exercise — logged before the range
     /// was changed, say — keeps its own conversion rather than being moved
     /// onto a grid it never belonged to.
-    private static func converted(_ weight: Int, of exercise: ExerciseDef?,
-                                  in unit: WeightUnit) -> Int {
+    static func grams(fromLegacy weight: Int, of exercise: ExerciseDef?,
+                      in unit: WeightUnit) -> Int {
         guard let exercise else { return unit.grams(from: Double(weight)) }
         let low = exercise.lowestWeight
         let step = max(1, exercise.weightIncrement)
@@ -80,7 +86,36 @@ enum WeightHistory {
         guard weight >= low, offset % step == 0 else {
             return unit.grams(from: Double(weight))
         }
+        // The two ends are numbers the user typed, and the wheel carries both
+        // exactly — including a top that is not a whole number of steps from
+        // the bottom, which is why `WeightWheel.values` appends it. Counting
+        // steps to reach it lands a gram or two away, off the wheel.
+        if let range = exercise.weightRangeGrams,
+           exercise.legacyRangeIsTheSameWheel(in: unit) {
+            if weight == exercise.lowestWeight { return range.lowest }
+            if weight == exercise.highestWeight { return range.highest }
+            return range.lowest + (offset / step) * range.increment
+        }
         return unit.grams(from: Double(low)) + (offset / step) * unit.grams(from: Double(step))
+    }
+
+    /// Weights in grams written back as the plain unit-less numbers an older
+    /// build reads — the old Mac app, a phone rolled back to the App Store
+    /// version, a Watch that has not updated.
+    ///
+    /// Written on every new log, which is what the comment at the top of this
+    /// file once said would NOT happen. Leaving them blank was the safer
+    /// choice while the numbers could only be converted one at a time and
+    /// might therefore be wrong by a factor of 2.2; counting steps of the
+    /// exercise's own wheel in the unit the user stated for their history
+    /// makes them right, and a right number beats a blank on a device that
+    /// has no other way to show the set at all.
+    static func legacyNumbers(for grams: [Int], of exercise: ExerciseDef?,
+                              in unit: WeightUnit) -> [Int] {
+        guard let exercise else {
+            return grams.map { Int(unit.display(grams: $0).rounded()) }
+        }
+        return grams.map { exercise.legacyWeight(fromGrams: $0, in: unit) }
     }
 
     /// Fills in anything that arrived since the question was answered.
@@ -126,7 +161,7 @@ enum WeightHistory {
             let exercise = byId[log.exerciseId]
             context.insert(LogWeights(
                 logId: log.id,
-                grams: log.weights.map { converted($0, of: exercise, in: unit) }))
+                grams: log.weights.map { grams(fromLegacy: $0, of: exercise, in: unit) }))
             filled += 1
         }
 
@@ -136,7 +171,7 @@ enum WeightHistory {
         for result in assisted where result.bodyWeightGrams == nil {
             result.bodyWeightGrams = unit.grams(from: result.bodyWeight)
             result.machineSettingsGrams = result.machineSettings.map {
-                converted($0, of: byId[logExercise[result.logId] ?? UUID()], in: unit)
+                grams(fromLegacy: $0, of: byId[logExercise[result.logId] ?? UUID()], in: unit)
             }
             filled += 1
         }
@@ -175,12 +210,68 @@ extension ExerciseDef {
         return (lowest, highest, increment)
     }
 
+    /// A weight in grams written back as the plain unit-less number an older
+    /// build expects.
+    ///
+    /// By STEPS of this exercise's own wheel wherever it has both ranges, so a
+    /// weight that travels out to an older device and back is the same weight
+    /// and not a rounding away from it. The unit only comes into it for an
+    /// exercise defined on this build, which has no unit-less range to count.
+    func legacyWeight(fromGrams grams: Int, in unit: WeightUnit) -> Int {
+        guard let range = weightRangeGrams, weightIncrement > 0,
+              grams >= range.lowest, legacyRangeIsTheSameWheel(in: unit) else {
+            return Int(unit.display(grams: grams).rounded())
+        }
+        // Both ends exactly, for the reason given in `grams(fromLegacy:)`.
+        if grams == range.lowest { return lowestWeight }
+        if grams == range.highest { return highestWeight }
+        let steps = Int((Double(grams - range.lowest) / Double(range.increment)).rounded())
+        return lowestWeight + steps * weightIncrement
+    }
+
+    /// Whether the range in grams is simply the unit-less one converted, which
+    /// is the usual case, rather than one the user re-typed in another unit.
+    ///
+    /// It decides how a number from a device that has only the unit-less range
+    /// may be read. Where the two describe the same wheel, counting steps puts
+    /// the number exactly back on it. Where they do not, the number means a
+    /// WEIGHT and not a position, and converting it is the only honest reading:
+    /// a wheel re-typed from 0–200 lb to 0–90 kg has a twenty-sixth step of
+    /// 65 kg, while the 130 lb that came off the old one is 59.
+    func legacyRangeIsTheSameWheel(in unit: WeightUnit) -> Bool {
+        guard let range = weightRangeGrams, weightIncrement > 0 else { return false }
+        // Each end converts and rounds on its own, so "the same" is within a
+        // gram or two, not to the gram.
+        let tolerance = 2
+        return abs(range.lowest - unit.grams(from: Double(lowestWeight))) <= tolerance
+            && abs(range.increment - unit.grams(from: Double(weightIncrement))) <= tolerance
+    }
+
     /// Writes a range the user chose in their own unit.
+    ///
+    /// The unit-less fields are written too, in the unit the user stated for
+    /// their history. Without that an exercise defined on this build keeps the
+    /// factory 0–200 by 5 in those fields, and that — not the range the user
+    /// typed — is what an older Watch is sent and what the Mac app shows.
+    ///
+    /// Whole numbers in the stated unit, so they are lossy where the real
+    /// range is not: 2.5 kg of increment goes down as 6 lb for a user whose
+    /// history is in pounds. They are a fallback and never the source of
+    /// truth, and `legacyRangeIsTheSameWheel` notices the difference and stops
+    /// anything counting ticks against them.
     func setWeightRange(lowest: Double, highest: Double, increment: Double,
                         unit: WeightUnit = .current) {
         lowestWeightGrams = unit.grams(from: max(0, lowest))
         highestWeightGrams = unit.grams(from: max(lowest, highest))
         weightIncrementGrams = max(1, unit.grams(from: max(0.25, increment)))
+
+        let legacyUnit = WeightHistory.statedUnit ?? unit
+        let low = Int(legacyUnit.display(grams: lowestWeightGrams ?? 0).rounded())
+        let high = Int(legacyUnit.display(grams: highestWeightGrams ?? 0).rounded())
+        let step = Int(legacyUnit.display(grams: weightIncrementGrams ?? 0).rounded())
+        lowestWeight = max(0, low)
+        highestWeight = max(lowestWeight, high)
+        weightIncrement = max(1, step)
     }
 }
 

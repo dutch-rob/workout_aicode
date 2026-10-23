@@ -623,7 +623,12 @@ final class PhoneSessionManager: NSObject, ObservableObject {
               let widStr = info["workoutId"] as? String, let wid = UUID(uuidString: widStr),
               let eidStr = info["exerciseId"] as? String, let eid = UUID(uuidString: eidStr)
         else { return }
-        let weights = info["weights"] as? [Int] ?? []
+        // Two keys, and which one is present says which build the Watch is on.
+        // "weightsGrams" is this build; "weights" alone is a Watch that has not
+        // updated yet, whose numbers are pounds or kilograms and would be a set
+        // logged at a four-hundredth of its weight if taken for grams.
+        let weights = info["weightsGrams"] as? [Int] ?? []
+        let legacy  = info["weights"] as? [Int] ?? []
         let reps    = info["reps"] as? [Int] ?? []
         let date    = (info["date"] as? Double).map { Date(timeIntervalSince1970: $0) } ?? Date()
         let id      = (info["id"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID()
@@ -632,6 +637,7 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         let duration = info["durationSeconds"] as? Int
         store?.addWatchLog(id: id, date: date, workoutId: wid,
                            exerciseId: eid, weights: weights, reps: reps,
+                           legacyWeights: legacy,
                            durationSeconds: duration,
                            averageHeartRate: info["averageHeartRate"] as? Int ?? 0,
                            maximumHeartRate: info["maximumHeartRate"] as? Int ?? 0,

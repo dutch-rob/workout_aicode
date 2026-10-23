@@ -427,16 +427,24 @@ struct WatchLogExerciseView: View {
     // MARK: - Handover helpers
 
     private func currentSnapshot() -> SessionSnapshot {
-        SessionSnapshot(workoutId: workout.id,
-                        currentIndex: currentIndex,
-                        weights: weights,
-                        reps: reps,
-                        loggedIndices: Array(loggedIndices),
-                        startedAt: startedAt.timeIntervalSince1970)
+        // Both numbers, so the phone can take this over whichever build it is
+        // on — see "Two numbers for every weight" in WatchSync.swift.
+        let legacy = weights.enumerated().map { index, row in
+            session.legacyWeights(row, exerciseId: workout.exerciseOrder.indices.contains(index)
+                                  ? workout.exerciseOrder[index] : "")
+        }
+        return SessionSnapshot(workoutId: workout.id,
+                               currentIndex: currentIndex,
+                               weights: legacy,
+                               reps: reps,
+                               loggedIndices: Array(loggedIndices),
+                               startedAt: startedAt.timeIntervalSince1970,
+                               weightsGrams: weights)
     }
 
     private func adopt(_ snap: SessionSnapshot) {
-        weights = snap.weights
+        weights = snap.grams(for: workout.exerciseOrder.map { session.exercise(id: $0) },
+                             in: session.weightUnit)
         reps = snap.reps
         loggedIndices = Set(snap.loggedIndices)
         startedAt = Date(timeIntervalSince1970: snap.startedAt)
@@ -716,7 +724,7 @@ struct WatchLogExerciseView: View {
 
     private func prepareBuffers() {
         weights = workout.exerciseOrder.map { exId in
-            session.lastEntry(workoutId: workout.id, exerciseId: exId)?.weights ?? []
+            session.lastWeightsGrams(workoutId: workout.id, exerciseId: exId)
         }
         reps = workout.exerciseOrder.map { exId in
             session.lastEntry(workoutId: workout.id, exerciseId: exId)?.reps ?? []

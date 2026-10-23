@@ -217,6 +217,13 @@ final class AppStore: ObservableObject {
         let durationByLog = Dictionary(aerobic.map { ($0.logId, $0.durationSeconds) },
                                        uniquingKeysWith: { a, _ in a })
         let assistedIds = Set(exercises.filter(\.subtractsFromBodyWeight).map(\.id))
+        // For writing the unit-less numbers an older Watch reads: the unit the
+        // user said their history was in, so those numbers stay of a piece with
+        // the ones that build already has. Not the display unit, which they may
+        // change this afternoon.
+        let legacyUnit = WeightHistory.statedUnit ?? .current
+        let byExerciseId = Dictionary(exercises.map { ($0.id, $0) },
+                                      uniquingKeysWith: { first, _ in first })
         var lastMap: [String: SyncLastEntry] = [:]
         for workout in workouts {
             let entries = lastEntries(for: workout)
@@ -233,8 +240,18 @@ final class AppStore: ObservableObject {
                    !settings.isEmpty {
                     wheels = settings
                 }
-                lastMap[key] = SyncLastEntry(weights: wheels, reps: log.reps,
-                                             durationSeconds: durationByLog[log.id] ?? 0)
+                // Both numbers, every time. The grams are what a Watch on this
+                // build opens its wheels on; the unit-less ones beside them are
+                // what a Watch that has not updated yet reads, and sending it
+                // grams there would open every wheel at the top of its range.
+                let definition = byExerciseId[exId]
+                let legacyWheels = wheels.map {
+                    definition?.legacyWeight(fromGrams: $0, in: legacyUnit)
+                        ?? Int(legacyUnit.display(grams: $0).rounded())
+                }
+                lastMap[key] = SyncLastEntry(weights: legacyWheels, reps: log.reps,
+                                             durationSeconds: durationByLog[log.id] ?? 0,
+                                             weightsGrams: wheels)
             }
         }
 
@@ -286,6 +303,7 @@ final class AppStore: ObservableObject {
     /// so re-delivered messages don't create duplicate rows.
     func addWatchLog(id: UUID, date: Date, workoutId: UUID, exerciseId: UUID,
                      weights: [Int], reps: [Int],
+                     legacyWeights: [Int] = [],
                      durationSeconds: Int? = nil,
                      averageHeartRate: Int = 0,
                      maximumHeartRate: Int = 0,
@@ -300,24 +318,45 @@ final class AppStore: ObservableObject {
         // that back unchanged — it has no business knowing what the user
         // weighs — and the conversion to the weight actually lifted happens
         // here, in the one place that writes a log from the Watch.
-        // `weights` is in GRAMS: the Watch is sent grams and sends them back.
         let exercise = exercises.first { $0.id == exerciseId }
+        let legacyUnit = WeightHistory.statedUnit ?? .current
+
+        // `weights` is in GRAMS. A Watch that has not updated yet sends none,
+        // only the unit-less numbers it has always sent, and reading THOSE as
+        // grams would record a 130 lb set as 130 g. So the grams are used when
+        // they are there and the old numbers are read through the exercise's
+        // own wheel when they are not.
+        let onTheWheels: [Int] = {
+            guard weights.isEmpty, !legacyWeights.isEmpty else { return weights }
+            guard let exercise else {
+                return legacyWeights.map { legacyUnit.grams(from: Double($0)) }
+            }
+            return legacyWeights.map {
+                WeightHistory.grams(fromLegacy: $0, of: exercise, in: legacyUnit)
+            }
+        }()
+
         let assisted = exercise?.subtractsFromBodyWeight == true
         let bodyWeightGrams = BodyWeight.currentGrams
         let lifted = assisted
-            ? weights.map { max(0, bodyWeightGrams - $0) }
-            : weights
+            ? onTheWheels.map { max(0, bodyWeightGrams - $0) }
+            : onTheWheels
 
         let log = WorkoutLog(id: id, date: date, workoutId: workoutId,
-                             exerciseId: exerciseId, weights: [], reps: reps)
+                             exerciseId: exerciseId,
+                             weights: WeightHistory.legacyNumbers(for: lifted, of: exercise,
+                                                                  in: legacyUnit),
+                             reps: reps)
         context.insert(log)
         context.insert(LogWeights(logId: log.id, grams: lifted))
         if assisted {
-            context.insert(AssistedResult(logId: log.id,
-                                          bodyWeight: 0,
-                                          machineSettings: [],
-                                          bodyWeightGrams: bodyWeightGrams,
-                                          machineSettingsGrams: weights))
+            context.insert(AssistedResult(
+                logId: log.id,
+                bodyWeight: legacyUnit.display(grams: bodyWeightGrams),
+                machineSettings: WeightHistory.legacyNumbers(for: onTheWheels, of: exercise,
+                                                            in: legacyUnit),
+                bodyWeightGrams: bodyWeightGrams,
+                machineSettingsGrams: onTheWheels))
         }
         // Only for an aerobic session, and only one that actually ran.
         if let durationSeconds, durationSeconds > 0 {

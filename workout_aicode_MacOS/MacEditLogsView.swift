@@ -382,10 +382,16 @@ struct MacEditLogsView: View {
         while let w = weights.last, let r = reps.last, w == 0, r == 0 {
             weights.removeLast(); reps.removeLast()
         }
-        // The weights go beside the log, in grams; the log's own field is the
-        // original unit-less one and is not written any more.
+        // The weights go beside the log, in grams, with the original unit-less
+        // numbers in the log's own field for whatever has yet to update — see
+        // WeightHistory.legacyNumbers.
+        let legacyUnit = WeightHistory.statedUnit ?? .current
+        let definition = exercises.first { $0.id == exerciseId }
         let log = WorkoutLog(date: newDate, workoutId: workoutId,
-                             exerciseId: exerciseId, weights: [], reps: reps)
+                             exerciseId: exerciseId,
+                             weights: WeightHistory.legacyNumbers(
+                                for: weights, of: definition, in: legacyUnit),
+                             reps: reps)
         context.insert(log)
         context.insert(LogWeights(logId: log.id, grams: weights))
         DraftMode.note(log: log.id, in: context)

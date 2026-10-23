@@ -115,6 +115,102 @@ struct SyncExercise: Codable, Identifiable, Hashable {
     var isAerobic: Bool { kindRaw == SyncDefaults.aerobicKind }
 }
 
+// MARK: - Two numbers for every weight
+//
+// The iPhone app, the Watch app and the Mac app are three separate installs
+// that update when they each feel like it: the Watch when it is next charging
+// on wifi, the Mac whenever its own App Store entry is opened. So a phone that
+// has learned about grams WILL at some point be talking to a Watch that has
+// not, for hours or for weeks.
+//
+// Nothing here may therefore change what an existing key MEANS. `weights` is
+// the plain unit-less number it has always been, and the grams travel beside
+// it under a new key. Each side reads the one it understands: an older Watch
+// finds `weights` exactly where it expects it, and this one prefers the grams
+// and falls back to reading `weights` through the exercise's own wheel.
+//
+// Getting this wrong is not a cosmetic matter. Sending grams in `weights` to
+// an older Watch opens its wheels at the top of the range; receiving an older
+// Watch's `weights` as though they were grams logs 130 lb as 130 g, which is
+// a real set recorded at a four-hundredth of its weight.
+
+extension SyncExercise {
+
+    /// Whether the range in grams is one that can actually be used.
+    ///
+    /// Positive, not merely present: a zeroed range is a wheel with a single
+    /// value on it, which logs every set at nothing.
+    var hasGramRange: Bool {
+        incrementGrams > 0 && highestGrams > 0 && highestGrams >= lowestGrams
+    }
+
+    /// This exercise with its gram range filled in from the unit-less numbers
+    /// beside it, for definitions that came from a phone which had no grams to
+    /// send. Without it a Watch on this build shows empty wheels for every
+    /// exercise until the phone catches up.
+    func repairingGramRange(in unit: WeightUnit) -> SyncExercise {
+        guard !hasGramRange else { return self }
+        var repaired = self
+        repaired.lowestGrams = unit.grams(from: Double(lowestWeight))
+        repaired.highestGrams = unit.grams(from: Double(highestWeight))
+        repaired.incrementGrams = max(1, unit.grams(from: Double(weightIncrement)))
+        return repaired
+    }
+
+    /// One of the old unit-less numbers, in grams.
+    ///
+    /// Counted in STEPS of this exercise's own wheel rather than converted on
+    /// its own, because rounding does not distribute: 130 lb by itself is
+    /// 58,967 g, while the wheel's twenty-sixth step is 26 × 2,268 = 58,968 g.
+    /// A weight converted on its own therefore lands a gram off the wheel it
+    /// came from, the Picker finds no value matching it, and the wheel opens
+    /// somewhere else entirely. The phone's `WeightHistory.converted` counts
+    /// the same steps for the same reason.
+    func grams(fromLegacy weight: Int, in unit: WeightUnit) -> Int {
+        let step = max(1, weightIncrement)
+        let offset = weight - lowestWeight
+        guard weight >= lowestWeight, offset % step == 0 else {
+            return unit.grams(from: Double(weight))
+        }
+        guard hasGramRange, legacyRangeIsTheSameWheel(in: unit) else {
+            return unit.grams(from: Double(lowestWeight))
+                + (offset / step) * unit.grams(from: Double(step))
+        }
+        // The ends exactly: the top of a wheel need not be a whole number of
+        // steps from the bottom, and counting to it lands beside it.
+        if weight == lowestWeight { return lowestGrams }
+        if weight == highestWeight { return highestGrams }
+        return lowestGrams + (offset / step) * incrementGrams
+    }
+
+    /// A weight in grams written back as the unit-less number an older build
+    /// expects — the inverse of the above, by the same step count, so a set
+    /// that goes out and comes back is the same set.
+    ///
+    /// An exercise with no unit-less range of its own (one defined on this
+    /// build, which never had one) can only be read out in the current unit.
+    func legacy(fromGrams grams: Int, in unit: WeightUnit) -> Int {
+        guard hasGramRange, weightIncrement > 0, grams >= lowestGrams,
+              legacyRangeIsTheSameWheel(in: unit) else {
+            return Int((unit.display(grams: grams)).rounded())
+        }
+        if grams == lowestGrams { return lowestWeight }
+        if grams == highestGrams { return highestWeight }
+        let steps = Int((Double(grams - lowestGrams) / Double(incrementGrams)).rounded())
+        return lowestWeight + steps * weightIncrement
+    }
+
+    /// Whether the gram range is the unit-less one converted rather than one
+    /// re-typed in another unit — the phone's
+    /// `ExerciseDef.legacyRangeIsTheSameWheel`, which this must agree with.
+    func legacyRangeIsTheSameWheel(in unit: WeightUnit) -> Bool {
+        guard hasGramRange, weightIncrement > 0 else { return false }
+        let tolerance = 2
+        return abs(lowestGrams - unit.grams(from: Double(lowestWeight))) <= tolerance
+            && abs(incrementGrams - unit.grams(from: Double(weightIncrement))) <= tolerance
+    }
+}
+
 /// One workout definition. `exerciseOrder` holds exercise ids (as strings).
 struct SyncWorkout: Codable, Identifiable, Hashable {
     var id: String
@@ -125,24 +221,44 @@ struct SyncWorkout: Codable, Identifiable, Hashable {
 /// The most recent logged weights/reps for a (workout, exercise) pair, used to
 /// pre-fill the Watch picker wheels the same way the phone pre-fills them.
 struct SyncLastEntry: Codable, Hashable {
+    /// Last time's weights as the plain unit-less numbers. Still written, and
+    /// still meaning exactly what they always did, because a Watch on an older
+    /// build reads nothing else — see "Two numbers for every weight" above.
     var weights: [Int]
     var reps: [Int]
     /// How long an aerobic exercise ran last time, so its wheel opens where it
     /// was left — the same courtesy the weight wheels have always had. Zero for
     /// a strength exercise, and for a payload written before this existed.
     var durationSeconds: Int
+    /// The same weights in grams, which is what both sides now store. Empty in
+    /// a payload from a phone that knew nothing of grams, and then worked out
+    /// from the numbers above.
+    var weightsGrams: [Int]
 
-    enum CodingKeys: String, CodingKey { case weights, reps, durationSeconds }
-    init(weights: [Int], reps: [Int], durationSeconds: Int = 0) {
+    enum CodingKeys: String, CodingKey {
+        case weights, reps, durationSeconds, weightsGrams
+    }
+    init(weights: [Int], reps: [Int], durationSeconds: Int = 0,
+         weightsGrams: [Int] = []) {
         self.weights = weights
         self.reps = reps
         self.durationSeconds = durationSeconds
+        self.weightsGrams = weightsGrams
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         weights = try c.decode([Int].self, forKey: .weights)
         reps = try c.decode([Int].self, forKey: .reps)
         durationSeconds = try c.decodeIfPresent(Int.self, forKey: .durationSeconds) ?? 0
+        weightsGrams = try c.decodeIfPresent([Int].self, forKey: .weightsGrams) ?? []
+    }
+
+    /// Where to open the wheels, in grams: what the phone sent if it knew, and
+    /// otherwise its unit-less numbers read through the exercise's own wheel.
+    func grams(for exercise: SyncExercise?, in unit: WeightUnit) -> [Int] {
+        guard weightsGrams.isEmpty else { return weightsGrams }
+        guard let exercise else { return weights.map { unit.grams(from: Double($0)) } }
+        return weights.map { exercise.grams(fromLegacy: $0, in: unit) }
     }
 }
 
@@ -152,6 +268,9 @@ struct SyncLastEntry: Codable, Hashable {
 struct SessionSnapshot: Codable, Equatable {
     var workoutId: String
     var currentIndex: Int
+    /// The wheels as the unit-less numbers an older build understands, with
+    /// the grams beside them in `weightsGrams` — see "Two numbers for every
+    /// weight". A hand-over is precisely the moment the two builds meet.
     var weights: [[Int]]
     var reps: [[Int]]
     var loggedIndices: [Int]
@@ -189,13 +308,18 @@ struct SessionSnapshot: Codable, Equatable {
         return end > now ? (end, restTotal) : nil
     }
 
+    /// The same wheels in grams. Empty in a snapshot from a build that had no
+    /// grams, and then read from `weights`.
+    var weightsGrams: [[Int]]
+
     enum CodingKeys: String, CodingKey {
         case workoutId, currentIndex, weights, reps, loggedIndices, startedAt
-        case restEndsAt, restTotal, updatedAt
+        case restEndsAt, restTotal, updatedAt, weightsGrams
     }
     init(workoutId: String, currentIndex: Int, weights: [[Int]], reps: [[Int]],
          loggedIndices: [Int], startedAt: Double,
-         restEndsAt: Double? = nil, restTotal: Int? = nil, updatedAt: Double? = nil) {
+         restEndsAt: Double? = nil, restTotal: Int? = nil, updatedAt: Double? = nil,
+         weightsGrams: [[Int]] = []) {
         self.workoutId = workoutId
         self.currentIndex = currentIndex
         self.weights = weights
@@ -205,6 +329,7 @@ struct SessionSnapshot: Codable, Equatable {
         self.restEndsAt = restEndsAt
         self.restTotal = restTotal
         self.updatedAt = updatedAt
+        self.weightsGrams = weightsGrams
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -220,6 +345,21 @@ struct SessionSnapshot: Codable, Equatable {
         restEndsAt = try c.decodeIfPresent(Double.self, forKey: .restEndsAt)
         restTotal = try c.decodeIfPresent(Int.self, forKey: .restTotal)
         updatedAt = try c.decodeIfPresent(Double.self, forKey: .updatedAt)
+        weightsGrams = try c.decodeIfPresent([[Int]].self, forKey: .weightsGrams) ?? []
+    }
+
+    /// The wheels in grams, per exercise of the workout being taken over.
+    ///
+    /// `exercises` is that workout's exercises in order, so a snapshot from an
+    /// older build can have each row read through the wheel it came off.
+    func grams(for exercises: [SyncExercise?], in unit: WeightUnit) -> [[Int]] {
+        guard weightsGrams.isEmpty else { return weightsGrams }
+        return weights.enumerated().map { index, row in
+            guard let exercise = index < exercises.count ? exercises[index] : nil else {
+                return row.map { unit.grams(from: Double($0)) }
+            }
+            return row.map { exercise.grams(fromLegacy: $0, in: unit) }
+        }
     }
 }
 
