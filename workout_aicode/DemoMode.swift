@@ -60,6 +60,7 @@ enum DemoMode {
         )
         seed(into: container.mainContext)
         markFirstExerciseAssisted(in: container.mainContext)
+        addExerciseWithoutHistory(in: container.mainContext)
         return container
     }
 
@@ -128,6 +129,21 @@ enum DemoMode {
                                      averageHeartRate: 138, maximumHeartRate: 157,
                                      zoneSeconds: [60, 240, 600, 180, 0]))
         }
+    }
+
+    /// DEBUG only: an exercise with no history at all, first in the workout,
+    /// so the log screen opens on wheels that have never been touched. That is
+    /// the state that wrote a row of nothing into a real log.
+    static func addExerciseWithoutHistory(in ctx: ModelContext) {
+        guard CommandLine.arguments.contains("-SRWFreshExercise"),
+              let workout = try? ctx.fetch(FetchDescriptor<WorkoutDef>())
+                  .sorted(by: { $0.sortIndex < $1.sortIndex }).first else { return }
+        let exercise = ExerciseDef(name: "Brand new machine", numberOfSeries: 2,
+                                   lowestWeight: 10, highestWeight: 100, weightIncrement: 5,
+                                   primaryMuscle: .chest)
+        ctx.insert(exercise)
+        workout.exerciseOrder.insert(exercise.id, at: 0)
+        try? ctx.save()
     }
 
     /// Screenshot/demo only: makes the first exercise an assisted machine, so

@@ -820,7 +820,7 @@ struct LogExerciseView: View {
             buttonRow.padding(.trailing, sensorBand)
             Text(exercise?.name ?? "").font(.title2).bold()
                 .padding(.trailing, sensorBand)
-            if let exercise, let problem = bodyWeightProblem(for: exercise) {
+            if let exercise, let problem = setProblem(for: exercise) {
                 Text(problem)
                     .font(.footnote)
                     .foregroundStyle(.orange)
@@ -1029,11 +1029,42 @@ struct LogExerciseView: View {
         // (or in the other unit) made the subtraction negative, which was
         // clamped to a logged weight of zero — a wrong number, silently, in
         // the one record that cannot be reconstructed later.
-        if exercise.subtractsFromBodyWeight, bodyWeightProblem(for: exercise) != nil {
-            return false
-        }
+        if setProblem(for: exercise) != nil { return false }
         guard exercise.kind == .aerobic else { return true }
         return summaryFor(currentIndex) != nil
+    }
+
+    /// What the wheels are SHOWING for this exercise, one value per set.
+    ///
+    /// The buffer starts empty for an exercise with no previous session, and
+    /// a wheel only writes into it when it is actually moved — the numbers on
+    /// screen until then come from a default in the binding's getter. Logging
+    /// the raw buffer therefore recorded a row with nothing in it at all,
+    /// which is where an empty log comes from (one is in the user's own
+    /// history, from a tap on "log" before touching anything). What is on
+    /// screen is what gets written.
+    private func displayed(_ buffer: [[Int]], for exercise: ExerciseDef,
+                           default fallback: Int) -> [Int] {
+        let count = max(1, exercise.numberOfSeries)
+        let row = currentIndex < buffer.count ? buffer[currentIndex] : []
+        return (0..<count).map { series in
+            series < row.count ? row[series] : fallback
+        }
+    }
+
+    /// Why a set cannot be logged yet, or nil when it can.
+    private func setProblem(for exercise: ExerciseDef) -> String? {
+        if let problem = bodyWeightProblem(for: exercise) { return problem }
+        guard exercise.kind == .strength else { return nil }
+        // Nought repetitions is not a set. Without this, "log" on a screen
+        // nobody has touched writes a row of nothing — which then becomes
+        // what the wheels open on next time, for this exercise and for the
+        // next device that syncs it.
+        let reps = displayed(self.reps, for: exercise, default: 0)
+        if !reps.contains(where: { $0 > 0 }) {
+            return "Set the repetitions before logging — a set with none is not a set."
+        }
+        return nil
     }
 
     /// Why an assisted set cannot be worked out yet, or nil when it can.
@@ -1296,7 +1327,8 @@ struct LogExerciseView: View {
     /// body weight has moved.
     @discardableResult
     private func writeLog(for exercise: ExerciseDef) -> WorkoutLog {
-        let onTheWheels = weights[currentIndex]
+        let onTheWheels = displayed(weights, for: exercise,
+                                    default: exercise.lowestWeight)
         let assisted = exercise.subtractsFromBodyWeight
         let bodyWeight = BodyWeight.current
         let lifted = assisted
@@ -1305,7 +1337,7 @@ struct LogExerciseView: View {
         let log = WorkoutLog(workoutId: workout.id,
                              exerciseId: exercise.id,
                              weights: lifted,
-                             reps: reps[currentIndex])
+                             reps: displayed(reps, for: exercise, default: 0))
         context.insert(log)
         if assisted {
             context.insert(AssistedResult(logId: log.id,
