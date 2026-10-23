@@ -37,16 +37,27 @@ enum ExerciseDefaults {
     /// What the app used before this was configurable, and what the question
     /// itself starts from.
     static let sets = 3
-    static let lowest = 0
-    static let highest = 200
-    static let increment = 5
+    static let lowest = 0.0
+    static let highest = 200.0
+    static let increment = 5.0
 
-    static var current: (sets: Int, lowest: Int, highest: Int, increment: Int) {
+    /// The weights are fractional. Gyms are: dumbbells in 2.5 kg steps, a
+    /// cable stack in 2½ lb. They were whole numbers, which meant a user whose
+    /// gym went up in halves could not say so here and had to correct every
+    /// exercise by hand — and until the per-exercise screen learned decimals,
+    /// could not say it there either.
+    ///
+    /// Read through NSNumber rather than as a Double, so an installation that
+    /// stored a whole number under these keys before today still reads back.
+    static var current: (sets: Int, lowest: Double, highest: Double, increment: Double) {
         let d = UserDefaults.standard
+        func number(_ key: String, or fallback: Double) -> Double {
+            (d.object(forKey: key) as? NSNumber)?.doubleValue ?? fallback
+        }
         return (d.object(forKey: ExerciseDefaultsKey.sets) as? Int ?? sets,
-                d.object(forKey: ExerciseDefaultsKey.lowest) as? Int ?? lowest,
-                d.object(forKey: ExerciseDefaultsKey.highest) as? Int ?? highest,
-                d.object(forKey: ExerciseDefaultsKey.increment) as? Int ?? increment)
+                number(ExerciseDefaultsKey.lowest, or: lowest),
+                number(ExerciseDefaultsKey.highest, or: highest),
+                number(ExerciseDefaultsKey.increment, or: increment))
     }
 
     // MARK: Rest
@@ -90,12 +101,12 @@ enum ExerciseDefaults {
                                    secondaryMuscles: secondary,
                                    libraryKey: libraryKey,
                                    restSeconds: restSeconds)
-        // The user's numbers are in the user's unit; what is stored is grams.
-        // The legacy lowestWeight/highestWeight/weightIncrement are left at
-        // their defaults and never written again.
-        exercise.setWeightRange(lowest: Double(d.lowest),
-                                highest: Double(d.highest),
-                                increment: Double(d.increment))
+        // The user's numbers are in the user's unit; what is stored is grams,
+        // with the unit-less fields written beside them for anything that can
+        // only read those — see `ExerciseDef.syncLegacyRange`.
+        exercise.setWeightRange(lowest: d.lowest,
+                                highest: d.highest,
+                                increment: d.increment)
         return exercise
     }
 

@@ -260,6 +260,164 @@ struct MixedBuildTests {
         }
     }
 
+    // MARK: Changing units while one device is still behind
+
+    @MainActor @Test func switchingTheDisplayUnitLeavesAnOlderWatchAlone() throws {
+        try withUnit(.pounds) {
+            let (store, context, press) = try store(unit: .pounds)
+            let workout = WorkoutDef(name: "Upper")
+            workout.exerciseOrder = [press.id]
+            context.insert(workout)
+            let log = WorkoutLog(workoutId: workout.id, exerciseId: press.id,
+                                 weights: [], reps: [10])
+            context.insert(log)
+            context.insert(LogWeights(logId: log.id,
+                                      grams: [WeightUnit.pounds.grams(from: 100)]))
+            try context.save()
+            store.reloadAll()
+
+            func sentToTheWatch() throws -> SyncLastEntry {
+                let data = try #require(store.watchSyncPayloadData())
+                let payload = try JSONDecoder().decode(SyncPayload.self, from: data)
+                return try #require(payload.lastEntries[
+                    SyncPayload.lastEntryKey(workoutId: workout.id.uuidString,
+                                             exerciseId: press.id.uuidString)])
+            }
+
+            let inPounds = try sentToTheWatch()
+            // The user switches the app to kilograms. Their HISTORY is still in
+            // pounds, and that — not the unit on screen — is what the
+            // unit-less numbers are written in, so a Watch that has not
+            // updated sees no change at all.
+            UserDefaults.standard.set(WeightUnit.kilograms.rawValue, forKey: WeightUnit.key)
+            let inKilograms = try sentToTheWatch()
+
+            #expect(inPounds.weights == [100])
+            #expect(inKilograms.weights == inPounds.weights)
+            #expect(inKilograms.weightsGrams == inPounds.weightsGrams)
+        }
+    }
+
+    @MainActor @Test func aWheelRetypedInTheOtherUnitStillLogsTheRightWeight() throws {
+        try withUnit(.pounds) {
+            let (store, context, press) = try store(unit: .pounds)
+            // Moved gym: the wheel is re-typed in kilograms, 0–90 by 2.5.
+            press.setWeightRange(lowest: 0, highest: 90, increment: 2.5, unit: .kilograms)
+            try context.save()
+            store.reloadAll()
+
+            // A Watch that has not updated is sent that wheel rounded into the
+            // user's history unit — 2.5 kg of increment cannot be written as a
+            // whole number of pounds, so it arrives coarser.
+            #expect(press.weightIncrement == 6)
+            #expect(press.legacyRangeIsTheSameWheel(in: .pounds) == false)
+
+            // It logs 132 from that coarser wheel. Read as a POSITION it would
+            // be the twenty-second step of the kilogram wheel, 55 kg; read as
+            // a weight, which is what it is, it is 59.9 kg — and the nearest
+            // step of the real wheel is 60.
+            let logId = UUID()
+            store.addWatchLog(id: logId, date: Date(), workoutId: UUID(),
+                              exerciseId: press.id,
+                              weights: [], reps: [8], legacyWeights: [132])
+            let stored = try #require(
+                try context.fetch(FetchDescriptor<LogWeights>()).first { $0.logId == logId })
+            #expect(WeightUnit.pounds.display(grams: stored.grams[0]) == 132)
+            #expect(WeightWheel.snap(stored.grams[0], for: press)
+                    == WeightUnit.kilograms.grams(from: 60))
+        }
+    }
+
+    // MARK: Half-unit increments, typed on the phone
+
+    @MainActor @Test func anIncrementOfHalfAUnitIsKeptAndShown() throws {
+        try withUnit(.kilograms) {
+            let (_, _, press) = try store(unit: .kilograms)
+            press.setWeightRange(lowest: 0, highest: 10, increment: 0.5, unit: .kilograms)
+
+            let range = try #require(press.weightRangeGrams)
+            #expect(range.increment == 500)
+            #expect(WeightUnit.kilograms.display(grams: range.increment) == 0.5)
+            // And the wheel really does step in halves.
+            let values = WeightWheel.values(for: press)
+            #expect(values.count == 21)
+            #expect(WeightUnit.kilograms.display(grams: values[1]) == 0.5)
+            #expect(WeightText.string(grams: values[1], in: .kilograms) == "0½")
+        }
+    }
+
+    @MainActor @Test func aQuarterIsTheFinestIncrementThatSurvives() throws {
+        try withUnit(.kilograms) {
+            let (_, _, press) = try store(unit: .kilograms)
+            press.setWeightRange(lowest: 0, highest: 2, increment: 0.25, unit: .kilograms)
+            #expect(try #require(press.weightRangeGrams).increment == 250)
+
+            // Finer than a quarter is not a number any plate or machine is
+            // marked in, and `setWeightRange` floors the increment there
+            // rather than storing something the wheels cannot show.
+            press.setWeightRange(lowest: 0, highest: 2, increment: 0.1, unit: .kilograms)
+            let increment = try #require(press.weightRangeGrams).increment
+            #expect(WeightUnit.kilograms.display(grams: increment) == 0.25)
+        }
+    }
+
+    @MainActor @Test func editingTheWheelKeepsTheUnitLessRangeInStep() throws {
+        try withUnit(.pounds) {
+            let (_, _, press) = try store(unit: .pounds)
+            #expect(press.weightIncrement == 5)
+
+            // What the edit screen does: writes one gram field at a time,
+            // never through `setWeightRange`. Found by reading a real store
+            // after a real edit — the unit-less fields had not moved, so an
+            // older Watch was still being sent the wheel from before.
+            press.weightIncrementGrams = WeightUnit.kilograms.grams(from: 0.5)
+            press.syncLegacyRange()
+
+            #expect(press.weightIncrement == 1)
+            #expect(press.legacyRangeIsTheSameWheel(in: .pounds) == false)
+        }
+    }
+
+    @MainActor @Test func theUnitLessRangeIsLeftAloneWhileTheHistoryHasNoUnit() throws {
+        let exercise = ExerciseDef(name: "New machine", numberOfSeries: 2,
+                                   lowestWeight: 20, highestWeight: 120, weightIncrement: 5)
+        // No grams yet — the question has not been answered. Writing zeros
+        // over these would destroy the only numbers `adopt` has to work from.
+        exercise.syncLegacyRange()
+        #expect(exercise.lowestWeight == 20)
+        #expect(exercise.highestWeight == 120)
+        #expect(exercise.weightIncrement == 5)
+    }
+
+    @MainActor @Test func aNewExerciseCanStartOnAFractionalIncrement() throws {
+        let d = UserDefaults.standard
+        let keys = [ExerciseDefaultsKey.lowest, ExerciseDefaultsKey.highest,
+                    ExerciseDefaultsKey.increment]
+        let saved = keys.map { d.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, saved) {
+                if let value { d.set(value, forKey: key) } else { d.removeObject(forKey: key) }
+            }
+        }
+        try withUnit(.kilograms) {
+            // A rack of dumbbells going up in 2.5s — which the first-run
+            // question could not express while these were whole numbers.
+            d.set(2.5, forKey: ExerciseDefaultsKey.lowest)
+            d.set(30.0, forKey: ExerciseDefaultsKey.highest)
+            d.set(2.5, forKey: ExerciseDefaultsKey.increment)
+
+            let exercise = ExerciseDefaults.makeExercise(name: "Dumbbell curl")
+            let range = try #require(exercise.weightRangeGrams)
+            #expect(WeightUnit.kilograms.display(grams: range.increment) == 2.5)
+            #expect(WeightUnit.kilograms.display(grams: range.lowest) == 2.5)
+
+            // And a whole number stored by a version that only had those still
+            // reads back, rather than falling to the built-in default.
+            d.set(5, forKey: ExerciseDefaultsKey.increment)
+            #expect(ExerciseDefaults.current.increment == 5)
+        }
+    }
+
     // MARK: What the Mac app, and a rolled-back phone, can still read
 
     @MainActor @Test func aNewLogAlsoWritesTheNumberAnOlderBuildReads() throws {

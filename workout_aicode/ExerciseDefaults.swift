@@ -37,20 +37,20 @@ struct ExerciseDefaultsView: View {
                 Section {
                     LabeledContent("Lowest weight") {
                         TextField("", value: $lowest, format: .number)
-                            .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     }
                     LabeledContent("Highest weight") {
                         TextField("", value: $highest, format: .number)
-                            .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     }
                     LabeledContent("Weight increment") {
                         TextField("", value: $increment, format: .number)
-                            .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     }
                 } header: {
                     Text("Weights")
                 } footer: {
-                    Text("The wheels show weights from the lowest to the highest, in steps of the increment. Match the increment to your gym — often 5, or 2 for dumbbells.")
+                    Text("The wheels show weights from the lowest to the highest, in steps of the increment. Match the increment to your gym — often 5, or 2.5 for dumbbells. Halves and quarters are allowed.")
                 }
 
                 Section {
@@ -71,7 +71,7 @@ struct ExerciseDefaultsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         if highest < lowest { highest = lowest }
-                        if increment < 1 { increment = 1 }
+                        if increment < 0.25 { increment = 0.25 }
                         ExerciseDefaults.markAsked()
                         dismiss()
                     }
@@ -102,15 +102,15 @@ struct ExerciseDefaultsSettings: View {
             Section {
                 LabeledContent("Lowest weight") {
                     TextField("", value: $lowest, format: .number)
-                        .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                 }
                 LabeledContent("Highest weight") {
                     TextField("", value: $highest, format: .number)
-                        .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                 }
                 LabeledContent("Weight increment") {
                     TextField("", value: $increment, format: .number)
-                        .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                        .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                 }
             } header: {
                 Text("Weights")
@@ -129,7 +129,7 @@ struct ExerciseDefaultsSettings: View {
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             if highest < lowest { highest = lowest }
-            if increment < 1 { increment = 1 }
+            if increment < 0.25 { increment = 0.25 }
         }
     }
 }

@@ -317,6 +317,9 @@ struct MacExerciseForm: View {
                 let grams = WeightUnit.current.grams(from: max(0, typed))
                 guard grams > 0 || exercise[keyPath: keyPath] != nil else { return }
                 exercise[keyPath: keyPath] = grams
+                // Keep the unit-less fields describing the same wheel, for
+                // every device that can only read those.
+                exercise.syncLegacyRange()
             }
         )
     }

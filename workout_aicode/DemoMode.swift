@@ -227,6 +227,8 @@ enum DemoMode {
         for workout in envelope.data.workouts { ctx.insert(workout) }
         for log in envelope.data.logs { ctx.insert(log) }
         for result in envelope.data.aerobicResults ?? [] { ctx.insert(result) }
+        for result in envelope.data.assistedResults ?? [] { ctx.insert(result) }
+        for weights in envelope.data.logWeights ?? [] { ctx.insert(weights) }
         try? ctx.save()
     }
 

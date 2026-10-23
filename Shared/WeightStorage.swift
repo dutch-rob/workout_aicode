@@ -265,13 +265,28 @@ extension ExerciseDef {
         highestWeightGrams = unit.grams(from: max(lowest, highest))
         weightIncrementGrams = max(1, unit.grams(from: max(0.25, increment)))
 
-        let legacyUnit = WeightHistory.statedUnit ?? unit
-        let low = Int(legacyUnit.display(grams: lowestWeightGrams ?? 0).rounded())
-        let high = Int(legacyUnit.display(grams: highestWeightGrams ?? 0).rounded())
-        let step = Int(legacyUnit.display(grams: weightIncrementGrams ?? 0).rounded())
-        lowestWeight = max(0, low)
-        highestWeight = max(lowestWeight, high)
-        weightIncrement = max(1, step)
+        syncLegacyRange(fallbackUnit: unit)
+    }
+
+    /// Writes the unit-less fields from the range in grams, so the two
+    /// describe the same wheel for anything that can only read the unit-less
+    /// ones — the Mac app, a Watch that has not updated, the snapshot the
+    /// iCloud toggle copies between stores.
+    ///
+    /// Call it after ANY change to the gram range. The edit screen writes the
+    /// three gram fields one at a time rather than through `setWeightRange`,
+    /// and without this an exercise edited there kept whatever unit-less range
+    /// it had before — found by reading the store after a real edit, not by
+    /// reading the code.
+    func syncLegacyRange(fallbackUnit: WeightUnit = .current) {
+        // Only from a range that exists. Writing zeros over the unit-less
+        // fields while the history has no unit yet would destroy the only
+        // numbers `WeightHistory.adopt` has to work from.
+        guard let range = weightRangeGrams else { return }
+        let unit = WeightHistory.statedUnit ?? fallbackUnit
+        lowestWeight = max(0, Int(unit.display(grams: range.lowest).rounded()))
+        highestWeight = max(lowestWeight, Int(unit.display(grams: range.highest).rounded()))
+        weightIncrement = max(1, Int(unit.display(grams: range.increment).rounded()))
     }
 }
 

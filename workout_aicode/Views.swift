@@ -318,6 +318,9 @@ struct EditExerciseView: View {
                 let grams = WeightUnit.current.grams(from: max(0, typed))
                 guard grams > 0 || exercise[keyPath: keyPath] != nil else { return }
                 exercise[keyPath: keyPath] = grams
+                // Keep the unit-less fields describing the same wheel, for
+                // every device that can only read those.
+                exercise.syncLegacyRange()
             }
         )
     }
@@ -520,10 +523,12 @@ struct EditExerciseView: View {
             if (exercise.highestWeightGrams ?? 0) < newValue {
                 exercise.highestWeightGrams = newValue
             }
+            exercise.syncLegacyRange()
         }
         .onChange(of: exercise.highestWeightGrams) { _, newValue in
             guard let newValue, let lowest = exercise.lowestWeightGrams else { return }
             if newValue < lowest { exercise.lowestWeightGrams = newValue }
+            exercise.syncLegacyRange()
         }
         .navigationTitle("edit exercise")
         .navigationBarBackButtonHidden(true)
