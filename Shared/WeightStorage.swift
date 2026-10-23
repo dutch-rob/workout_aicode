@@ -59,6 +59,30 @@ enum WeightHistory {
         return pending
     }
 
+    /// One old weight, in grams.
+    ///
+    /// Converted THE WAY ITS WHEEL IS, by counting steps, rather than on its
+    /// own. Rounding does not distribute: 130 lb on its own is 58,967g, while
+    /// the wheel's twenty-sixth step is 26 × 2,268 = 58,968g. Converting each
+    /// number independently therefore left 48 of one real user's 138 logs
+    /// holding a weight that was not on its own exercise's wheel — a gram out,
+    /// invisible on screen, and wrong in every comparison made afterwards.
+    ///
+    /// A weight that is NOT a step of its exercise — logged before the range
+    /// was changed, say — keeps its own conversion rather than being moved
+    /// onto a grid it never belonged to.
+    private static func converted(_ weight: Int, of exercise: ExerciseDef?,
+                                  in unit: WeightUnit) -> Int {
+        guard let exercise else { return unit.grams(from: Double(weight)) }
+        let low = exercise.lowestWeight
+        let step = max(1, exercise.weightIncrement)
+        let offset = weight - low
+        guard weight >= low, offset % step == 0 else {
+            return unit.grams(from: Double(weight))
+        }
+        return unit.grams(from: Double(low)) + (offset / step) * unit.grams(from: Double(step))
+    }
+
     /// Fills in anything that arrived since the question was answered.
     ///
     /// Call it whenever the data may have changed. Once the user has stated a
@@ -95,19 +119,24 @@ enum WeightHistory {
             filled += 1
         }
 
+        let byId = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let logs = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
         let existing = Set(((try? context.fetch(FetchDescriptor<LogWeights>())) ?? []).map(\.logId))
         for log in logs where !existing.contains(log.id) {
-            context.insert(LogWeights(logId: log.id,
-                                      grams: log.weights.map { unit.grams(from: Double($0)) }))
+            let exercise = byId[log.exerciseId]
+            context.insert(LogWeights(
+                logId: log.id,
+                grams: log.weights.map { converted($0, of: exercise, in: unit) }))
             filled += 1
         }
 
+        let logExercise = Dictionary(logs.map { ($0.id, $0.exerciseId) },
+                                     uniquingKeysWith: { first, _ in first })
         let assisted = (try? context.fetch(FetchDescriptor<AssistedResult>())) ?? []
         for result in assisted where result.bodyWeightGrams == nil {
             result.bodyWeightGrams = unit.grams(from: result.bodyWeight)
             result.machineSettingsGrams = result.machineSettings.map {
-                unit.grams(from: Double($0))
+                converted($0, of: byId[logExercise[result.logId] ?? UUID()], in: unit)
             }
             filled += 1
         }
