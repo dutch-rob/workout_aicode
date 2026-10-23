@@ -136,10 +136,26 @@ final class AppStore: ObservableObject {
             let logs = try context.fetch(descriptor)
             var map: [UUID: WorkoutLog] = [:]
             let targetSet = Set(workout.exerciseOrder)
+            let aerobicLogIds = Set(((try? context.fetch(FetchDescriptor<AerobicResult>())) ?? [])
+                .map(\.logId))
+            let gramsByLog = LogWeightsIndex.byLogId(
+                (try? context.fetch(FetchDescriptor<LogWeights>())) ?? [])
             for log in logs {
-                if targetSet.contains(log.exerciseId) && map[log.exerciseId] == nil {
-                    map[log.exerciseId] = log
+                guard targetSet.contains(log.exerciseId), map[log.exerciseId] == nil else {
+                    if map.count == targetSet.count { break }
+                    continue
                 }
+                // "Last time" means the last time something was actually
+                // logged. A row of nothing — no weight, no repetition, and no
+                // aerobic session either — is not a session to open the wheels
+                // on: it drops the weight wheel to its lowest value and the
+                // repetitions to zero, and the next set logged from there
+                // records those, so one empty row quietly becomes a run of
+                // them. (A real set of 0 × 10 is a bodyweight set and counts;
+                // this is 0 × 0.)
+                guard !isEmptyRow(log, grams: gramsByLog[log.id] ?? [],
+                                  aerobicLogIds: aerobicLogIds) else { continue }
+                map[log.exerciseId] = log
                 if map.count == targetSet.count { break }
             }
             return map
@@ -167,6 +183,19 @@ final class AppStore: ObservableObject {
         } else {
             context.insert(LogWeights(logId: logId, grams: grams))
         }
+    }
+
+    /// A log with nothing in it: no weight, no repetition, no aerobic session.
+    ///
+    /// The weights are the GRAMS beside the log, not the old unit-less field,
+    /// which nothing writes any more — judging emptiness by that field would
+    /// call every new log empty.
+    private func isEmptyRow(_ log: WorkoutLog, grams: [Int],
+                            aerobicLogIds: Set<UUID>) -> Bool {
+        guard !aerobicLogIds.contains(log.id) else { return false }
+        let hasWeight = grams.contains { $0 != 0 }
+        let hasReps = log.reps.contains { $0 != 0 }
+        return !hasWeight && !hasReps
     }
 
     /// What an assisted set was worked out from, for the log that holds it.

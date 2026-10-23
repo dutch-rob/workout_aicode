@@ -663,6 +663,85 @@ struct SchemaMigrationTests {
         #expect(exercise.lowestWeightGrams == first)
     }
 
+    // MARK: An empty row is not "last time"
+    //
+    // The wheels open on the most recent log of an exercise. A row with
+    // nothing in it therefore drops the weight wheel to its lowest value and
+    // the repetitions to zero — and the next set logged from there records
+    // those, so one empty row quietly becomes a run of them. Both metrics go
+    // at once, which is exactly what it looked like from the gym.
+
+    @MainActor @Test func theWheelsIgnoreALogWithNothingInIt() throws {
+        let context = try logEditStore()
+        let store = AppStore(context: context)
+        let press = ExerciseDef(name: "Chest press")
+        context.insert(press)
+        let workout = WorkoutDef(name: "Upper body", exerciseOrder: [press.id])
+        context.insert(workout)
+
+        let real = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                              workoutId: workout.id, exerciseId: press.id,
+                              weights: [], reps: [12, 10])
+        context.insert(real)
+        context.insert(LogWeights(logId: real.id, grams: [50_000, 55_000]))
+        // Logged by accident, or by an app that was briefly broken.
+        context.insert(WorkoutLog(date: Date(timeIntervalSince1970: 2_000_000),
+                                  workoutId: workout.id, exerciseId: press.id,
+                                  weights: [], reps: []))
+        try context.save()
+        store.reloadAll()
+
+        let last = try #require(store.lastEntries(for: workout)[press.id])
+        #expect(store.weightsGrams(forLogId: last.id) == [50_000, 55_000])
+        #expect(last.reps == [12, 10])
+    }
+
+    @MainActor @Test func aBodyweightSetIsNotAnEmptyRow() throws {
+        let context = try logEditStore()
+        let store = AppStore(context: context)
+        let dips = ExerciseDef(name: "Dips")
+        context.insert(dips)
+        let workout = WorkoutDef(name: "Upper body", exerciseOrder: [dips.id])
+        context.insert(workout)
+
+        let earlier = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                                 workoutId: workout.id, exerciseId: dips.id,
+                                 weights: [], reps: [8])
+        context.insert(earlier)
+        context.insert(LogWeights(logId: earlier.id, grams: [20_000]))
+        // No added weight, ten real repetitions. That is a set.
+        let bodyweight = WorkoutLog(date: Date(timeIntervalSince1970: 2_000_000),
+                                    workoutId: workout.id, exerciseId: dips.id,
+                                    weights: [], reps: [12, 10])
+        context.insert(bodyweight)
+        context.insert(LogWeights(logId: bodyweight.id, grams: [0, 0]))
+        try context.save()
+        store.reloadAll()
+
+        let last = try #require(store.lastEntries(for: workout)[dips.id])
+        #expect(last.reps == [12, 10])
+    }
+
+    @MainActor @Test func anAerobicSessionIsNotAnEmptyRowEither() throws {
+        let context = try logEditStore()
+        let store = AppStore(context: context)
+        let bike = ExerciseDef(name: "Exercise bike", kind: .aerobic)
+        context.insert(bike)
+        let workout = WorkoutDef(name: "Cardio", exerciseOrder: [bike.id])
+        context.insert(workout)
+
+        // A ride has no sets at all, and is still the last time it was done.
+        let ride = WorkoutLog(date: Date(timeIntervalSince1970: 2_000_000),
+                              workoutId: workout.id, exerciseId: bike.id,
+                              weights: [], reps: [])
+        context.insert(ride)
+        context.insert(AerobicResult(logId: ride.id, durationSeconds: 1200))
+        try context.save()
+        store.reloadAll()
+
+        #expect(store.lastEntries(for: workout)[bike.id]?.id == ride.id)
+    }
+
     // MARK: Machines that take weight off you
     //
     // An assisted chin-up is logged as the weight LIFTED — body weight less
