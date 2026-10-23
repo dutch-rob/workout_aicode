@@ -148,32 +148,64 @@ enum DemoMode {
     /// variant a committed edit field produced. For walking the recovery path
     /// the way a user meets it, rather than asserting about it in a test.
     ///
-    ///     -SRWLegacySeed        exercises with no grams at all
-    ///     -SRWLegacySeed zeroed exercises whose grams were written as 0
+    ///     -SRWLegacySeed         exercises with no grams at all
+    ///     -SRWLegacySeed zeroed  exercises whose grams were written as 0
+    ///     -SRWPoison             plus a set logged while it was broken:
+    ///                            zero weight, zero reps, newest of its
+    ///                            exercise, which is what every wheel then
+    ///                            opens on
     static func seedLegacyData(into ctx: ModelContext) {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "-SRWLegacySeed") else { return }
         let zeroed = i + 1 < args.count && args[i + 1] == "zeroed"
         guard ((try? ctx.fetchCount(FetchDescriptor<ExerciseDef>())) ?? 0) == 0 else { return }
 
-        let exercise = ExerciseDef(name: "Lat pulldown")
-        exercise.lowestWeight = 20
-        exercise.highestWeight = 120
-        exercise.weightIncrement = 5
-        if zeroed {
-            exercise.lowestWeightGrams = 0
-            exercise.highestWeightGrams = 0
-            exercise.weightIncrementGrams = 0
+        // A history the shape of a real one: several exercises, a dozen
+        // sessions each, weights and repetitions that move. Everything in the
+        // ORIGINAL unit-less fields, which is what a store looks like before
+        // any of this existed.
+        let rows: [(String, Int, Int, Int, [Int], [Int])] = [
+            ("Lat pulldown",   3, 20, 120, [50, 55, 55], [12, 10, 8]),
+            ("Chest press",    3, 20, 120, [40, 45, 45], [12, 10, 9]),
+            ("Seated row",     2, 20, 120, [45, 50],     [12, 9]),
+            ("Assisted chin-up", 2, 0, 80, [30, 35],     [8, 6]),
+        ]
+        var ids: [UUID] = []
+        for (name, sets, low, high, weights, reps) in rows {
+            let exercise = ExerciseDef(name: name, numberOfSeries: sets)
+            exercise.lowestWeight = low
+            exercise.highestWeight = high
+            exercise.weightIncrement = 5
+            exercise.subtractsFromBodyWeight = name.hasPrefix("Assisted")
+            if zeroed {
+                // What a committed edit field wrote: present, and useless.
+                exercise.lowestWeightGrams = 0
+                exercise.highestWeightGrams = 0
+                exercise.weightIncrementGrams = 0
+            }
+            ctx.insert(exercise)
+            ids.append(exercise.id)
+
+            for session in 0..<12 {
+                let date = Date().addingTimeInterval(-Double(session + 1) * 7 * 86_400)
+                let drop = session * 5
+                ctx.insert(WorkoutLog(date: date, workoutId: UUID(),
+                                      exerciseId: exercise.id,
+                                      weights: weights.map { max(low, $0 - drop) },
+                                      reps: reps))
+            }
         }
-        ctx.insert(exercise)
 
-        let workout = WorkoutDef(name: "Upper body", exerciseOrder: [exercise.id])
+        if args.contains("-SRWPoison"), let first = ids.first {
+            ctx.insert(WorkoutLog(date: Date(), workoutId: UUID(),
+                                  exerciseId: first, weights: [], reps: []))
+        }
+
+        let workout = WorkoutDef(name: "Upper body", exerciseOrder: ids)
         ctx.insert(workout)
-
-        let log = WorkoutLog(date: Date().addingTimeInterval(-86_400),
-                             workoutId: workout.id, exerciseId: exercise.id,
-                             weights: [50, 55], reps: [12, 10])
-        ctx.insert(log)
+        // The logs belong to it.
+        let logs = (try? ctx.fetch(FetchDescriptor<WorkoutLog>())) ?? []
+        for log in logs { log.workoutId = workout.id }
         try? ctx.save()
     }
 
