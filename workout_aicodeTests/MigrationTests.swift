@@ -742,6 +742,51 @@ struct SchemaMigrationTests {
         #expect(store.lastEntries(for: workout)[bike.id]?.id == ride.id)
     }
 
+    // MARK: Moving a gym, or moving a unit
+    //
+    // What is remembered is the WEIGHT, never a position on a wheel. So when
+    // an exercise's range is re-typed in the other unit, the wheel opens on
+    // the nearest weight it can offer to what was actually lifted — not on
+    // the same tick number, which would mean a different weight entirely.
+
+    @MainActor @Test func reTypingTheRangeInKilogramsKeepsTheWeightNotTheTick() throws {
+        let context = try logEditStore()
+        let store = AppStore(context: context)
+        let chinUp = ExerciseDef(name: "Assisted chin up")
+        chinUp.lowestWeight = 0
+        chinUp.highestWeight = 200
+        chinUp.weightIncrement = 5
+        context.insert(chinUp)
+        let workout = WorkoutDef(name: "Upper body", exerciseOrder: [chinUp.id])
+        context.insert(workout)
+        let log = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: workout.id, exerciseId: chinUp.id,
+                             weights: [130], reps: [10])
+        context.insert(log)
+        try context.save()
+
+        WeightHistory.adopt(.pounds, in: context)
+        let lifted = store.weightsGrams(forLogId: log.id).first ?? 0
+        // 130 lb was the 26th step of a 5 lb wheel.
+        #expect(WeightUnit.pounds.display(grams: lifted) == 130)
+        #expect(lifted == 26 * WeightUnit.pounds.grams(from: 5))
+
+        // The gym changes. The user re-types the range in kilograms.
+        chinUp.setWeightRange(lowest: 0, highest: 90, increment: 2.5, unit: .kilograms)
+        try context.save()
+
+        // 130 lb is 58.97 kg. The nearest the new wheel can offer is 60 —
+        // the WEIGHT is carried across, not the tick (the 26th tick of the
+        // new wheel would be 65 kg, half as heavy again).
+        let opensOn = WeightWheel.snap(lifted, for: chinUp)
+        #expect(WeightUnit.kilograms.display(grams: opensOn) == 60)
+        #expect(WeightUnit.kilograms.display(grams: 26 * 2500) == 65)
+
+        // And the log itself is untouched by any of it.
+        #expect(store.weightsGrams(forLogId: log.id) == [lifted])
+        #expect(WeightUnit.kilograms.display(grams: lifted) == 59)
+    }
+
     // MARK: Machines that take weight off you
     //
     // An assisted chin-up is logged as the weight LIFTED — body weight less
