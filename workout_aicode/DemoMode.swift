@@ -210,6 +210,26 @@ enum DemoMode {
         try? ctx.save()
     }
 
+    /// DEBUG only: loads an export from the app's own Documents folder into
+    /// the REAL store, so a real history can be walked through the app as a
+    /// user meets it. Put the file there with `simctl get_app_container`.
+    ///
+    ///     -SRWImportFile        reads Documents/import.json
+    static func importFileIfAsked(into ctx: ModelContext) {
+        guard CommandLine.arguments.contains("-SRWImportFile"),
+              ((try? ctx.fetchCount(FetchDescriptor<ExerciseDef>())) ?? 0) == 0,
+              let folder = FileManager.default.urls(for: .documentDirectory,
+                                                    in: .userDomainMask).first,
+              let data = try? Data(contentsOf: folder.appendingPathComponent("import.json")),
+              let envelope = try? JSONDecoder().decode(ExportEnvelope.self, from: data)
+        else { return }
+        for exercise in envelope.data.exercises { ctx.insert(exercise) }
+        for workout in envelope.data.workouts { ctx.insert(workout) }
+        for log in envelope.data.logs { ctx.insert(log) }
+        for result in envelope.data.aerobicResults ?? [] { ctx.insert(result) }
+        try? ctx.save()
+    }
+
     /// DEBUG only: an exercise with no history at all, first in the workout,
     /// so the log screen opens on wheels that have never been touched. That is
     /// the state that wrote a row of nothing into a real log.

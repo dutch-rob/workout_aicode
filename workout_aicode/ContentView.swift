@@ -233,6 +233,7 @@ struct ContentView: View {
             // they are never asked; their unit follows their region.
             #if DEBUG
             DemoMode.seedLegacyData(into: modelContext)
+            DemoMode.importFileIfAsked(into: modelContext)
             #endif
             refreshWeightUnitState()
             survey.noteLaunch(earliestLogDate: allLogs.first?.date)
