@@ -11,13 +11,20 @@ import Foundation
 
     /// A fixed calendar, so a machine in another time zone gets the same
     /// answers as this one.
-    private var calendar: Calendar {
+    private var calendar: Calendar { calendar(in: "Europe/Amsterdam") }
+
+    private func calendar(in zone: String) -> Calendar {
         var c = Calendar(identifier: .gregorian)
-        c.timeZone = TimeZone(identifier: "Europe/Amsterdam")!
+        c.timeZone = TimeZone(identifier: zone)!
         return c
     }
 
     private func date(_ y: Int, _ m: Int, _ d: Int,
+                      _ hh: Int, _ mm: Int, _ ss: Int = 0) -> Date {
+        date(in: calendar, y, m, d, hh, mm, ss)
+    }
+
+    private func date(in calendar: Calendar, _ y: Int, _ m: Int, _ d: Int,
                       _ hh: Int, _ mm: Int, _ ss: Int = 0) -> Date {
         calendar.date(from: DateComponents(year: y, month: m, day: d,
                                            hour: hh, minute: mm, second: ss))!
@@ -83,6 +90,32 @@ import Foundation
                                              daysAhead: 2, calendar: calendar)
         #expect(next == date(2026, 10, 26, 18, 0))
         #expect(next.timeIntervalSince(date(2026, 10, 24, 18, 0)) == 49 * 3600)
+    }
+
+    @Test func theClockOnTheWallWinsInCaliforniaToo() {
+        // The two hemispheres of users change their clocks on different days,
+        // so both transitions are held, not just whichever one the author
+        // happened to think of. The United States puts its clocks back on
+        // 1 November 2026: a workout on 31 October at 18:00, two days ahead,
+        // is 18:00 on 2 November — 49 real hours later.
+        let pacific = calendar(in: "America/Los_Angeles")
+        let start = date(in: pacific, 2026, 10, 31, 18, 0)
+        let next = WorkoutSchedule.nextStart(after: start, daysAhead: 2,
+                                             calendar: pacific)
+        #expect(next == date(in: pacific, 2026, 11, 2, 18, 0))
+        #expect(next.timeIntervalSince(start) == 49 * 3600)
+    }
+
+    @Test func aWorkoutOnTheMorningTheClocksGoForwardKeepsItsTime() {
+        // And the other direction: 8 March 2026 in California loses an hour.
+        // A workout on the 7th at 09:00, two days ahead, is 09:00 on the 9th
+        // — 47 hours.
+        let pacific = calendar(in: "America/Los_Angeles")
+        let start = date(in: pacific, 2026, 3, 7, 9, 0)
+        let next = WorkoutSchedule.nextStart(after: start, daysAhead: 2,
+                                             calendar: pacific)
+        #expect(next == date(in: pacific, 2026, 3, 9, 9, 0))
+        #expect(next.timeIntervalSince(start) == 47 * 3600)
     }
 
     @Test func severalAheadAreEvenlySpaced() {
