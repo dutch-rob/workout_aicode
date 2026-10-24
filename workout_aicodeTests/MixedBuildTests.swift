@@ -418,6 +418,116 @@ struct MixedBuildTests {
         }
     }
 
+    // MARK: Weights zeroed by a version that has since been rolled back
+    //
+    // Reported from a real device, and the shape of the report is the whole
+    // diagnosis: logs from 17 October onwards were right and everything older
+    // read zero. The units work ran on that phone, wrote zeros, and was rolled
+    // back — but rolling back the CODE does not roll back iCloud. The zeroed
+    // LogWeights rows stayed in the account and synced down again, and
+    // anything logged AFTER the rollback never had one, which is exactly where
+    // the date splits.
+    //
+    // Both `pendingCount` and `adopt` asked whether a row EXISTED. A row full
+    // of zeros exists, so it was skipped, every time, for ever. The same
+    // mistake was made and fixed once already for the exercise range, whose
+    // comment says it plainly: zero matters as much as nil.
+
+    @MainActor @Test func weightsZeroedByAnEarlierVersionAreRepaired() throws {
+        try withNoHistoryUnit {
+            let (store, context, press) = try store(unit: .pounds)
+            let log = WorkoutLog(workoutId: UUID(), exerciseId: press.id,
+                                 weights: [100, 100], reps: [10, 8])
+            context.insert(log)
+            // What that version left behind: a row that is there and says
+            // nothing.
+            context.insert(LogWeights(logId: log.id, grams: [0, 0]))
+            try context.save()
+            store.reloadAll()
+
+            #expect(WeightHistory.pendingCount(in: context) > 0,
+                    "a zeroed row is unfinished business, not finished")
+            #expect(WeightHistory.shouldAsk(in: context))
+
+            WeightHistory.adopt(.pounds, in: context)
+
+            let grams = store.weightsGrams(forLogId: log.id)
+            #expect(grams.map { WeightUnit.pounds.display(grams: $0) } == [100, 100])
+        }
+    }
+
+    @MainActor @Test func aSetGenuinelyLoggedAtNothingIsLeftAlone() throws {
+        try withNoHistoryUnit {
+            let (store, context, press) = try store(unit: .pounds)
+            // Zero in the old field too: there is nothing to recover here, and
+            // rewriting it would invent a weight the user never lifted.
+            let log = WorkoutLog(workoutId: UUID(), exerciseId: press.id,
+                                 weights: [0, 0], reps: [12, 12])
+            context.insert(log)
+            context.insert(LogWeights(logId: log.id, grams: [0, 0]))
+            try context.save()
+            store.reloadAll()
+
+            WeightHistory.adopt(.pounds, in: context)
+            #expect(store.weightsGrams(forLogId: log.id) == [0, 0])
+        }
+    }
+
+    @MainActor @Test func aRepairedRowIsNotConvertedTwice() throws {
+        try withNoHistoryUnit {
+            let (store, context, press) = try store(unit: .pounds)
+            let log = WorkoutLog(workoutId: UUID(), exerciseId: press.id,
+                                 weights: [100], reps: [10])
+            context.insert(log)
+            context.insert(LogWeights(logId: log.id, grams: [0]))
+            try context.save()
+            store.reloadAll()
+
+            WeightHistory.adopt(.pounds, in: context)
+            let once = store.weightsGrams(forLogId: log.id)
+            // `catchUp` runs on every launch, every foreground and every time
+            // a record arrives. It must be able to run a hundred times.
+            WeightHistory.catchUp(in: context)
+            WeightHistory.catchUp(in: context)
+            #expect(store.weightsGrams(forLogId: log.id) == once)
+            #expect(WeightUnit.pounds.display(grams: once[0]) == 100)
+        }
+    }
+
+    @MainActor @Test func anAssistedRecordZeroedTheSameWayIsRepaired() throws {
+        try withNoHistoryUnit {
+            let (store, context, press) = try store(unit: .pounds)
+            let log = WorkoutLog(workoutId: UUID(), exerciseId: press.id,
+                                 weights: [100], reps: [10])
+            context.insert(log)
+            context.insert(LogWeights(logId: log.id, grams: [0]))
+            context.insert(AssistedResult(logId: log.id,
+                                          bodyWeight: 214, machineSettings: [130],
+                                          bodyWeightGrams: 0, machineSettingsGrams: [0]))
+            try context.save()
+            store.reloadAll()
+
+            WeightHistory.adopt(.pounds, in: context)
+
+            let assisted = try #require(store.assistedResult(forLogId: log.id))
+            #expect(assisted.bodyWeightGrams == WeightUnit.pounds.grams(from: 214))
+            #expect(assisted.machineSettingsGrams?
+                        .map { WeightUnit.pounds.display(grams: $0) } == [130])
+        }
+    }
+
+    /// With no answer recorded yet, as a phone meeting this version has.
+    @MainActor private func withNoHistoryUnit(_ body: () throws -> Void) rethrows {
+        let d = UserDefaults.standard
+        let saved = d.string(forKey: WeightHistory.statedUnitKey)
+        d.removeObject(forKey: WeightHistory.statedUnitKey)
+        defer {
+            if let saved { d.set(saved, forKey: WeightHistory.statedUnitKey) }
+            else { d.removeObject(forKey: WeightHistory.statedUnitKey) }
+        }
+        try body()
+    }
+
     // MARK: What the Mac app, and a rolled-back phone, can still read
 
     @MainActor @Test func aNewLogAlsoWritesTheNumberAnOlderBuildReads() throws {

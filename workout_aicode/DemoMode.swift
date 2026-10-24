@@ -226,6 +226,24 @@ enum DemoMode {
         for exercise in envelope.data.exercises { ctx.insert(exercise) }
         for workout in envelope.data.workouts { ctx.insert(workout) }
         for log in envelope.data.logs { ctx.insert(log) }
+        // `-SRWPoisonOld <yyyy-mm-dd>` reproduces the real incident: a zeroed
+        // LogWeights row for every log BEFORE that date, as a rolled-back
+        // version left behind in iCloud.
+        let poisonBefore: Date? = {
+            let args = CommandLine.arguments
+            guard let i = args.firstIndex(of: "-SRWPoisonOld"), i + 1 < args.count else {
+                return nil
+            }
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd"
+            return f.date(from: args[i + 1])
+        }()
+        if let poisonBefore {
+            for log in envelope.data.logs where log.date < poisonBefore {
+                ctx.insert(LogWeights(logId: log.id,
+                                      grams: Array(repeating: 0, count: log.weights.count)))
+            }
+        }
         for result in envelope.data.aerobicResults ?? [] { ctx.insert(result) }
         for result in envelope.data.assistedResults ?? [] { ctx.insert(result) }
         for weights in envelope.data.logWeights ?? [] { ctx.insert(weights) }

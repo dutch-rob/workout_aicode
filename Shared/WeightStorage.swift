@@ -58,11 +58,50 @@ enum WeightHistory {
         var pending = exercises.filter { $0.weightRangeGrams == nil }.count
 
         let logs = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
-        let haveWeights = Set(((try? context.fetch(FetchDescriptor<LogWeights>())) ?? [])
-            .map(\.logId))
-        // A log with no weights at all is an aerobic one, which never had any.
-        pending += logs.filter { !$0.weights.isEmpty && !haveWeights.contains($0.id) }.count
+        let gramsByLog = LogWeightsIndex.byLogId(
+            (try? context.fetch(FetchDescriptor<LogWeights>())) ?? [])
+        pending += logs.filter { needsConverting($0, grams: gramsByLog[$0.id]) }.count
+
+        let assisted = (try? context.fetch(FetchDescriptor<AssistedResult>())) ?? []
+        pending += assisted.filter { needsConverting($0) }.count
         return pending
+    }
+
+    /// Whether a log still has to be given a unit.
+    ///
+    /// Two cases, and the second is the one that was missed. Either there are
+    /// no grams beside it at all — the ordinary case, a log from before any of
+    /// this existed — or there IS a row and it says nothing, while the old
+    /// field beside it says a weight was lifted.
+    ///
+    /// That second case came from a real phone. The units work ran on it,
+    /// wrote zeros, and was rolled back; rolling back the code does not roll
+    /// back iCloud, so the zeroed rows stayed in the account and synced down
+    /// again afterwards. Everything logged after the rollback had no such row
+    /// and converted correctly, which is why the user saw one date onwards
+    /// come out right and everything older read zero.
+    ///
+    /// Asking whether the row EXISTS is therefore not the question. It is the
+    /// same mistake `weightRangeGrams` was fixed for, and its comment says it
+    /// in one line: zero matters as much as nil.
+    private static func needsConverting(_ log: WorkoutLog, grams: [Int]?) -> Bool {
+        // A log with no weights at all is an aerobic one, which never had any.
+        guard let grams else { return !log.weights.isEmpty }
+        guard grams.allSatisfy({ $0 == 0 }) else { return false }
+        // Only where there is something to recover. A set genuinely logged at
+        // nothing is zero in both fields, and rewriting it would invent a
+        // weight the user never lifted.
+        return log.weights.contains { $0 != 0 }
+    }
+
+    /// The same question for an assisted set's body weight and machine
+    /// setting, which were zeroed by the same versions.
+    private static func needsConverting(_ result: AssistedResult) -> Bool {
+        guard let bodyWeightGrams = result.bodyWeightGrams else { return true }
+        if bodyWeightGrams == 0, result.bodyWeight > 0 { return true }
+        let settings = result.machineSettingsGrams ?? []
+        return settings.allSatisfy { $0 == 0 }
+            && result.machineSettings.contains { $0 != 0 }
     }
 
     /// One old weight, in grams.
@@ -138,8 +177,10 @@ enum WeightHistory {
     /// The user has said which unit their history was in. Fill in the grams
     /// everywhere, and remember the unit as their preference.
     ///
-    /// Idempotent: anything already carrying grams is left alone, so running
-    /// twice cannot double-convert. The old fields are not touched.
+    /// Idempotent: anything already carrying a real weight is left alone, so
+    /// running twice cannot double-convert — and `catchUp` runs on every
+    /// launch, every foreground and every record that arrives, so it has to
+    /// survive running a hundred times. The old fields are not touched.
     @discardableResult
     static func adopt(_ unit: WeightUnit, in context: ModelContext) -> Int {
         var filled = 0
@@ -156,19 +197,28 @@ enum WeightHistory {
 
         let byId = Dictionary(exercises.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let logs = (try? context.fetch(FetchDescriptor<WorkoutLog>())) ?? []
-        let existing = Set(((try? context.fetch(FetchDescriptor<LogWeights>())) ?? []).map(\.logId))
-        for log in logs where !existing.contains(log.id) {
+        let rows = Dictionary(
+            ((try? context.fetch(FetchDescriptor<LogWeights>())) ?? [])
+                .filter { !$0.isDeleted }
+                .map { ($0.logId, $0) },
+            uniquingKeysWith: { first, _ in first })
+        for log in logs {
+            let row = rows[log.id]
+            guard needsConverting(log, grams: row?.grams) else { continue }
             let exercise = byId[log.exerciseId]
-            context.insert(LogWeights(
-                logId: log.id,
-                grams: log.weights.map { grams(fromLegacy: $0, of: exercise, in: unit) }))
+            let converted = log.weights.map { grams(fromLegacy: $0, of: exercise, in: unit) }
+            // Overwritten where a zeroed row is already sitting there, rather
+            // than inserted beside it: two rows for one log would be worse
+            // than the zero.
+            if let row { row.grams = converted }
+            else { context.insert(LogWeights(logId: log.id, grams: converted)) }
             filled += 1
         }
 
         let logExercise = Dictionary(logs.map { ($0.id, $0.exerciseId) },
                                      uniquingKeysWith: { first, _ in first })
         let assisted = (try? context.fetch(FetchDescriptor<AssistedResult>())) ?? []
-        for result in assisted where result.bodyWeightGrams == nil {
+        for result in assisted where needsConverting(result) {
             result.bodyWeightGrams = unit.grams(from: result.bodyWeight)
             result.machineSettingsGrams = result.machineSettings.map {
                 grams(fromLegacy: $0, of: byId[logExercise[result.logId] ?? UUID()], in: unit)
