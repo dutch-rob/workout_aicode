@@ -179,6 +179,16 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
         startedAt = nil
         stopTicking()
         lastSummary = summary
+        // WHOSE session this was. Without it one finished session counted for
+        // every aerobic exercise in the workout: the second one came up with
+        // no start button at all, because the app believed it had already been
+        // run, and logging it would have recorded the FIRST one's duration and
+        // heart rate under the second one's name.
+        //
+        // Keyed by name because that is the only identity both ways in carry:
+        // a session started from the phone arrives as a name, and so does one
+        // started here.
+        lastSummaryExercise = exerciseName
         // The weights carry on from here, in a session of their own.
         await WatchStrengthWorkout.shared.resumeAfterAerobic()
         return summary
@@ -197,9 +207,11 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     }
 
     /// What the last finished session measured, for the log message that
-    /// follows it. Taken once and cleared, so a second exercise logged without
-    /// running one cannot inherit the first one's numbers.
+    /// follows it, and which exercise it belongs to. Taken once and cleared,
+    /// so a second exercise logged without running one cannot inherit the
+    /// first one's numbers.
     private var lastSummary: Summary?
+    private var lastSummaryExercise = ""
 
     #if DEBUG
     /// Screenshot/demo only: the heart rate screen with a rate in it, so the
@@ -218,11 +230,30 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     }
     #endif
 
-    /// True once a session has finished and not yet been logged.
-    var hasFinishedSession: Bool { lastSummary != nil }
+    /// True once a session has finished for THIS exercise and not yet been
+    /// logged — so its button offers to log it, while every other aerobic
+    /// exercise in the workout still offers to start one.
+    func hasFinishedSession(for exercise: String) -> Bool {
+        lastSummary != nil && lastSummaryExercise == exercise
+    }
 
-    func takeLastSummary() -> Summary? {
-        defer { lastSummary = nil }
+    /// What the finished session measured, if it was this exercise's. Cleared
+    /// only when it is taken, so logging something else leaves it waiting.
+    #if DEBUG
+    /// Puts a finished session in place without running one, so the rule about
+    /// which exercise it belongs to can be tested without a wrist.
+    func rememberForTesting(_ summary: Summary, exercise: String) {
+        lastSummary = summary
+        lastSummaryExercise = exercise
+    }
+    #endif
+
+    func takeLastSummary(for exercise: String) -> Summary? {
+        guard lastSummary != nil, lastSummaryExercise == exercise else { return nil }
+        defer {
+            lastSummary = nil
+            lastSummaryExercise = ""
+        }
         return lastSummary
     }
 

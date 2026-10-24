@@ -74,6 +74,9 @@ struct WatchLogExerciseView: View {
             .onChange(of: session.adoptSnapshot) { _, _ in
                 if let snap = session.takeAdoptSnapshot(for: workout.id) { adopt(snap) }
             }
+            // The phone's switch, flipped while this workout is already under
+            // way — see watchModeChanged.
+            .onChange(of: session.workoutMode) { _, mode in watchModeChanged(to: mode) }
             // Swipe left/right to move between exercises without logging, as on
             // the phone. Simultaneous so the wheels keep their own scrolling.
             .simultaneousGesture(exerciseSwipeGesture)
@@ -156,6 +159,7 @@ struct WatchLogExerciseView: View {
                 wheelRow(for: exercise, metric: .weights)
                 wheelRow(for: exercise, metric: .reps)
             }
+            .overlay(alignment: .topTrailing) { WatchRestOverlay() }
         } else {
             VStack(spacing: 2) {
                 exerciseTitle(exercise, showRest: true)
@@ -177,7 +181,9 @@ struct WatchLogExerciseView: View {
                 .font(.caption).bold()
                 .lineLimit(1)
                 .truncationMode(.tail)
-            WatchRestCounter()
+            // The rest's seconds are NOT here: this row shares its width with
+            // the clock, and the counter sat on top of the exercise name.
+            // They are over the wheels instead — see WatchRestOverlay.
             Spacer(minLength: 0)
         }
         .frame(width: toggleWidth, alignment: .leading)
@@ -216,8 +222,15 @@ struct WatchLogExerciseView: View {
 
     /// Whether an aerobic session has already been run for this exercise, so
     /// the button can stop offering to start another and offer to log instead.
+    ///
+    /// For THIS exercise. It used to ignore the index it was given and ask
+    /// whether any session at all had finished, which left the second cardio
+    /// exercise of a workout with no start button — reported from a real
+    /// workout that began with the elliptical and could not then start the
+    /// indoor cycle.
     private func hasRun(_ index: Int) -> Bool {
-        WatchAerobicWorkout.shared.hasFinishedSession
+        guard let name = exerciseAt(index)?.name else { return false }
+        return WatchAerobicWorkout.shared.hasFinishedSession(for: name)
     }
 
     private func durationSeconds(at index: Int) -> Int {
@@ -484,6 +497,20 @@ struct WatchLogExerciseView: View {
         Task { await WatchStrengthWorkout.shared.start(workoutStartedAt: start) }
     }
 
+    /// The setting is on the phone, and it can be changed while the workout is
+    /// already running — which is exactly what one user did, mid-workout,
+    /// then found no heart-rate zones behind the exercise names. The other
+    /// settings in the same payload (two rows of wheels) had plainly arrived,
+    /// so the answer "it will be right next time" was not good enough.
+    ///
+    /// The session is back-dated to the start of the workout either way, so
+    /// switching it on part-way records the whole thing — minus the heart rate
+    /// for the stretch before the wrist was asked, which nothing can recover.
+    private func watchModeChanged(to mode: WatchWorkoutMode) {
+        guard mode == .appleWorkout else { return }
+        startAppleWorkoutIfChosen()
+    }
+
     // MARK: - Picker row (reps OR weights)
 
     private func pickerRow(for exercise: SyncExercise,
@@ -638,7 +665,12 @@ struct WatchLogExerciseView: View {
     private func logAndNext(_ exercise: SyncExercise) {
         // An aerobic exercise reports what the session measured instead of
         // sets; a strength one sends zero duration and nothing to go with it.
-        let measured = WatchAerobicWorkout.shared.takeLastSummary()
+        // Only this exercise's own session, and only for an aerobic one —
+        // taking it unconditionally threw away a finished session whenever a
+        // strength exercise happened to be logged first.
+        let measured = exercise.isAerobic
+            ? WatchAerobicWorkout.shared.takeLastSummary(for: exercise.name)
+            : nil
         session.logSet(workoutId: workout.id,
                        exerciseId: exercise.id,
                        weights: weights[safe: currentIndex] ?? [],

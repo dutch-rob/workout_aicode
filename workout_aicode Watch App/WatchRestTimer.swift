@@ -229,9 +229,7 @@ enum WatchRestHaptics {
         let device = WKInterfaceDevice.current()
         let count = WatchPreferences.clampTaps(taps)
         for index in 0..<count {
-            // Far enough apart to be felt as separate taps rather than one
-            // long buzz, close enough to read as one announcement.
-            let delay = Double(index) * 0.6
+            let delay = Double(index) * spacing
             if delay == 0 {
                 device.play(.notification)
             } else {
@@ -241,6 +239,21 @@ enum WatchRestHaptics {
             }
         }
     }
+
+    /// Seconds between taps.
+    ///
+    /// `.notification` is not an instant — it is a PATTERN about a second
+    /// long. Asking for the next one while it is still playing does not
+    /// queue it: watchOS drops it. At the 0.6 s this used, five taps were
+    /// played and about three were felt, with a gap in the middle where two
+    /// landed on top of each other — reported from a real workout, in those
+    /// words.
+    ///
+    /// So the spacing has to outlast the pattern rather than merely separate
+    /// it. Five taps is then a long announcement, which is the point of
+    /// choosing five: whoever sets it is under a bar and means to be
+    /// interrupted.
+    private static let spacing = 1.1
 }
 
 // MARK: - The rest on screen
@@ -285,6 +298,11 @@ struct WatchRestDrain: ViewModifier {
 struct WatchRestCounter: View {
     @ObservedObject private var timer = WatchRestTimer.shared
 
+    /// Without the ✕, for where there is no room for it — see
+    /// `WatchRestOverlay`. Tapping the number still ends the rest, which is
+    /// what the seconds beside "log exercise" do on the phone.
+    var compact = false
+
     var body: some View {
         if timer.isRunning {
             Button {
@@ -292,13 +310,39 @@ struct WatchRestCounter: View {
             } label: {
                 HStack(spacing: 2) {
                     Text(timer.label).monospacedDigit()
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                    if !compact {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .font(.caption2.weight(.semibold))
             }
             .buttonStyle(.plain)
             .fixedSize()
+        }
+    }
+}
+
+/// The rest's seconds laid over the wheels rather than beside the name.
+///
+/// With two rows of wheels the name is up on the clock's row, where there is
+/// no width to spare: the counter and its ✕ sat on top of the exercise title.
+/// Reported from a real workout, with the right answer attached — put the
+/// number over the wheels, and leave the wheels working.
+///
+/// So it is the number alone, in the top corner, away from the middle of a
+/// wheel where a tap means "that set is done". Everything around it passes
+/// touches straight through: `allowsHitTesting(false)` on the padding means
+/// only the few points actually under the digits belong to the counter.
+struct WatchRestOverlay: View {
+    @ObservedObject private var timer = WatchRestTimer.shared
+
+    var body: some View {
+        if timer.isRunning {
+            WatchRestCounter(compact: true)
+                .padding(.horizontal, 4)
+                .background(.black.opacity(0.55), in: Capsule())
+                .padding(.trailing, 2)
         }
     }
 }

@@ -8,13 +8,19 @@ import Foundation
 //
 // THIS IS A STAND-IN, and the seam is the point of it.
 //
-// From OS 27 HealthKit hands over the real thing:
-// `HKHealthStore.preferredWorkoutZoneConfiguration(for:)` returns the very
-// configuration the Apple Workout app is using — automatic or custom,
-// whichever is active in Settings — and `HKWorkoutZoneGroup` carries the
-// time-in-zone for a finished workout, so none of the arithmetic below is
-// needed there. That SDK is beta and not installed, so this computes zones the
-// way Apple documents its automatic ones, from heart rate reserve.
+// It was expected that OS 27 would hand over the real thing. It did not.
+// Checked against the installed watchOS 27.0 SDK: the only zone API there is
+// `HKLiveWorkoutBuilderDelegate.workoutBuilder(_:didUpdateWorkoutZone:)`,
+// and the `HKLiveWorkoutZoneUpdate` it passes carries one property — the
+// timestamp of the last processed sample. It says that A zone changed. It does
+// not say which zone, where the boundaries are, or what the user configured.
+// There is no `preferredWorkoutZoneConfiguration` anywhere in the SDK.
+//
+// So this still computes zones the way Apple documents its automatic ones,
+// from heart rate reserve, and they will NOT agree with the Workout app for
+// anyone whose zones were measured from their own history or set by hand.
+// A user who wants them to agree has to be able to type their own boundaries;
+// nothing else can close the gap.
 //
 // Expect the numbers to be close but not identical to what the Watch shows:
 // Apple uses a *measured* maximum from your history, which no API exposes, and

@@ -784,6 +784,11 @@ struct LogExerciseView: View {
                 maximumHeartRate: aerobic.maximumHeartRate,
                 zoneSeconds: aerobic.zoneSeconds)
             aerobic.finishedSeconds = nil
+            // A cardio session IS the workout happening, so it counts as
+            // activity: a workout of nothing but cardio was otherwise treated
+            // as a screen somebody opened and closed, and got no offer to
+            // schedule the next one.
+            handoff.noteActivity()
         }
     }
 

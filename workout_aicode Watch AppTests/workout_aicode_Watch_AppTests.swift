@@ -6,7 +6,7 @@
 //
 
 import Testing
-@testable import workout_aicode_Watch_App_Watch_App
+@testable import workout_aicode_Watch_App_
 
 struct workout_aicode_Watch_App_Watch_AppTests {
 

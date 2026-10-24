@@ -269,7 +269,8 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     /// The workout ended on THIS (phone) device — either by finishing every
     /// exercise or by quitting early. Both count as a workout, so both are saved
     /// (as long as at least one set was actually logged).
-    func finishWorkoutHere(startedAt: Date, endedAt: Date, workoutId: UUID? = nil) {
+    func finishWorkoutHere(startedAt: Date, endedAt: Date, workoutId: UUID? = nil,
+                           writeToHealth: Bool = true) {
         let hadActivity = openWorkout.map { $0.lastActivityAt > $0.startedAt } ?? false
         openWorkout = nil
         // Said "done" or "quit": this is the one ending that means it. Anything
@@ -285,7 +286,7 @@ final class PhoneSessionManager: NSObject, ObservableObject {
                                            startedAt: startedAt, endedAt: endedAt)
         }
 
-        guard healthEnabled, hadActivity, endedAt > startedAt else { return }
+        guard writeToHealth, healthEnabled, hadActivity, endedAt > startedAt else { return }
         // Deferred on purpose: HealthKit may put its permission sheet on screen,
         // and must never block the log screen from closing first.
         DispatchQueue.main.async {
@@ -808,10 +809,15 @@ extension PhoneSessionManager: WCSessionDelegate {
             let started = (message["startedAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
             let ended = (message["endedAt"] as? Double).map { Date(timeIntervalSince1970: $0) } ?? Date()
             let finishedId = (message["workoutId"] as? String).flatMap(UUID.init(uuidString:))
+            // The Watch wrote the HKWorkout itself in Apple-workout mode, so
+            // this device must not write a second one — but everything else
+            // about finishing still applies.
+            let recordedOnWatch = message["recordedOnWatch"] as? Bool ?? false
             DispatchQueue.main.async {
                 if let started {
                     self.finishWorkoutHere(startedAt: started, endedAt: ended,
-                                           workoutId: finishedId)
+                                           workoutId: finishedId,
+                                           writeToHealth: !recordedOnWatch)
                 } else { self.openWorkout = nil }
             }
         default:
