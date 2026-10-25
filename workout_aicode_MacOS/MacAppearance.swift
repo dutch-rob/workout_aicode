@@ -82,3 +82,50 @@ extension View {
         background(RemembersItsFrame(name: name))
     }
 }
+
+#if DEBUG
+// MARK: - Sizing itself for a screenshot
+
+/// Puts the window at a known place and size for a capture run.
+///
+/// So that taking screenshots needs ONE permission instead of two. Driving the
+/// window from a script means System Events, which means Accessibility, which
+/// is a second grant to a second app and a second trip through System
+/// Settings — for the sole purpose of setting a rectangle the app can set
+/// itself.
+///
+/// The autosave name is deliberately NOT set here: a screenshot run must not
+/// overwrite the window size the user actually chose.
+struct ScreenshotFrame: NSViewRepresentable {
+    let origin: CGPoint
+    let size: CGSize
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.setFrame(NSRect(origin: origin, size: size), display: true)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+enum ScreenshotMode {
+    /// `-SRWShot <width>x<height>` — and the capture region the script uses
+    /// is this origin and size, which is why both are fixed here.
+    static let origin = CGPoint(x: 60, y: 60)
+
+    static var size: CGSize? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "-SRWShot"), i + 1 < args.count else { return nil }
+        let parts = args[i + 1].lowercased().split(separator: "x")
+        guard parts.count == 2, let w = Double(parts[0]), let h = Double(parts[1]),
+              w > 200, h > 200 else { return nil }
+        return CGSize(width: w, height: h)
+    }
+}
+#endif

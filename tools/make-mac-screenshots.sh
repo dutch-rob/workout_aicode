@@ -9,13 +9,17 @@
 # reason is macOS privacy rather than anything about the app:
 #
 #   • `screencapture` needs Screen Recording permission for whatever runs it
-#     (Terminal, or the app driving it). macOS asks once, then you must run it
-#     again — the permission does not apply to the process already running.
-#   • Positioning the window uses System Events, which needs Accessibility.
+#     (Terminal, or the app driving it). macOS asks once, then you must QUIT
+#     AND REOPEN that app — the permission does not apply to a process that is
+#     already running, so the toggle looks on while capture still fails.
 #
-# Both are one-time grants in System Settings → Privacy & Security. The script
-# says which one is missing rather than producing black images, which is what
-# screencapture does when it is not allowed to see anything.
+# That is the only grant needed. The window is positioned and sized by the app
+# itself when launched with -SRWShot, rather than by System Events from here,
+# which would have meant Accessibility as well: a second permission, for a
+# second app, to set a rectangle the app can set on its own.
+#
+# The script checks before capturing rather than producing black images, which
+# is what screencapture does when it is not allowed to see anything.
 #
 # Usage:  tools/make-mac-screenshots.sh
 #         SCREENS="logs workouts" tools/make-mac-screenshots.sh
@@ -90,47 +94,17 @@ MSG
 fi
 rm -f "$probe"
 
-# Accessibility, checked here rather than discovered three screens in. The
-# first System Events call also raises the Automation prompt, so this gets
-# both out of the way before anything is captured.
-if ! osascript -e 'tell application "System Events" to get name of first process' >/dev/null 2>&1; then
-  cat >&2 <<MSG
-Cannot drive the window, so it cannot be sized for the screenshots.
-
-Grant to:  $GRANTEE
-  System Settings → Privacy & Security → Accessibility
-
-If a dialog asked about controlling "System Events" and was declined, that
-answer is remembered in Privacy & Security → Automation → $GRANTEE.
-MSG
-  exit 1
-fi
-
 shoot() {
   local screen="$1"
   shift
   echo "— $screen"
   osascript -e "quit app id \"$BUNDLE\"" >/dev/null 2>&1
   sleep 1
-  open -n "$APP" --args -SRWScreen "$screen" "$@"
-  sleep 4   # the window, its data and its first layout
-
-  # Put the window where we want it and size it in points.
-  if ! osascript <<EOF >/dev/null 2>&1
-tell application "System Events"
-  tell process "SetsRepsWheels"
-    set frontmost to true
-    set position of window 1 to {60, 60}
-    set size of window 1 to {$WIDTH, $HEIGHT}
-  end tell
-end tell
-EOF
-  then
-    echo "Could not position the window. Grant Accessibility to this terminal in" >&2
-    echo "System Settings → Privacy & Security → Accessibility, then run again." >&2
-    exit 1
-  fi
-  sleep 2
+  # The app puts its own window at 60,60 at this size — see ScreenshotMode.
+  # Doing it from here would mean System Events, and so a second permission
+  # for a second app, to set a rectangle the app can set itself.
+  open -n "$APP" --args -SRWShot "${WIDTH}x${HEIGHT}" -SRWScreen "$screen" "$@"
+  sleep 5   # the window, its data, its first layout and the frame it sets
 
   # The region the window was just moved to, which is why it was positioned
   # exactly rather than left where macOS put it. Capturing by window id would

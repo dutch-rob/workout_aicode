@@ -14,7 +14,7 @@ struct workout_aicode_MacOSApp: App {
                 .environmentObject(setup)
                 .modelContainer(setup.container)
                 .dynamicTypeSize(size.dynamicTypeSize)
-                .remembersItsFrame()
+                .modifier(WindowFrameBehaviour())
         }
         .defaultSize(width: 1000, height: 680)
         .commands {
@@ -45,5 +45,22 @@ struct workout_aicode_MacOSApp: App {
                 .dynamicTypeSize(size.dynamicTypeSize)
                 .frame(minWidth: 480, minHeight: 420)
         }
+    }
+}
+
+/// A screenshot run sizes the window itself; everything else remembers the
+/// size the user left it at. Never both: a capture must not overwrite what
+/// somebody actually chose.
+private struct WindowFrameBehaviour: ViewModifier {
+    func body(content: Content) -> some View {
+        #if DEBUG
+        if let size = ScreenshotMode.size {
+            content.background(ScreenshotFrame(origin: ScreenshotMode.origin, size: size))
+        } else {
+            content.remembersItsFrame()
+        }
+        #else
+        content.remembersItsFrame()
+        #endif
     }
 }
