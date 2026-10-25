@@ -104,9 +104,26 @@ struct ScreenshotFrame: NSViewRepresentable {
         let view = NSView(frame: .zero)
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            window.setFrame(NSRect(origin: origin, size: size), display: true)
+            window.setContentSize(size)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            // Its own window id, written where the script can read it.
+            //
+            // The first attempt positioned the window and captured that
+            // rectangle of the SCREEN, which was wrong twice over. AppKit
+            // measures from the bottom-left and `screencapture -R` from the
+            // top-left, so the window and the capture were at opposite ends of
+            // the display — the result was a picture of the desktop with
+            // somebody's browser in it. And a region shot takes whatever
+            // happens to be there, which for screenshots of an app is both
+            // useless and a way to photograph a private window by accident.
+            //
+            // `screencapture -l<id>` takes the window and nothing else: no
+            // desktop, no coordinates to get wrong, nothing behind it.
+            if let path = ScreenshotMode.windowIdPath {
+                try? "\(window.windowNumber)".write(toFile: path, atomically: true,
+                                                    encoding: .utf8)
+            }
         }
         return view
     }
@@ -115,9 +132,16 @@ struct ScreenshotFrame: NSViewRepresentable {
 }
 
 enum ScreenshotMode {
-    /// `-SRWShot <width>x<height>` — and the capture region the script uses
-    /// is this origin and size, which is why both are fixed here.
-    static let origin = CGPoint(x: 60, y: 60)
+    /// Unused now that the window reports its id — kept at zero so nothing
+    /// depends on a position again.
+    static let origin = CGPoint.zero
+
+    /// `-SRWShotId <path>` — where to write the window id for the script.
+    static var windowIdPath: String? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "-SRWShotId"), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
 
     static var size: CGSize? {
         let args = CommandLine.arguments

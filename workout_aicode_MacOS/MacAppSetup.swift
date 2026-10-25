@@ -54,6 +54,18 @@ final class MacAppSetup: ObservableObject {
             WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
             AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self
         ]
+        #if DEBUG
+        // A screenshot run never touches the real store — see MacDemoData.
+        if MacDemoData.isEnabled {
+            let demo = try! ModelContainer(
+                for: Schema(models),
+                configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            container = demo
+            MacDemoData.seed(into: demo.mainContext)
+            return
+        }
+        #endif
+
         let configuration = Self.syncEnabled
             ? ModelConfiguration(cloudKitDatabase: .automatic)
             : ModelConfiguration(url: Self.localStoreURL, cloudKitDatabase: .none)

@@ -8,6 +8,9 @@
 # UNLIKE the iOS script this cannot run unattended the first time, and the
 # reason is macOS privacy rather than anything about the app:
 #
+# The app is given its own in-memory sample data (-SRWDemo): a capture never
+# contains anybody's real training, and never shows an empty app.
+#
 #   • `screencapture` needs Screen Recording permission for whatever runs it
 #     (Terminal, or the app driving it). macOS asks once, then you must QUIT
 #     AND REOPEN that app — the permission does not apply to a process that is
@@ -33,6 +36,8 @@ HEIGHT=900
 SCREENS="${SCREENS:-workouts exercises logs graphs progress importExport settings info}"
 
 mkdir -p "$OUT"
+IDFILE="$(mktemp -t srw-window-id)"
+trap 'rm -f "$IDFILE"' EXIT
 
 APP=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 4 -name "workout_aicode_MacOS.app" \
       -path "*Debug*" 2>/dev/null | head -1)
@@ -100,18 +105,30 @@ shoot() {
   echo "— $screen"
   osascript -e "quit app id \"$BUNDLE\"" >/dev/null 2>&1
   sleep 1
-  # The app puts its own window at 60,60 at this size — see ScreenshotMode.
-  # Doing it from here would mean System Events, and so a second permission
-  # for a second app, to set a rectangle the app can set itself.
-  open -n "$APP" --args -SRWShot "${WIDTH}x${HEIGHT}" -SRWScreen "$screen" "$@"
-  sleep 5   # the window, its data, its first layout and the frame it sets
+  rm -f "$IDFILE"
+  # -SRWDemo gives the app its own in-memory store with sample data, so a
+  # capture never contains real training and never shows an empty app.
+  open -n "$APP" --args -SRWDemo -SRWShot "${WIDTH}x${HEIGHT}" \
+       -SRWShotId "$IDFILE" -SRWScreen "$screen" "$@"
 
-  # The region the window was just moved to, which is why it was positioned
-  # exactly rather than left where macOS put it. Capturing by window id would
-  # avoid the arithmetic, but a SwiftUI app exposes no AppleScript window to
-  # ask an id of, and the fallback would be this anyway.
+  # The id file appearing is the app saying its window exists and is sized.
+  local waited=0
+  while [ ! -s "$IDFILE" ] && [ $waited -lt 20 ]; do
+    sleep 0.5
+    waited=$((waited + 1))
+  done
+  if [ ! -s "$IDFILE" ]; then
+    echo "  the app never reported a window for $screen" >&2
+    return 1
+  fi
+  sleep 2   # its data and first layout
+
+  # The window itself. A region shot takes whatever happens to be on screen
+  # at those coordinates — the first attempt photographed a browser — and
+  # AppKit measures from the bottom-left while screencapture measures from the
+  # top-left, so the arithmetic was wrong as well as unsafe.
   local file="$OUT/$screen.png"
-  screencapture -x -R60,60,$WIDTH,$HEIGHT "$file"
+  screencapture -x -o -l"$(cat "$IDFILE")" "$file"
 
   if [ ! -s "$file" ]; then
     echo "  nothing captured for $screen" >&2
