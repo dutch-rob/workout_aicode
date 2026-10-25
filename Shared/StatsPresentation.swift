@@ -168,6 +168,74 @@ enum LogSessions {
         let logs: [WorkoutLog]
     }
 
+    /// Narrows a log list by typed text and by date.
+    ///
+    /// The text matches the way somebody typing half a name expects it to: the
+    /// ROWS are reduced to the exercises whose names contain it, not merely
+    /// the sessions that happen to hold one. Filtering sessions while still
+    /// listing every exercise inside them is what the Mac used to do, and it
+    /// read as the field doing nothing at all — type "assisted chin up", and
+    /// if that exercise is in most sessions, almost nothing disappears and
+    /// every session still shows its whole contents.
+    ///
+    /// A WORKOUT name is the exception and keeps its session whole. Asking for
+    /// "PF B" is asking for that workout, and answering with a workout
+    /// stripped of its exercises would be a strange reading of the question.
+    ///
+    /// Dates are inclusive and by the day, not the instant: `to` of the 17th
+    /// means everything up to the end of the 17th, because that is what
+    /// picking a date on a calendar means.
+    static func matching(_ sessions: [Session], text: String = "",
+                         exerciseNames: [UUID: String] = [:],
+                         from: Date? = nil, to: Date? = nil,
+                         calendar: Calendar = .current) -> [Session] {
+        let needle = text.trimmingCharacters(in: .whitespaces).lowercased()
+        let start = from.map { calendar.startOfDay(for: $0) }
+        let end = to.flatMap {
+            calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: $0))
+        }
+
+        return sessions.compactMap { session in
+            if let start, session.date < start { return nil }
+            if let end, session.date >= end { return nil }
+            guard !needle.isEmpty else { return session }
+
+            if Self.name(session.workoutName, matches: needle) { return session }
+
+            let kept = session.logs.filter {
+                Self.name(exerciseNames[$0.exerciseId] ?? "", matches: needle)
+            }
+            guard !kept.isEmpty else { return nil }
+            return Session(id: session.id, workoutId: session.workoutId,
+                           workoutName: session.workoutName,
+                           date: session.date, logs: kept)
+        }
+    }
+
+    /// Whether a name answers to what was typed.
+    ///
+    /// By WORDS, not by raw substring, and a real exercise list is the reason:
+    /// "Machine bench press" contains the letters of "chin" — ma-CHIN-e — so a
+    /// plain `contains` answers a search for the chin-up with the bench press.
+    /// Found by a test that expected two sessions and got three, which is a
+    /// better way to find it than from a user wondering why their filter is
+    /// full of nonsense.
+    ///
+    /// So a single word matches where some word in the name STARTS with it:
+    /// "chin" finds "Assisted chin up" and not the bench press, "press" finds
+    /// both the leg press and the bench press. Anything with a space in it is
+    /// matched against the whole name instead, since by then the typing is
+    /// specific enough to mean what it says — and typing a full name, which is
+    /// what somebody does first, has to work.
+    static func name(_ name: String, matches needle: String) -> Bool {
+        guard !needle.isEmpty else { return true }
+        let haystack = name.lowercased()
+        if needle.contains(" ") { return haystack.contains(needle) }
+        return haystack
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .contains { $0.hasPrefix(needle) }
+    }
+
     /// `logs` newest first, as queried; sessions come back in the same order.
     static func group(_ logs: [WorkoutLog], workoutNames: [UUID: String]) -> [Session] {
         var sessions: [Session] = []

@@ -20,6 +20,10 @@ struct MacLogsView: View {
     @Query private var aerobicResults: [AerobicResult]
 
     @State private var search = ""
+    @State private var limitDates = false
+    @State private var from = Calendar.current.date(byAdding: .month, value: -1,
+                                                    to: Date()) ?? Date()
+    @State private var to = Date()
     @Environment(\.modelContext) private var context
     @State private var editing: LogEditSession?
     @State private var couldNotOpen: String?
@@ -32,19 +36,17 @@ struct MacLogsView: View {
         Dictionary(workouts.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
     }
 
-    /// Filtering keeps whole sessions: a session with a matching exercise in it
-    /// stays, with its other exercises alongside. Dropping those would show a
-    /// squat next to nothing and lose what it was done among.
+    /// See `LogSessions.matching` for what the typing does and why.
     private var sessions: [LogSessions.Session] {
-        let all = LogSessions.group(logs, workoutNames: workoutNames)
-        let needle = search.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return all }
-        return all.filter { session in
-            session.workoutName.lowercased().contains(needle)
-                || session.logs.contains {
-                    (exerciseNames[$0.exerciseId] ?? "").lowercased().contains(needle)
-                }
-        }
+        LogSessions.matching(LogSessions.group(logs, workoutNames: workoutNames),
+                             text: search,
+                             exerciseNames: exerciseNames,
+                             from: limitDates ? from : nil,
+                             to: limitDates ? to : nil)
+    }
+
+    private var isFiltering: Bool {
+        !search.trimmingCharacters(in: .whitespaces).isEmpty || limitDates
     }
 
     var body: some View {
@@ -54,13 +56,44 @@ struct MacLogsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 0) {
-                    HStack {
-                        TextField("Search an exercise or a workout", text: $search)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 320)
-                        Spacer()
-                        Text(countLine)
-                            .font(.caption).foregroundStyle(.secondary)
+                    VStack(spacing: 6) {
+                        HStack {
+                            // "Filter", not "Search": it narrows what is on
+                            // screen rather than taking you somewhere.
+                            TextField("Filter by exercise or workout", text: $search)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 320)
+                            if !search.isEmpty {
+                                Button {
+                                    search = ""
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                                .help("Clear the filter")
+                            }
+                            Spacer()
+                            Text(countLine)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        HStack(spacing: 8) {
+                            Toggle("Dates", isOn: $limitDates)
+                            if limitDates {
+                                DatePicker("from", selection: $from,
+                                           displayedComponents: .date)
+                                DatePicker("to", selection: $to,
+                                           displayedComponents: .date)
+                                    .onChange(of: to) { _, newValue in
+                                        if newValue < from { from = newValue }
+                                    }
+                                    .onChange(of: from) { _, newValue in
+                                        if newValue > to { to = newValue }
+                                    }
+                            }
+                            Spacer()
+                        }
+                        .font(.callout)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -110,17 +143,31 @@ struct MacLogsView: View {
     }
 
     private var countLine: String {
-        let n = sessions.count
+        let shown = sessions
         let total = LogSessions.group(logs, workoutNames: workoutNames).count
-        if n == total { return "\(total) sessions · \(logs.count) exercises logged" }
-        return "\(n) of \(total) sessions"
+        guard isFiltering else {
+            return "\(total) sessions · \(logs.count) exercises logged"
+        }
+        // Rows as well as sessions, because the filter now reduces both and a
+        // count of sessions alone would not say how much is being shown.
+        let rows = shown.reduce(0) { $0 + $1.logs.count }
+        return "\(shown.count) of \(total) sessions · \(rows) exercises"
+    }
+
+    private var emptyDescription: String {
+        let typed = search.trimmingCharacters(in: .whitespaces)
+        switch (typed.isEmpty, limitDates) {
+        case (true, true):  return "Nothing was logged between those dates."
+        case (false, true): return "No workout or exercise called “\(typed)” between those dates."
+        default:            return "No workout or exercise called “\(typed)”."
+        }
     }
 
     @ViewBuilder private var list: some View {
         if sessions.isEmpty {
             ContentUnavailableView("Nothing matches",
-                                   systemImage: "magnifyingglass",
-                                   description: Text("No workout or exercise called “\(search)”."))
+                                   systemImage: "line.3.horizontal.decrease.circle",
+                                   description: Text(emptyDescription))
         } else {
             List {
                 ForEach(sessions) { session in
