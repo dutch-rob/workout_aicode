@@ -38,17 +38,73 @@ if [ -z "$APP" ]; then
 fi
 echo "Using $APP"
 
+# WHICH app needs the permission. macOS grants these to the application
+# responsible for the process, which for a shell is whatever opened it — and
+# "this terminal" is the wrong answer often enough to be worth working out:
+# run from the terminal pane inside an editor or an assistant, the app that
+# needs granting is that one, and granting Terminal does nothing at all.
+responsible_app() {
+  local pid=$PPID app=""
+  for _ in 1 2 3 4 5 6 7 8; do
+    [ -z "$pid" ] || [ "$pid" = "0" ] || [ "$pid" = "1" ] && break
+    local path
+    path=$(ps -o comm= -p "$pid" 2>/dev/null)
+    case "$path" in
+      /Applications/*.app/Contents/MacOS/*) app="$path" ;;
+      */*.app/Contents/MacOS/*) [ -z "$app" ] && app="$path" ;;
+    esac
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+  done
+  if [ -n "$app" ]; then
+    # /Applications/Foo.app/Contents/MacOS/Foo -> Foo
+    basename "${app%%.app/*}"
+  else
+    echo "your terminal"
+  fi
+}
+
+GRANTEE="$(responsible_app)"
+
 # Screen Recording, checked before anything else: without it every capture is
 # a black rectangle of exactly the right size, which is the most misleading
 # possible failure.
 probe="$(mktemp -t srw-probe).png"
 screencapture -x -R0,0,8,8 "$probe" 2>/dev/null
 if [ ! -s "$probe" ]; then
-  echo "screencapture produced nothing. Grant Screen Recording to this terminal" >&2
-  echo "in System Settings → Privacy & Security → Screen Recording, then run again." >&2
+  rm -f "$probe"
+  cat >&2 <<MSG
+Screen recording is not permitted, so nothing can be captured.
+
+Grant it to:  $GRANTEE
+  System Settings → Privacy & Security → Screen & System Audio Recording
+  (called "Screen Recording" before macOS 15)
+
+That is the app this script is running inside, which is what macOS asks
+about — granting it to Terminal does nothing unless Terminal is what you
+ran it from.
+
+Then QUIT AND REOPEN $GRANTEE: macOS does not apply a new recording
+permission to a process that is already running.
+MSG
   exit 1
 fi
 rm -f "$probe"
+
+# Accessibility, checked here rather than discovered three screens in. The
+# first System Events call also raises the Automation prompt, so this gets
+# both out of the way before anything is captured.
+if ! osascript -e 'tell application "System Events" to get name of first process' >/dev/null 2>&1; then
+  cat >&2 <<MSG
+Cannot drive the window, so it cannot be sized for the screenshots.
+
+Grant to:  $GRANTEE
+  System Settings → Privacy & Security → Accessibility
+
+If a dialog asked about controlling "System Events" and was declined, that
+answer is remembered in Privacy & Security → Automation → $GRANTEE.
+MSG
+  exit 1
+fi
 
 shoot() {
   local screen="$1"
