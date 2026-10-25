@@ -18,71 +18,88 @@ import SwiftData
 enum MacDemoData {
     static var isEnabled: Bool { CommandLine.arguments.contains("-SRWDemo") }
 
-    /// Plausible rather than impressive: a routine somebody might actually
-    /// run, with numbers that move a little, because a chart of a perfect
-    /// line looks like test data and reads as one.
+    /// The SAME routine the iPhone and Watch screenshots use — see
+    /// DemoMode.upperBody and .lowerBody on the phone.
+    ///
+    /// They sit in one App Store listing, and a Mac showing "Lower body" with
+    /// a machine bench press beside an iPhone showing "Leg day" with a chest
+    /// press reads as two different apps photographed badly. Matching them is
+    /// the whole point: the same person's training, seen on two screens.
+    private typealias Row = (name: String, sets: Int, low: Double, high: Double,
+                             step: Double, weight: Double, reps: [Int],
+                             muscle: MuscleGroup?)
+
+    private static let upperBody: [Row] = [
+        ("Lats pull down",     3, 20, 120, 5, 50, [12, 10, 8], .back),
+        ("Chest press",        3, 20, 120, 5, 40, [12, 10, 8], .chest),
+        ("Seated row",         3, 20, 120, 5, 45, [12, 10, 9], .back),
+        ("Shoulder press",     3, 10,  80, 5, 30, [10,  9, 8], .frontDelts),
+        ("Biceps curl",        3, 10,  60, 5, 25, [12, 10, 8], .biceps),
+        ("Triceps pushdown",   3, 10,  60, 5, 30, [12, 10, 8], .triceps),
+        ("Abs crunch machine", 2, 10,  80, 5, 40, [15, 12],    .absCore),
+    ]
+
+    private static let legDay: [Row] = [
+        ("Leg press",     3, 40, 250, 10, 120, [12, 10, 8],  .quads),
+        ("Leg extension", 3, 20, 120,  5,  45, [12, 10, 8],  .quads),
+        ("Leg curl",      3, 20, 120,  5,  40, [12, 10, 8],  .hamstrings),
+        ("Calf raise",    3, 20, 150,  5,  70, [15, 12, 12], .calves),
+    ]
+
     @MainActor
     static func seed(into context: ModelContext) {
         let unit = WeightUnit.current
 
-        func exercise(_ name: String, _ muscle: MuscleGroup?,
-                      low: Double, high: Double, step: Double,
-                      sets: Int = 3) -> ExerciseDef {
-            let made = ExerciseDef(name: name, numberOfSeries: sets,
-                                   primaryMuscle: muscle)
-            made.setWeightRange(lowest: low, highest: high, increment: step, unit: unit)
-            context.insert(made)
-            return made
+        func define(_ rows: [Row]) -> [(ExerciseDef, Row)] {
+            rows.map { row in
+                let made = ExerciseDef(name: row.name, numberOfSeries: row.sets,
+                                       primaryMuscle: row.muscle)
+                made.setWeightRange(lowest: row.low, highest: row.high,
+                                    increment: row.step, unit: unit)
+                context.insert(made)
+                return (made, row)
+            }
         }
 
-        let bench = exercise("Machine bench press", .chest, low: 20, high: 200, step: 5)
-        let pulldown = exercise("Lat pulldown", .back, low: 20, high: 200, step: 5)
-        let press = exercise("Machine shoulder press", .frontDelts, low: 10, high: 120, step: 5)
-        let legPress = exercise("Leg press", .quads, low: 40, high: 400, step: 10)
-        let curl = exercise("Biceps curl machine", .biceps, low: 10, high: 100, step: 5)
-        let row = exercise("Seated row", .back, low: 20, high: 200, step: 5)
-        let extensions = exercise("Triceps extensions", .triceps, low: 10, high: 120, step: 5)
-        let abs = exercise("Abs crunch machine", .absCore, low: 10, high: 120, step: 5)
+        let upper = define(upperBody)
+        let lower = define(legDay)
 
-        let upper = WorkoutDef(name: "Upper body")
-        upper.exerciseOrder = [bench.id, pulldown.id, press.id, row.id, extensions.id]
-        let lower = WorkoutDef(name: "Lower body")
-        lower.exerciseOrder = [legPress.id, curl.id, abs.id]
-        context.insert(upper)
-        context.insert(lower)
+        let upperWorkout = WorkoutDef(name: "Upper body",
+                                      exerciseOrder: upper.map(\.0.id), sortIndex: 0)
+        let legWorkout = WorkoutDef(name: "Leg day",
+                                    exerciseOrder: lower.map(\.0.id), sortIndex: 1)
+        context.insert(upperWorkout)
+        context.insert(legWorkout)
 
-        // Eight weeks, twice a week, alternating — enough for the trend lines
-        // on the graphs screen to have something to say.
+        // Eight weeks, alternating, every third day — enough history for the
+        // trend lines to have something to say and for the logs screen to
+        // need its filter.
         let calendar = Calendar.current
         var day = calendar.date(byAdding: .day, value: -56, to: Date()) ?? Date()
         var session = 0
 
         while day < Date() {
             let isUpper = session % 2 == 0
-            let workout = isUpper ? upper : lower
-            let plan: [(ExerciseDef, Double, [Int])] = isUpper
-                ? [(bench, 50, [12, 10]), (pulldown, 45, [12, 10]),
-                   (press, 25, [12, 10]), (row, 40, [15, 12]),
-                   (extensions, 20, [15, 12])]
-                : [(legPress, 120, [15, 12]), (curl, 25, [12, 10]),
-                   (abs, 30, [20, 20])]
-
+            let workout = isUpper ? upperWorkout : legWorkout
+            let plan = isUpper ? upper : lower
             let at = calendar.date(bySettingHour: 17, minute: 15, second: 0, of: day) ?? day
-            for (index, entry) in plan.enumerated() {
-                let (definition, base, reps) = entry
-                // A little progress across the weeks, and not in lockstep.
-                let gained = Double(session / 2) * (isUpper ? 1.25 : 2.5)
-                let weight = base + gained
+            // A little progress across the weeks, in steps of the wheel, so
+            // every weight shown is one the machine actually has.
+            let steps = Double(session / 4)
+
+            for (index, pair) in plan.enumerated() {
+                let (definition, row) = pair
+                let weight = row.weight + steps * row.step
+                let grams = Array(repeating: unit.grams(from: weight), count: row.reps.count)
                 let log = WorkoutLog(date: calendar.date(byAdding: .minute,
                                                          value: index * 6, to: at) ?? at,
                                      workoutId: workout.id,
                                      exerciseId: definition.id,
-                                     weights: [Int(weight), Int(weight)],
-                                     reps: reps)
+                                     weights: Array(repeating: Int(weight),
+                                                    count: row.reps.count),
+                                     reps: row.reps)
                 context.insert(log)
-                context.insert(LogWeights(logId: log.id,
-                                          grams: [unit.grams(from: weight),
-                                                  unit.grams(from: weight)]))
+                context.insert(LogWeights(logId: log.id, grams: grams))
             }
             day = calendar.date(byAdding: .day, value: 3, to: day) ?? Date.distantFuture
             session += 1

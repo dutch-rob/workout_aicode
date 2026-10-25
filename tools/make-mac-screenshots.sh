@@ -31,8 +31,13 @@ cd "$(dirname "$0")/.."
 
 BUNDLE="robotex.workout-aicode-MacOS"
 OUT="${OUT:-screenshots/mac}"
-WIDTH=1440
-HEIGHT=900
+# SIZE picks one of the four the Mac App Store accepts: 1280x800, 1440x900,
+# 2560x1600, 2880x1800. The big two need a display tall enough to hold the
+# window — 1600 or 1800 points — so on a 1440-tall screen only the small two
+# are reachable, and 1440x900 is the better of them.
+SIZE="${SIZE:-1440x900}"
+WIDTH="${SIZE%%x*}"
+HEIGHT="${SIZE##*x}"
 SCREENS="${SCREENS:-workouts exercises logs graphs progress importExport settings info}"
 
 mkdir -p "$OUT"
@@ -134,7 +139,19 @@ shoot() {
     echo "  nothing captured for $screen" >&2
     return 1
   fi
-  echo "  $(sips -g pixelWidth -g pixelHeight "$file" 2>/dev/null | awk '/pixel/ {printf "%s ", $2}')→ $file"
+
+  # What came out, against what the App Store takes. A 1x display yields the
+  # window's point size; a Retina one yields twice that. Both are fine, but
+  # only if the result is one of the four accepted sizes, and silently
+  # shipping a rejected one wastes a submission.
+  local got
+  got=$(sips -g pixelWidth -g pixelHeight "$file" 2>/dev/null \
+        | awk '/pixelWidth/{w=$2} /pixelHeight/{h=$2} END{print w "x" h}')
+  case "$got" in
+    1280x800|1440x900|2560x1600|2880x1800) ;;
+    *) echo "  WARNING: $got is not a size the Mac App Store accepts." >&2 ;;
+  esac
+  echo "  $got → $file"
 }
 
 for screen in $SCREENS; do
