@@ -17,6 +17,23 @@ struct workout_aicode_MacOSApp: App {
                 .remembersItsFrame()
         }
         .defaultSize(width: 1000, height: 680)
+        .commands {
+            // A Mac app's Help menu is expected to lead somewhere, and this
+            // one led nowhere. The guide is already in the app, so Help opens
+            // it rather than a separate help book that would be a second copy
+            // to keep true.
+            CommandGroup(replacing: .help) {
+                Button("SetsRepsWheels Help") { MacNavigation.shared.showHelp() }
+                    .keyboardShortcut("?", modifiers: .command)
+                Divider()
+                Button("Import and Export Help") {
+                    MacNavigation.shared.showHelp(.importExport)
+                }
+                Button("Your Data and Privacy") {
+                    MacNavigation.shared.showHelp(.privacy)
+                }
+            }
+        }
 
         // The Mac way in: the app menu, and ⌘, — which is where every Mac user
         // looks first, and found nothing. The settings are still in the

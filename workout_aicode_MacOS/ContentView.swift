@@ -11,11 +11,13 @@ struct ContentView: View {
     @EnvironmentObject private var setup: MacAppSetup
     @Environment(\.modelContext) private var context
     @Query private var exercises: [ExerciseDef]
-    @State private var section: MacSection? = .workouts
+    /// Shared, so the Help menu can put the guide on screen — see
+    /// MacNavigation.
+    @ObservedObject private var navigation = MacNavigation.shared
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $section) {
+            List(selection: $navigation.section) {
                 Section("Define") {
                     ForEach(MacSection.defining) { row($0) }
                 }
@@ -55,7 +57,7 @@ struct ContentView: View {
                                    systemImage: "exclamationmark.triangle",
                                    description: Text(failure))
         } else {
-            switch section ?? .workouts {
+            switch navigation.section ?? .workouts {
             case .workouts:     MacWorkoutsView()
             case .exercises:    MacExercisesView()
             case .logs:         MacLogsView()
@@ -63,7 +65,7 @@ struct ContentView: View {
             case .progress:     MacProgressView()
             case .settings:     MacSettingsView()
             case .info:         MacInfoView()
-            case .importExport: MacComingSoonView(section: .importExport)
+            case .importExport: MacImportExportView()
             }
         }
     }

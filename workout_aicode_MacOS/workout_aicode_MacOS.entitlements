@@ -8,6 +8,12 @@
 	     and says nothing about why. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Import and export. A sandboxed app may touch exactly the files the
+	     user picked in the open or save panel and nothing else, which is the
+	     whole of what this needs: it reads a chosen .json and writes one. No
+	     folder access, no bookmarks, nothing kept after the panel closes. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
 	<key>com.apple.developer.aps-environment</key>
 	<string>development</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
