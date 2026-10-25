@@ -307,6 +307,18 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     }
     @Published var justFinished: FinishedWorkout? = nil
 
+    /// What the Watch asked this device to put in the calendar.
+    ///
+    /// Held rather than acted on here: writing needs the model (for the
+    /// workout's name) and may need the permission prompt, which belongs to a
+    /// view. Cleared once it has been dealt with.
+    struct ScheduleRequest: Equatable {
+        let workoutId: UUID
+        let starts: [Date]
+        let duration: TimeInterval
+    }
+    @Published var scheduleRequestedFromWatch: ScheduleRequest? = nil
+
     /// A prior workout was left open and superseded/abandoned — save it capped at
     /// its last activity, then forget it.
     private func finalizeAbandonedOpenWorkout() {
@@ -710,8 +722,19 @@ extension PhoneSessionManager: WCSessionDelegate {
         DispatchQueue.main.async { self.remoteSnapshot = snap }
     }
 
+    /// Queued deliveries — `transferUserInfo`.
+    ///
+    /// Routed through the SAME switch as a live message, which it was not.
+    /// This went straight to the log handler, which ignores anything that is
+    /// not a logged set, so every other kind of message silently vanished
+    /// whenever it came this way. And it comes this way exactly when it
+    /// matters: `transferUserInfo` is the fallback when the phone is not
+    /// reachable, which at the end of a workout — phone in a locker, in a bag,
+    /// app closed — is the normal case rather than the exception. A workout
+    /// finished on the Watch was lost here, which is why nothing was offered
+    /// afterwards even once the phone was opened.
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
-        DispatchQueue.main.async { self.handleIncomingLog(userInfo) }
+        self.session(session, didReceiveMessage: userInfo)
     }
 
     // Messages WITH a reply handler.
@@ -819,6 +842,18 @@ extension PhoneSessionManager: WCSessionDelegate {
                                            workoutId: finishedId,
                                            writeToHealth: !recordedOnWatch)
                 } else { self.openWorkout = nil }
+            }
+        case "scheduleNext":
+            // The wrist asked; this device writes. See
+            // WatchSessionManager.requestSchedule for why it has to be here.
+            let id = (message["workoutId"] as? String).flatMap(UUID.init(uuidString:))
+            let starts = (message["starts"] as? [Double] ?? [])
+                .map { Date(timeIntervalSince1970: $0) }
+            let duration = message["durationSeconds"] as? Double ?? 0
+            DispatchQueue.main.async {
+                guard let id, !starts.isEmpty, duration > 0 else { return }
+                self.scheduleRequestedFromWatch = ScheduleRequest(
+                    workoutId: id, starts: starts, duration: duration)
             }
         default:
             DispatchQueue.main.async { self.handleIncomingLog(message) }

@@ -112,6 +112,10 @@ struct ContentView: View {
         // own any more. The buzz at the end comes from a scheduled
         // notification, not from this being on screen.
         .modifier(WatchRestDrain())
+        // Asked after the workout screen has gone, as on the phone.
+        .sheet(item: $session.justFinished) { finished in
+            WatchScheduleSheet(finished: finished) { session.justFinished = nil }
+        }
     }
 
     @ObservedObject private var aerobic = WatchAerobicWorkout.shared

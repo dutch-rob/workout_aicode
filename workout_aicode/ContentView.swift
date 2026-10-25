@@ -286,6 +286,23 @@ struct ContentView: View {
                 }
             }
         }
+        // The Watch asked for the next workout while this app was closed or in
+        // a pocket. Written as soon as the app is running, with no sheet: the
+        // question was already answered on the wrist, and asking it twice
+        // would be the app arguing with itself.
+        .onChange(of: handoff.scheduleRequestedFromWatch) { _, request in
+            guard let request else { return }
+            handoff.scheduleRequestedFromWatch = nil
+            guard let workout = workouts.first(where: { $0.id == request.workoutId })
+            else { return }
+            Task {
+                guard await WorkoutCalendar.shared.requestAccess() else { return }
+                WorkoutCalendar.shared.schedule(workout: workout.name,
+                                                id: workout.id,
+                                                starts: request.starts,
+                                                duration: request.duration)
+            }
+        }
         .onChange(of: handoff.justFinished) { _, finished in
             guard let finished, WorkoutSchedule.isEnabled else {
                 handoff.justFinished = nil

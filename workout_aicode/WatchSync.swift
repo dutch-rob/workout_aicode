@@ -477,6 +477,13 @@ struct SyncPayload: Codable {
     /// Which unit to WRITE weights in. The numbers themselves are grams, as
     /// they are on the phone; this is only how they are read out.
     var weightUnit: String
+    /// Whether the user asked to be offered the next workout at the end of
+    /// one, and how it should be proposed. The Watch needs these to make the
+    /// offer itself: EventKit on watchOS cannot write an event — saveEvent is
+    /// __WATCHOS_PROHIBITED — so the Watch asks and the phone writes.
+    var scheduleEnabled: Bool
+    var scheduleDaysAhead: Int
+    var scheduleCount: Int
 
     static func lastEntryKey(workoutId: String, exerciseId: String) -> String {
         "\(workoutId)|\(exerciseId)"
@@ -485,6 +492,7 @@ struct SyncPayload: Codable {
     enum CodingKeys: String, CodingKey {
         case workouts, exercises, lastEntries, healthSharingEnabled, restTimerEnabled
         case watchWorkoutMode, zoneTint, restTaps, wheelRows, weightUnit
+        case scheduleEnabled, scheduleDaysAhead, scheduleCount
     }
     init(workouts: [SyncWorkout], exercises: [SyncExercise],
          lastEntries: [String: SyncLastEntry], healthSharingEnabled: Bool = false,
@@ -493,7 +501,10 @@ struct SyncPayload: Codable {
          zoneTint: Double = WatchPreferences.defaultZoneTint,
          restTaps: Int = WatchPreferences.defaultRestTaps,
          wheelRows: Int = WatchPreferences.defaultWheelRows,
-         weightUnit: String = WeightUnit.regionDefault.rawValue) {
+         weightUnit: String = WeightUnit.regionDefault.rawValue,
+         scheduleEnabled: Bool = false,
+         scheduleDaysAhead: Int = WorkoutSchedule.defaultDaysAhead,
+         scheduleCount: Int = WorkoutSchedule.defaultCount) {
         self.workouts = workouts
         self.exercises = exercises
         self.lastEntries = lastEntries
@@ -504,6 +515,9 @@ struct SyncPayload: Codable {
         self.restTaps = restTaps
         self.wheelRows = wheelRows
         self.weightUnit = weightUnit
+        self.scheduleEnabled = scheduleEnabled
+        self.scheduleDaysAhead = scheduleDaysAhead
+        self.scheduleCount = scheduleCount
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -522,5 +536,12 @@ struct SyncPayload: Codable {
             try c.decodeIfPresent(Int.self, forKey: .wheelRows) ?? WatchPreferences.defaultWheelRows)
         weightUnit = try c.decodeIfPresent(String.self, forKey: .weightUnit)
             ?? WeightUnit.regionDefault.rawValue
+        // Absent from a phone that predates scheduling, and then the Watch
+        // simply never offers.
+        scheduleEnabled = try c.decodeIfPresent(Bool.self, forKey: .scheduleEnabled) ?? false
+        scheduleDaysAhead = try c.decodeIfPresent(Int.self, forKey: .scheduleDaysAhead)
+            ?? WorkoutSchedule.defaultDaysAhead
+        scheduleCount = try c.decodeIfPresent(Int.self, forKey: .scheduleCount)
+            ?? WorkoutSchedule.defaultCount
     }
 }

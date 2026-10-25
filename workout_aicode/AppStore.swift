@@ -294,7 +294,10 @@ final class AppStore: ObservableObject {
             zoneTint: WatchPreferences.zoneTint,
             restTaps: WatchPreferences.restTaps,
             wheelRows: WatchPreferences.wheelRows,
-            weightUnit: WeightUnit.current.rawValue
+            weightUnit: WeightUnit.current.rawValue,
+            scheduleEnabled: WorkoutSchedule.isEnabled,
+            scheduleDaysAhead: WorkoutSchedule.daysAhead,
+            scheduleCount: WorkoutSchedule.count
         )
         return try? JSONEncoder().encode(payload)
     }

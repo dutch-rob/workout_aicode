@@ -35,6 +35,21 @@ final class WatchSessionManager: NSObject, ObservableObject {
     @Published private(set) var wheelRows = WatchPreferences.defaultWheelRows
     /// Which unit to write weights in. The numbers are grams either way.
     @Published private(set) var weightUnit = WeightUnit.regionDefault
+    /// Whether to offer the next workout at the end of one, and how.
+    @Published private(set) var scheduleEnabled = false
+    @Published private(set) var scheduleDaysAhead = WorkoutSchedule.defaultDaysAhead
+    @Published private(set) var scheduleCount = WorkoutSchedule.defaultCount
+
+    /// A workout just ended here, waiting for the offer to be made or
+    /// declined. Nil whenever there is nothing to ask about.
+    struct FinishedWorkout: Equatable, Identifiable {
+        let workoutId: String
+        let name: String
+        let startedAt: Date
+        let endedAt: Date
+        var id: String { "\(workoutId)-\(endedAt.timeIntervalSince1970)" }
+    }
+    @Published var justFinished: FinishedWorkout? = nil
     private var lastEntries: [String: SyncLastEntry] = [:]
 
     // MARK: Handover session state
@@ -129,6 +144,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
             restTaps = payload.restTaps
             wheelRows = payload.wheelRows
             weightUnit = WeightUnit(rawValue: payload.weightUnit) ?? .regionDefault
+            scheduleEnabled = payload.scheduleEnabled
+            scheduleDaysAhead = payload.scheduleDaysAhead
+            scheduleCount = payload.scheduleCount
         }
         // Left by the phone for a Watch app that was not running when the
         // aerobic session began — which is the usual way it begins.
@@ -255,6 +273,11 @@ final class WatchSessionManager: NSObject, ObservableObject {
             "workoutId": workoutId,
             "recordedOnWatch": recordedHere
         ]
+        if scheduleEnabled, !workoutId.isEmpty {
+            justFinished = FinishedWorkout(workoutId: workoutId,
+                                           name: workout(id: workoutId)?.name ?? "",
+                                           startedAt: startedAt, endedAt: endedAt)
+        }
         if session.isReachable {
             session.sendMessage(msg, replyHandler: nil, errorHandler: { _ in
                 session.transferUserInfo(msg)
@@ -468,6 +491,28 @@ final class WatchSessionManager: NSObject, ObservableObject {
         default:
             return false
         }
+    }
+
+    /// Asks the phone to put the next workout in the calendar.
+    ///
+    /// The Watch cannot do it itself: EventKit is on watchOS, but `saveEvent`
+    /// and `removeEvent` are __WATCHOS_PROHIBITED, so an event can be read
+    /// there and never written. The phone has the calendar, the permission and
+    /// the code that already knows how to move its own events — so the wrist
+    /// asks and the phone writes, and nobody has to take their phone out.
+    ///
+    /// `transferUserInfo` rather than a plain message: it is queued and
+    /// delivered even when the phone is in a pocket with the app closed, which
+    /// at the end of a workout it usually is.
+    func requestSchedule(workoutId: String, starts: [Date], duration: TimeInterval) {
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        session.transferUserInfo([
+            "type": "scheduleNext",
+            "workoutId": workoutId,
+            "starts": starts.map(\.timeIntervalSince1970),
+            "durationSeconds": duration
+        ])
     }
 
     /// Started on the wrist. The phone does not measure anything for this, but

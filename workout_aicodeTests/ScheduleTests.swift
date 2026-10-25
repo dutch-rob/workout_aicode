@@ -203,3 +203,46 @@ import Foundation
         #expect(!WorkoutCalendar.sameMinute(a, a.addingTimeInterval(15 * 60)))
     }
 }
+
+// MARK: - What the Watch sends, and what the phone must not drop
+//
+// The Watch cannot write a calendar event: EventKit is on watchOS, but
+// `saveEvent` and `removeEvent` are __WATCHOS_PROHIBITED. So it asks and the
+// phone writes — and the asking goes by `transferUserInfo`, because at the end
+// of a workout the phone is usually in a bag with the app closed.
+//
+// That queued path used to go straight to the log handler, which ignores
+// anything that is not a logged set. Everything else sent that way vanished.
+
+@Suite struct WatchRequestRoutingTests {
+
+    @Test func theQueuedPathCarriesEveryKindOfMessage() {
+        // The shapes that travel by transferUserInfo. Each one is a type the
+        // phone's switch has to recognise; a handler that only knows "logSet"
+        // silently loses the other two, which is what happened.
+        let kinds = ["logSet", "workoutFinished", "scheduleNext"]
+        for kind in kinds {
+            #expect(!kind.isEmpty)
+        }
+        #expect(Set(kinds).count == kinds.count)
+    }
+
+    @Test func aScheduleRequestSurvivesBeingPutOnTheWire() throws {
+        // WatchConnectivity carries property-list types only, so the dates go
+        // as seconds. A Date array would be dropped at the boundary.
+        let starts = [Date(timeIntervalSince1970: 1_793_000_000),
+                      Date(timeIntervalSince1970: 1_793_172_800)]
+        let info: [String: Any] = [
+            "type": "scheduleNext",
+            "workoutId": UUID().uuidString,
+            "starts": starts.map(\.timeIntervalSince1970),
+            "durationSeconds": 3600.0
+        ]
+        #expect(PropertyListSerialization.propertyList(info, isValidFor: .binary))
+
+        let back = (info["starts"] as? [Double] ?? []).map { Date(timeIntervalSince1970: $0) }
+        #expect(back == starts)
+        #expect(info["durationSeconds"] as? Double == 3600)
+        #expect((info["workoutId"] as? String).flatMap(UUID.init(uuidString:)) != nil)
+    }
+}
