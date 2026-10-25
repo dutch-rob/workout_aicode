@@ -168,6 +168,47 @@ enum LogSessions {
         let logs: [WorkoutLog]
     }
 
+    /// How a log list is ordered. By date it is the session or the last time
+    /// the exercise was done; by name it is the workout's or the exercise's.
+    enum Order: String, CaseIterable, Identifiable {
+        case newestFirst, oldestFirst, nameAZ, nameZA
+        var id: String { rawValue }
+
+        var isByDate: Bool { self == .newestFirst || self == .oldestFirst }
+
+        /// The order a heading moves to when it is clicked: clicking the one
+        /// already in use reverses it, clicking the other starts at its own
+        /// natural end — newest first for a date, A to Z for a name.
+        func clickingDate() -> Order { self == .newestFirst ? .oldestFirst : .newestFirst }
+        func clickingName() -> Order { self == .nameAZ ? .nameZA : .nameAZ }
+    }
+
+    static func ordered(_ sessions: [Session], by order: Order) -> [Session] {
+        switch order {
+        case .newestFirst: return sessions.sorted { $0.date > $1.date }
+        case .oldestFirst: return sessions.sorted { $0.date < $1.date }
+        case .nameAZ: return sessions.sorted { compare($0.workoutName, $1.workoutName, ascending: true) }
+        case .nameZA: return sessions.sorted { compare($0.workoutName, $1.workoutName, ascending: false) }
+        }
+    }
+
+    static func ordered(_ histories: [ExerciseHistory], by order: Order) -> [ExerciseHistory] {
+        switch order {
+        case .newestFirst: return histories.sorted { $0.lastLogged > $1.lastLogged }
+        case .oldestFirst: return histories.sorted { $0.lastLogged < $1.lastLogged }
+        case .nameAZ: return histories.sorted { compare($0.name, $1.name, ascending: true) }
+        case .nameZA: return histories.sorted { compare($0.name, $1.name, ascending: false) }
+        }
+    }
+
+    /// Names compared the way a person reads them, so "abs" and "Abs" sort
+    /// together and "Exercise 10" comes after "Exercise 9".
+    private static func compare(_ a: String, _ b: String, ascending: Bool) -> Bool {
+        let result = a.localizedStandardCompare(b)
+        guard result != .orderedSame else { return false }
+        return ascending ? result == .orderedAscending : result == .orderedDescending
+    }
+
     /// Narrows a log list by typed text and by date.
     ///
     /// The text matches the way somebody typing half a name expects it to: the
@@ -210,6 +251,54 @@ enum LogSessions {
                            workoutName: session.workoutName,
                            date: session.date, logs: kept)
         }
+    }
+
+    /// One exercise and every time it was logged, newest first.
+    ///
+    /// The other way of reading a log. Grouping by session answers "what did I
+    /// do that day"; this answers "when do I do this, and what was it last
+    /// time", which is the question somebody has while standing in front of a
+    /// machine wondering whether to add five pounds.
+    struct ExerciseHistory: Identifiable {
+        let id: String
+        let exerciseId: UUID
+        let name: String
+        /// Newest first, like everything else in this app's log reading.
+        let entries: [Entry]
+
+        struct Entry: Identifiable {
+            let id: String
+            let log: WorkoutLog
+            let workoutName: String
+            var date: Date { log.date }
+        }
+
+        var mostRecent: Entry? { entries.first }
+        var lastLogged: Date { entries.first?.date ?? .distantPast }
+    }
+
+    /// Turns sessions inside out: the same logs, gathered by exercise.
+    ///
+    /// Takes already-filtered sessions, so the exercise list narrows with the
+    /// same typing and the same dates as the session list — one filter, two
+    /// ways of looking at what it left.
+    static func byExercise(_ sessions: [Session],
+                           exerciseNames: [UUID: String]) -> [ExerciseHistory] {
+        var entries: [UUID: [ExerciseHistory.Entry]] = [:]
+        for session in sessions {
+            for log in session.logs {
+                entries[log.exerciseId, default: []].append(
+                    ExerciseHistory.Entry(id: log.id.uuidString, log: log,
+                                          workoutName: session.workoutName))
+            }
+        }
+        return entries.map { exerciseId, list in
+            ExerciseHistory(id: exerciseId.uuidString,
+                            exerciseId: exerciseId,
+                            name: exerciseNames[exerciseId] ?? "",
+                            entries: list.sorted { $0.date > $1.date })
+        }
+        .sorted { $0.lastLogged > $1.lastLogged }
     }
 
     /// Whether a name answers to what was typed.

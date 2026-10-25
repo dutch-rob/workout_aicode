@@ -130,3 +130,108 @@ struct LogFilterTests {
         #expect(LogSessions.matching(all, to: date(18)).count == 1)
     }
 }
+
+// MARK: - Reading the log the other way round
+//
+// The Mac can gather the same logs by exercise instead of by session: what
+// somebody wants while standing at a machine, wondering what they did last
+// time and whether to add weight.
+
+@Suite(.serialized)
+struct ExerciseGroupingTests {
+
+    private let benchId = UUID()
+    private let chinUpId = UUID()
+
+    private var names: [UUID: String] { [benchId: "Bench press", chinUpId: "Assisted chin up"] }
+
+    private func date(_ d: Int) -> Date {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        return c.date(from: DateComponents(year: 2026, month: 10, day: d, hour: 17))!
+    }
+
+    @MainActor private func session(_ day: Int, _ workout: String,
+                                    _ ids: [UUID]) -> LogSessions.Session {
+        let workoutId = UUID()
+        return LogSessions.Session(
+            id: "\(day)", workoutId: workoutId, workoutName: workout, date: date(day),
+            logs: ids.map {
+                WorkoutLog(date: date(day), workoutId: workoutId, exerciseId: $0,
+                           weights: [100], reps: [10])
+            })
+    }
+
+    @MainActor private var all: [LogSessions.Session] {
+        [session(21, "PF B", [chinUpId]),
+         session(19, "PF B", [benchId, chinUpId]),
+         session(17, "PF A", [benchId])]
+    }
+
+    @MainActor @Test func everyTimeAnExerciseWasDoneIsGatheredUnderIt() {
+        let histories = LogSessions.byExercise(all, exerciseNames: names)
+        #expect(histories.count == 2)
+
+        let chin = try? #require(histories.first { $0.name == "Assisted chin up" })
+        #expect(chin?.entries.count == 2)
+        // Newest first, like the rest of the app's log reading.
+        #expect(chin?.entries.first?.date == date(21))
+        #expect(chin?.entries.last?.date == date(19))
+    }
+
+    @MainActor @Test func anExerciseCarriesTheWorkoutItWasDoneIn() {
+        let histories = LogSessions.byExercise(all, exerciseNames: names)
+        let bench = histories.first { $0.name == "Bench press" }
+        #expect(bench?.mostRecent?.workoutName == "PF B")
+        #expect(bench?.entries.last?.workoutName == "PF A")
+    }
+
+    @MainActor @Test func exercisesComeInTheOrderTheyWereLastDone() {
+        let histories = LogSessions.byExercise(all, exerciseNames: names)
+        // The chin-up was done on the 21st, the bench on the 19th.
+        #expect(histories.map(\.name) == ["Assisted chin up", "Bench press"])
+    }
+
+    // MARK: Ordering
+
+    @MainActor @Test func clickingAHeadingTurnsItRound() {
+        var order = LogSessions.Order.newestFirst
+        order = order.clickingDate()
+        #expect(order == .oldestFirst)
+        order = order.clickingDate()
+        #expect(order == .newestFirst)
+        // Clicking the OTHER heading starts at its own natural end rather than
+        // inheriting the direction of the one before it.
+        order = order.clickingName()
+        #expect(order == .nameAZ)
+        order = order.clickingName()
+        #expect(order == .nameZA)
+    }
+
+    @MainActor @Test func sessionsSortBothWaysByDateAndByName() {
+        #expect(LogSessions.ordered(all, by: .newestFirst).map(\.id) == ["21", "19", "17"])
+        #expect(LogSessions.ordered(all, by: .oldestFirst).map(\.id) == ["17", "19", "21"])
+        let az = LogSessions.ordered(all, by: .nameAZ).map(\.workoutName)
+        #expect(az.first == "PF A")
+        #expect(LogSessions.ordered(all, by: .nameZA).map(\.workoutName).first == "PF B")
+    }
+
+    @MainActor @Test func exercisesSortBothWaysToo() {
+        let histories = LogSessions.byExercise(all, exerciseNames: names)
+        #expect(LogSessions.ordered(histories, by: .nameAZ).map(\.name)
+                == ["Assisted chin up", "Bench press"])
+        #expect(LogSessions.ordered(histories, by: .nameZA).map(\.name)
+                == ["Bench press", "Assisted chin up"])
+        #expect(LogSessions.ordered(histories, by: .oldestFirst).map(\.name)
+                == ["Bench press", "Assisted chin up"])
+    }
+
+    @MainActor @Test func theFilterAndTheGroupingWorkTogether() {
+        // Narrow first, then turn inside out: one filter, two ways of looking
+        // at what it leaves.
+        let narrowed = LogSessions.matching(all, text: "chin", exerciseNames: names)
+        let histories = LogSessions.byExercise(narrowed, exerciseNames: names)
+        #expect(histories.count == 1)
+        #expect(histories[0].entries.count == 2)
+    }
+}

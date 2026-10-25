@@ -103,6 +103,9 @@ struct MacWorkoutDetail: View {
     let allExercises: [ExerciseDef]
 
     @State private var sieve = MacExerciseSieve()
+    /// Folded shut to begin with: the exercise list is what this pane is for,
+    /// and the body is the way in when a name will not come to mind.
+    @State private var showBody = false
 
     private var inWorkout: [ExerciseDef] {
         workout.exerciseOrder.compactMap { id in
@@ -174,11 +177,41 @@ struct MacWorkoutDetail: View {
         .frame(minWidth: 200, maxHeight: .infinity)
     }
 
+    private var muscleBinding: Binding<MuscleGroup?> {
+        Binding(get: { sieve.filter.muscle },
+                set: { sieve.filter = $0.map(MacExerciseFilter.muscle) ?? .all })
+    }
+
+    private var aerobicBinding: Binding<Bool> {
+        Binding(get: { sieve.filter.isAerobic },
+                set: { sieve.filter = $0 ? .aerobic : .all })
+    }
+
     private var library: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Add an exercise — ticked ones are already in")
                 .font(.caption).foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
+
+            // The same body as the exercises screen, and for the same reason:
+            // building a workout is thinking in muscles — "something for
+            // back now" — rather than in names you can already recall. It
+            // folds away because this pane shares a window with the workout
+            // itself, and some days you know exactly what you are adding.
+            DisclosureGroup(isExpanded: $showBody) {
+                MuscleBodyPicker(selection: muscleBinding,
+                                 aerobic: aerobicBinding,
+                                 height: 260)
+                    .padding(.vertical, 4)
+                if sieve.filter != .all {
+                    Button("All groups") { sieve.filter = .all }
+                        .buttonStyle(.link)
+                }
+            } label: {
+                Text(bodyLabel).font(.caption)
+            }
+            .padding(.horizontal, 8)
+
             MacExerciseFilterBar(sieve: $sieve)
 
             List {
@@ -218,6 +251,16 @@ struct MacWorkoutDetail: View {
             }
         }
         .frame(minWidth: 220, maxHeight: .infinity)
+    }
+
+    /// Says what the body is currently filtering to, so the heading is still
+    /// useful when it is folded shut.
+    private var bodyLabel: String {
+        switch sieve.filter {
+        case .all:           return "Find by muscle"
+        case .aerobic:       return "Find by muscle — showing aerobic"
+        case .muscle(let g): return "Find by muscle — showing \(g.label)"
+        }
     }
 
     private func ownRow(_ exercise: ExerciseDef) -> some View {

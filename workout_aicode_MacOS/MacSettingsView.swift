@@ -21,11 +21,25 @@ struct MacSettingsView: View {
     @AppStorage(ExerciseDefaultsKey.highest) private var highest = ExerciseDefaults.highest
     @AppStorage(ExerciseDefaultsKey.increment) private var increment = ExerciseDefaults.increment
     @AppStorage(RestTimerKey.defaultSeconds) private var restSeconds = defaultRestSeconds
+    @AppStorage(MacAppearanceKey.textSize) private var textSize = MacTextSize.default.rawValue
 
     private var draft: DraftSession? { drafts.first { $0.isActive } }
 
     var body: some View {
         Form {
+            Section {
+                Picker("Text size", selection: $textSize) {
+                    ForEach(MacTextSize.allCases) { size in
+                        Text(size.label).tag(size.rawValue)
+                    }
+                }
+            } header: {
+                Text("Appearance")
+            } footer: {
+                Text("How large this app draws its text. A Mac has no system-wide setting for it the way an iPhone does, so it is the app's own — and screens differ enough that the same size is small on one and large on another. It applies here only; your iPhone and Watch are unaffected.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section {
                 if unitAnswered {
                     Picker("Weights in", selection: $weightUnitRaw) {

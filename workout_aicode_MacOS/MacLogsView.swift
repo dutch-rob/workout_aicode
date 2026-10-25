@@ -21,6 +21,13 @@ struct MacLogsView: View {
 
     @State private var search = ""
     @State private var limitDates = false
+    /// Which way round the log is read, and in what order. Kept per window
+    /// rather than saved: it is a way of looking at something, not a
+    /// preference about the app.
+    @State private var byExercise = false
+    @State private var order = LogSessions.Order.newestFirst
+    /// The ids of the sessions or exercises whose rows are folded away.
+    @State private var collapsed: Set<String> = []
     @State private var from = Calendar.current.date(byAdding: .month, value: -1,
                                                     to: Date()) ?? Date()
     @State private var to = Date()
@@ -43,6 +50,21 @@ struct MacLogsView: View {
                              exerciseNames: exerciseNames,
                              from: limitDates ? from : nil,
                              to: limitDates ? to : nil)
+    }
+
+    private var histories: [LogSessions.ExerciseHistory] {
+        LogSessions.ordered(LogSessions.byExercise(sessions, exerciseNames: exerciseNames),
+                            by: order)
+    }
+
+    private var orderedSessions: [LogSessions.Session] {
+        LogSessions.ordered(sessions, by: order)
+    }
+
+    private func isCollapsed(_ id: String) -> Bool { collapsed.contains(id) }
+
+    private func toggleCollapsed(_ id: String) {
+        if collapsed.contains(id) { collapsed.remove(id) } else { collapsed.insert(id) }
     }
 
     private var isFiltering: Bool {
@@ -78,6 +100,25 @@ struct MacLogsView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         HStack(spacing: 8) {
+                            Picker("", selection: $byExercise) {
+                                Text("By workout").tag(false)
+                                Text("By exercise").tag(true)
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .fixedSize()
+                            .onChange(of: byExercise) { _, _ in collapsed.removeAll() }
+
+                            Divider().frame(height: 16)
+
+                            Button(allCollapsed ? "Expand all" : "Collapse all") {
+                                if allCollapsed { collapsed.removeAll() }
+                                else { collapsed = Set(allGroupIds) }
+                            }
+                            .buttonStyle(.link)
+
+                            Divider().frame(height: 16)
+
                             Toggle("Dates", isOn: $limitDates)
                             if limitDates {
                                 DatePicker("from", selection: $from,
@@ -163,25 +204,142 @@ struct MacLogsView: View {
         }
     }
 
+    private var allGroupIds: [String] {
+        byExercise ? histories.map(\.id) : orderedSessions.map(\.id)
+    }
+
+    private var allCollapsed: Bool {
+        let ids = allGroupIds
+        return !ids.isEmpty && ids.allSatisfy { collapsed.contains($0) }
+    }
+
+    /// Clickable column titles. The one in use says which way it is sorted,
+    /// and clicking it again turns it round.
+    private var headings: some View {
+        HStack(spacing: 16) {
+            heading(byExercise ? "Exercise" : "Workout", active: !order.isByDate) {
+                order = order.clickingName()
+            }
+            .frame(width: 232, alignment: .leading)
+
+            heading(byExercise ? "Last logged" : "Date", active: order.isByDate) {
+                order = order.clickingDate()
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+    }
+
+    private func heading(_ title: String, active: Bool,
+                         _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Text(title)
+                    .foregroundStyle(active ? .primary : .secondary)
+                if active {
+                    Image(systemName: order == .newestFirst || order == .nameZA
+                          ? "chevron.down" : "chevron.up")
+                        .font(.caption2)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Sort by \(title.lowercased())")
+    }
+
+    /// The +/− in the left margin. A disclosure triangle would be the macOS
+    /// idiom, but these are section headers in a plain List rather than an
+    /// outline, and a button is what can actually be put there.
+    private func foldButton(_ id: String) -> some View {
+        Button {
+            toggleCollapsed(id)
+        } label: {
+            Image(systemName: isCollapsed(id) ? "plus.square" : "minus.square")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(isCollapsed(id) ? "Show the exercises" : "Hide the exercises")
+    }
+
     @ViewBuilder private var list: some View {
         if sessions.isEmpty {
             ContentUnavailableView("Nothing matches",
                                    systemImage: "line.3.horizontal.decrease.circle",
                                    description: Text(emptyDescription))
         } else {
-            List {
-                ForEach(sessions) { session in
-                    Section {
+            VStack(spacing: 0) {
+                headings
+                Divider()
+                if byExercise { exerciseList } else { workoutList }
+            }
+        }
+    }
+
+    private var workoutList: some View {
+        List {
+            ForEach(orderedSessions) { session in
+                Section {
+                    if !isCollapsed(session.id) {
                         ForEach(session.logs) { log in
                             row(log)
                         }
-                    } header: {
-                        HStack {
-                            Text(session.workoutName.isEmpty ? "Workout" : session.workoutName)
-                                .font(.headline).foregroundStyle(.blue)
-                            Spacer()
-                            Text(session.date.formatted(date: .abbreviated, time: .shortened))
+                    }
+                } header: {
+                    HStack(spacing: 6) {
+                        foldButton(session.id)
+                        Text(session.workoutName.isEmpty ? "Workout" : session.workoutName)
+                            .font(.headline).foregroundStyle(.blue)
+                        Spacer()
+                        Text(session.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.subheadline).foregroundStyle(.blue)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The same logs, gathered by exercise. Collapsed, an exercise says when
+    /// it was last done and where; opened, it lists every time.
+    private var exerciseList: some View {
+        List {
+            ForEach(histories) { history in
+                Section {
+                    if !isCollapsed(history.id) {
+                        ForEach(history.entries) { entry in
+                            HStack(alignment: .top, spacing: 16) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(entry.date.formatted(date: .abbreviated,
+                                                              time: .shortened))
+                                    Text(entry.workoutName.isEmpty ? "Workout"
+                                                                   : entry.workoutName)
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                .frame(width: 200, alignment: .leading)
+                                if let result = aerobicResult(for: entry.log) {
+                                    aerobicLine(result)
+                                } else {
+                                    sets(entry.log)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                } header: {
+                    HStack(spacing: 6) {
+                        foldButton(history.id)
+                        Text(history.name.isEmpty ? "(deleted exercise)" : history.name)
+                            .font(.headline).foregroundStyle(.blue)
+                        Spacer()
+                        if let last = history.mostRecent {
+                            Text(last.date.formatted(date: .abbreviated, time: .shortened))
                                 .font(.subheadline).foregroundStyle(.blue)
+                            if !last.workoutName.isEmpty {
+                                Text("· \(last.workoutName)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
