@@ -42,7 +42,45 @@ enum WatchHealthAccess {
            let age = Calendar.current.dateComponents([.year], from: date, to: Date()).year {
             maximum = HeartRateZones.estimatedMaximum(forAge: age)
         }
+        // The user's OWN zones first, which is the only way the band can agree
+        // with the Workout app: Health returns whichever configuration is
+        // active there, the system's automatic ones or boundaries the user set
+        // by hand. Everything below this point is the fallback.
+        if let preferred = await preferredZones(from: store,
+                                                resting: resting, maximum: maximum) {
+            return preferred
+        }
         return HeartRateZones(restingHeartRate: resting, maximumHeartRate: maximum)
+    }
+
+    /// Apple's own zone boundaries, when this OS and this Health database have
+    /// them.
+    ///
+    /// `zones` comes back as the five bands themselves. What this type keeps
+    /// is the four thresholds BETWEEN them, which are the minimums of zones
+    /// two upwards — zone one has no minimum and the top zone has no maximum,
+    /// which is why the thresholds are read from the bottom edges rather than
+    /// the top ones.
+    static func preferredZones(from store: HKHealthStore,
+                               resting: Int, maximum: Int) async -> HeartRateZones? {
+        guard #available(watchOS 27.0, iOS 27.0, *),
+              let heartRate = HKQuantityType.quantityType(forIdentifier: .heartRate)
+        else { return nil }
+        guard let configuration =
+                try? await store.preferredWorkoutZoneConfiguration(for: heartRate)
+        else { return nil }
+
+        let unit = HKUnit.count().unitDivided(by: .minute())
+        let thresholds = configuration.zones
+            .sorted { $0.index < $1.index }
+            .dropFirst()                       // zone 1 has no bottom edge
+            .compactMap { $0.minimum?.doubleValue(for: unit) }
+            .map { Int($0.rounded()) }
+
+        return HeartRateZones(boundaries: thresholds,
+                              restingHeartRate: resting,
+                              maximumHeartRate: maximum,
+                              source: .healthKit)
     }
 
     static func mostRecentQuantity(_ type: HKQuantityType,

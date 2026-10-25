@@ -8,19 +8,21 @@ import Foundation
 //
 // THIS IS A STAND-IN, and the seam is the point of it.
 //
-// It was expected that OS 27 would hand over the real thing. It did not.
-// Checked against the installed watchOS 27.0 SDK: the only zone API there is
-// `HKLiveWorkoutBuilderDelegate.workoutBuilder(_:didUpdateWorkoutZone:)`,
-// and the `HKLiveWorkoutZoneUpdate` it passes carries one property — the
-// timestamp of the last processed sample. It says that A zone changed. It does
-// not say which zone, where the boundaries are, or what the user configured.
-// There is no `preferredWorkoutZoneConfiguration` anywhere in the SDK.
+// From OS 27 HealthKit hands over the real thing, and the app asks for it:
+// `HKHealthStore.preferredWorkoutZoneConfiguration(for:)` returns the very
+// configuration the Workout app is using — the system's automatic zones, or
+// the boundaries the user set by hand in Health, whichever is active. When
+// that answers, these zones ARE Apple's and `source` says `.healthKit`.
 //
-// So this still computes zones the way Apple documents its automatic ones,
-// from heart rate reserve, and they will NOT agree with the Workout app for
-// anyone whose zones were measured from their own history or set by hand.
-// A user who wants them to agree has to be able to type their own boundaries;
-// nothing else can close the gap.
+// The arithmetic below is the fallback, for an older OS and for the case
+// where Health has no configuration to give. It follows Apple's documented
+// automatic zones, from heart rate reserve, and will not agree exactly with a
+// Watch whose maximum was measured from the user's own history — which is
+// exactly why reading the real one matters.
+//
+// (A note here once claimed this API did not exist, on the strength of a
+// search through HealthKit's Objective-C headers. It is declared in the Swift
+// interface, which that search never looked at. Grep the .swiftinterface too.)
 //
 // Expect the numbers to be close but not identical to what the Watch shows:
 // Apple uses a *measured* maximum from your history, which no API exposes, and
@@ -89,6 +91,27 @@ struct HeartRateZones: Equatable {
         self.boundaries = Self.reserveFractions.map {
             Int((Double(resting) + reserve * $0).rounded())
         }
+    }
+
+    /// Boundaries taken verbatim, for zones that came from Health rather than
+    /// being worked out here.
+    ///
+    /// Nothing is recomputed: these are the numbers the Workout app is using,
+    /// and the whole point is that the band agrees with the wrist. Resting and
+    /// maximum are carried only so the rest of the type has something to
+    /// report; they take no part in deciding a zone.
+    init?(boundaries: [Int], restingHeartRate: Int, maximumHeartRate: Int,
+          source: ZoneSource) {
+        // Five zones, so four thresholds. Health could in principle describe
+        // some other number, and a band drawn for five would then be a lie —
+        // better to fall back to the estimate than to show the wrong shape.
+        guard boundaries.count == Self.zoneCount - 1,
+              boundaries == boundaries.sorted(),
+              Set(boundaries).count == boundaries.count else { return nil }
+        self.boundaries = boundaries
+        self.restingHeartRate = restingHeartRate
+        self.maximumHeartRate = maximumHeartRate
+        self.source = source
     }
 
     /// Which zone a heart rate falls in: always 1...5.
