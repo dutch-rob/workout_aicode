@@ -47,6 +47,7 @@ struct MuscleBodyPicker: View {
             // for it in the label column instead moved every label up, which
             // was a lot of disturbance for one button.
             figure(isBack: false, labels: Self.frontLabels)
+                .frame(maxWidth: Self.naturalWidth(of: .front, height: height))
                 .overlay(alignment: .bottomLeading) {
                     if let aerobic {
                         AerobicFilterButton(isOn: aerobic)
@@ -60,6 +61,7 @@ struct MuscleBodyPicker: View {
                 }
             viewCaptions
             figure(isBack: true, labels: Self.backLabels)
+                .frame(maxWidth: Self.naturalWidth(of: .back, height: height))
             labelColumn(Self.backLabels, trailing: false)
         }
         // The taller the frame the bigger the bodies. On the phone the row of
@@ -278,6 +280,26 @@ struct MuscleBodyPicker: View {
     }
 
     /// The rectangle the figure occupies inside `size`, preserving its aspect.
+    /// How wide a figure actually needs to be, which is decided by the height.
+    ///
+    /// A figure is drawn inside a `GeometryReader`, and a GeometryReader takes
+    /// all the width it is offered. `drawnRect` then CENTRES the artwork in
+    /// that box, so every extra point of window width became half a point of
+    /// blank space on each side of each figure — and the two inner halves of
+    /// that blank, meeting in the middle, read as the two bodies drifting
+    /// apart as the window widened. The arrows between them went with it.
+    ///
+    /// Capping each figure at the width its own height implies keeps the
+    /// diagram together: the figures, the captions and the arrows stay one
+    /// picture, and the extra width goes to the label columns on the outside,
+    /// where the labels are aligned towards the figures and so stay put.
+    ///
+    /// `maxWidth` rather than `width`, so a window too narrow for the natural
+    /// size squeezes the figures instead of overflowing.
+    private static func naturalWidth(of figure: FigureGeometry, height: CGFloat) -> CGFloat {
+        height * figure.aspect
+    }
+
     private static func drawnRect(in size: CGSize, aspect: CGFloat) -> CGRect {
         let height = min(size.height, size.width / aspect)
         let width = height * aspect
