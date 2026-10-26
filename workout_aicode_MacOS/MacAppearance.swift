@@ -86,79 +86,27 @@ extension View {
 #if DEBUG
 // MARK: - Sizing itself for a screenshot
 
-/// Puts the window at a known place and size for a capture run.
+/// Finds the app's own window, sizes it, and reports its id.
 ///
-/// So that taking screenshots needs ONE permission instead of two. Driving the
-/// window from a script means System Events, which means Accessibility, which
-/// is a second grant to a second app and a second trip through System
-/// Settings — for the sole purpose of setting a rectangle the app can set
-/// itself.
+/// Through `NSApp.windows` rather than through a view's `window` property.
+/// The first attempt hung an NSViewRepresentable in the background of the
+/// root view and waited for `view.window` to become non-nil — which it does
+/// for an ordinary launch and, for reasons that were not worth any more
+/// bisecting, never did when the app opened on a seeded in-memory store. The
+/// view was built (its `makeNSView` ran) and simply never joined a window.
 ///
-/// The autosave name is deliberately NOT set here: a screenshot run must not
-/// overwrite the window size the user actually chose.
-struct ScreenshotFrame: NSViewRepresentable {
-    let origin: CGPoint
-    let size: CGSize
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        Self.whenAttached(to: view) { window in
-            window.setContentSize(size)
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            // Its own window id, written where the script can read it.
-            //
-            // The first attempt positioned the window and captured that
-            // rectangle of the SCREEN, which was wrong twice over. AppKit
-            // measures from the bottom-left and `screencapture -R` from the
-            // top-left, so the window and the capture were at opposite ends of
-            // the display — the result was a picture of the desktop with
-            // somebody's browser in it. And a region shot takes whatever
-            // happens to be there, which for screenshots of an app is both
-            // useless and a way to photograph a private window by accident.
-            //
-            // `screencapture -l<id>` takes the window and nothing else: no
-            // desktop, no coordinates to get wrong, nothing behind it.
-            if let path = ScreenshotMode.windowIdPath {
-                try? "\(window.windowNumber)".write(toFile: path, atomically: true,
-                                                    encoding: .utf8)
-            }
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    /// Runs `body` once the view actually has a window, rather than once.
-    ///
-    /// A single hop to the main queue is not enough and the screenshots said
-    /// so: five of eight screens never reported a window, while the two
-    /// lightest did. `makeNSView` is called while the hierarchy is still being
-    /// put together, so `view.window` is often nil on the next turn of the run
-    /// loop — and the heavier a screen is to build, the more reliably nil it
-    /// is. Asking once and giving up silently turned that into "the app never
-    /// reported a window", which looked like a permissions problem and was
-    /// nothing of the sort.
-    private static func whenAttached(to view: NSView, _ body: @escaping (NSWindow) -> Void) {
-        func attempt(_ remaining: Int) {
-            if let window = view.window {
-                body(window)
-            } else if remaining > 0 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    attempt(remaining - 1)
-                }
-            }
-        }
-        // Ten seconds of trying. A window that has not appeared by then is not
-        // going to.
-        DispatchQueue.main.async { attempt(100) }
-    }
-}
-
+/// AppKit knows what windows the app has regardless of how SwiftUI arrived at
+/// them, so this asks AppKit.
 enum ScreenshotMode {
-    /// Unused now that the window reports its id — kept at zero so nothing
-    /// depends on a position again.
-    static let origin = CGPoint.zero
+    /// `-SRWShot <width>x<height>`
+    static var size: CGSize? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "-SRWShot"), i + 1 < args.count else { return nil }
+        let parts = args[i + 1].lowercased().split(separator: "x")
+        guard parts.count == 2, let w = Double(parts[0]), let h = Double(parts[1]),
+              w > 200, h > 200 else { return nil }
+        return CGSize(width: w, height: h)
+    }
 
     /// `-SRWShotId <path>` — where to write the window id for the script.
     static var windowIdPath: String? {
@@ -167,13 +115,29 @@ enum ScreenshotMode {
         return args[i + 1]
     }
 
-    static var size: CGSize? {
-        let args = CommandLine.arguments
-        guard let i = args.firstIndex(of: "-SRWShot"), i + 1 < args.count else { return nil }
-        let parts = args[i + 1].lowercased().split(separator: "x")
-        guard parts.count == 2, let w = Double(parts[0]), let h = Double(parts[1]),
-              w > 200, h > 200 else { return nil }
-        return CGSize(width: w, height: h)
+    /// Starts watching for the window. Safe to call before the run loop runs.
+    static func beginIfAsked() {
+        guard windowIdPath != nil || size != nil else { return }
+        let size = self.size
+        var elapsed = 0.0
+        Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { timer in
+            elapsed += 0.25
+            // A real window with content, not a panel or an offscreen shell.
+            guard let window = NSApp.windows.first(where: {
+                $0.isVisible && $0.contentView != nil && $0.frame.width > 200
+            }) else {
+                if elapsed > 30 { timer.invalidate() }
+                return
+            }
+            timer.invalidate()
+            if let size { window.setContentSize(size) }
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            if let path = windowIdPath {
+                try? "\(window.windowNumber)".write(toFile: path, atomically: true,
+                                                    encoding: .utf8)
+            }
+        }
     }
 }
 #endif

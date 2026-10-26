@@ -15,6 +15,19 @@ import SwiftData
 // Apple. Reaching for the live store would mean somebody's real training, and
 // their workout names, in a public listing.
 
+// NOT IN USE, AND THE REASON IS WORTH WRITING DOWN.
+//
+// Passing -SRWDemo stops the app creating a window at all: NSApp.windows stays
+// empty for ever, ContentView's body is never evaluated, nothing is logged and
+// nothing crashes. Bisected a long way without finding it — not the in-memory
+// store (a temp file does it too), not the migration plan, not the seeding
+// itself (skipping it entirely still does it), not the timing (deferring it a
+// second still does it), not the argument name (a bare token does it too) —
+// and the very same store configuration works fine when the flag is off.
+//
+// The screenshot script therefore does not pass it, and captures the app with
+// whatever data it really has. Left here rather than deleted: the sample data
+// matches the iPhone's, and whatever this is will be worth finding.
 enum MacDemoData {
     static var isEnabled: Bool { CommandLine.arguments.contains("-SRWDemo") }
 
@@ -64,12 +77,14 @@ enum MacDemoData {
         let upper = define(upperBody)
         let lower = define(legDay)
 
+
         let upperWorkout = WorkoutDef(name: "Upper body",
                                       exerciseOrder: upper.map(\.0.id), sortIndex: 0)
         let legWorkout = WorkoutDef(name: "Leg day",
                                     exerciseOrder: lower.map(\.0.id), sortIndex: 1)
         context.insert(upperWorkout)
         context.insert(legWorkout)
+
 
         // Eight weeks, alternating, every third day — enough history for the
         // trend lines to have something to say and for the logs screen to
@@ -109,6 +124,7 @@ enum MacDemoData {
         // screenshot: this data was written in the unit being read.
         UserDefaults.standard.set(unit.rawValue, forKey: WeightHistory.statedUnitKey)
         try? context.save()
+
     }
 }
 #endif

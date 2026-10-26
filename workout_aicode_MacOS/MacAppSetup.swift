@@ -42,6 +42,15 @@ final class MacAppSetup: ObservableObject {
         UserDefaults.standard.set(on, forKey: MacSyncKey.enabled)
     }
 
+    #if DEBUG
+    /// Sample data for a screenshot run, once the window is up.
+    private func seedForScreenshotsIfAsked() {
+        guard MacDemoData.isEnabled else { return }
+        let container = self.container
+        DispatchQueue.main.async { MacDemoData.seed(into: ModelContext(container)) }
+    }
+    #endif
+
     /// Where a local-only store lives, when someone chooses one.
     static let localStoreURL: URL = {
         FileManager.default
@@ -54,21 +63,21 @@ final class MacAppSetup: ObservableObject {
             WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
             AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self
         ]
-        #if DEBUG
-        // A screenshot run never touches the real store — see MacDemoData.
-        if MacDemoData.isEnabled {
-            let demo = try! ModelContainer(
-                for: Schema(models),
-                configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-            container = demo
-            MacDemoData.seed(into: demo.mainContext)
-            return
-        }
-        #endif
-
-        let configuration = Self.syncEnabled
+        // A screenshot run gets a throwaway store of its own and never
+        // touches the real one — see MacDemoData. It is built through exactly
+        // the same path as any other store: an early return with its own
+        // container left the app with no window at all, for reasons that were
+        // never worth the hours spent bisecting them.
+        var configuration = Self.syncEnabled
             ? ModelConfiguration(cloudKitDatabase: .automatic)
             : ModelConfiguration(url: Self.localStoreURL, cloudKitDatabase: .none)
+        #if DEBUG
+        if MacDemoData.isEnabled {
+            let url = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("srw-shots-\(UUID().uuidString).sqlite")
+            configuration = ModelConfiguration(url: url, cloudKitDatabase: .none)
+        }
+        #endif
 
         // Same migration plan as the phone, because it is the same database.
         // A Mac opening the shared store with a different idea of the schema is
@@ -77,6 +86,9 @@ final class MacAppSetup: ObservableObject {
             container = try ModelContainer(for: Schema(models),
                                            migrationPlan: WorkoutMigrationPlan.self,
                                            configurations: configuration)
+            #if DEBUG
+            seedForScreenshotsIfAsked()
+            #endif
             return
         } catch {
             print("[Mac] store failed with the migration plan: \(error)")

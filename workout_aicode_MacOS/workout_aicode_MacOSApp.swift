@@ -4,6 +4,12 @@ import SwiftData
 @main
 struct workout_aicode_MacOSApp: App {
     @StateObject private var setup = MacAppSetup()
+
+    init() {
+        #if DEBUG
+        ScreenshotMode.beginIfAsked()
+        #endif
+    }
     @AppStorage(MacAppearanceKey.textSize) private var textSize = MacTextSize.default.rawValue
 
     private var size: MacTextSize { MacTextSize(rawValue: textSize) ?? .default }
@@ -14,7 +20,7 @@ struct workout_aicode_MacOSApp: App {
                 .environmentObject(setup)
                 .modelContainer(setup.container)
                 .dynamicTypeSize(size.dynamicTypeSize)
-                .modifier(WindowFrameBehaviour())
+                .remembersItsFrameUnlessCapturing()
         }
         .defaultSize(width: 1000, height: 680)
         .commands {
@@ -48,19 +54,16 @@ struct workout_aicode_MacOSApp: App {
     }
 }
 
-/// A screenshot run sizes the window itself; everything else remembers the
-/// size the user left it at. Never both: a capture must not overwrite what
-/// somebody actually chose.
-private struct WindowFrameBehaviour: ViewModifier {
-    func body(content: Content) -> some View {
+extension View {
+    /// A capture must not overwrite the window size somebody actually chose,
+    /// so the autosave name is left off entirely on a screenshot run.
+    func remembersItsFrameUnlessCapturing() -> some View {
         #if DEBUG
-        if let size = ScreenshotMode.size {
-            content.background(ScreenshotFrame(origin: ScreenshotMode.origin, size: size))
-        } else {
-            content.remembersItsFrame()
+        return Group {
+            if ScreenshotMode.size == nil { self.remembersItsFrame() } else { self }
         }
         #else
-        content.remembersItsFrame()
+        return remembersItsFrame()
         #endif
     }
 }
