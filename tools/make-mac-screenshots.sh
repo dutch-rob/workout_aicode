@@ -41,6 +41,10 @@ HEIGHT="${SIZE##*x}"
 SCREENS="${SCREENS:-workouts exercises logs graphs progress importExport settings info}"
 
 mkdir -p "$OUT"
+# Clear what is there first. A capture left behind by an earlier run looks
+# exactly like one this run made — which is how a picture of a desktop,
+# taken before the window-id fix, survived two runs and nearly went to Apple.
+rm -f "$OUT"/*.png
 IDFILE="$(mktemp -t srw-window-id)"
 trap 'rm -f "$IDFILE"' EXIT
 
@@ -123,10 +127,19 @@ shoot() {
     waited=$((waited + 1))
   done
   if [ ! -s "$IDFILE" ]; then
-    echo "  the app never reported a window for $screen" >&2
+    echo "  the app never reported a window for $screen (it may still be building)" >&2
     return 1
   fi
   sleep 2   # its data and first layout
+
+  # Bring it to the front immediately before the shutter. macOS draws an
+  # unfocused window greyed — grey title, grey selection, washed-out
+  # controls — and one capture came out that way while another did not, which
+  # is activation losing a race rather than failing. `open -a` asks
+  # LaunchServices to front the running app and needs no permission; asking
+  # System Events would have meant Accessibility again.
+  open -a "$APP" >/dev/null 2>&1
+  sleep 1
 
   # The window itself. A region shot takes whatever happens to be on screen
   # at those coordinates — the first attempt photographed a browser — and

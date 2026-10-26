@@ -102,8 +102,7 @@ struct ScreenshotFrame: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
+        Self.whenAttached(to: view) { window in
             window.setContentSize(size)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -129,6 +128,31 @@ struct ScreenshotFrame: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
+
+    /// Runs `body` once the view actually has a window, rather than once.
+    ///
+    /// A single hop to the main queue is not enough and the screenshots said
+    /// so: five of eight screens never reported a window, while the two
+    /// lightest did. `makeNSView` is called while the hierarchy is still being
+    /// put together, so `view.window` is often nil on the next turn of the run
+    /// loop — and the heavier a screen is to build, the more reliably nil it
+    /// is. Asking once and giving up silently turned that into "the app never
+    /// reported a window", which looked like a permissions problem and was
+    /// nothing of the sort.
+    private static func whenAttached(to view: NSView, _ body: @escaping (NSWindow) -> Void) {
+        func attempt(_ remaining: Int) {
+            if let window = view.window {
+                body(window)
+            } else if remaining > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    attempt(remaining - 1)
+                }
+            }
+        }
+        // Ten seconds of trying. A window that has not appeared by then is not
+        // going to.
+        DispatchQueue.main.async { attempt(100) }
+    }
 }
 
 enum ScreenshotMode {
