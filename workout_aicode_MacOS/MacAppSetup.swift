@@ -64,10 +64,9 @@ final class MacAppSetup: ObservableObject {
             AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self
         ]
         // A screenshot run gets a throwaway store of its own and never
-        // touches the real one — see MacDemoData. It is built through exactly
-        // the same path as any other store: an early return with its own
-        // container left the app with no window at all, for reasons that were
-        // never worth the hours spent bisecting them.
+        // touches the real one — see MacDemoData. It goes through the same
+        // path as any other store, which keeps a capture honest about what
+        // the app does on launch.
         var configuration = Self.syncEnabled
             ? ModelConfiguration(cloudKitDatabase: .automatic)
             : ModelConfiguration(url: Self.localStoreURL, cloudKitDatabase: .none)

@@ -15,19 +15,14 @@ import SwiftData
 // Apple. Reaching for the live store would mean somebody's real training, and
 // their workout names, in a public listing.
 
-// NOT IN USE, AND THE REASON IS WORTH WRITING DOWN.
-//
-// Passing -SRWDemo stops the app creating a window at all: NSApp.windows stays
-// empty for ever, ContentView's body is never evaluated, nothing is logged and
-// nothing crashes. Bisected a long way without finding it — not the in-memory
-// store (a temp file does it too), not the migration plan, not the seeding
-// itself (skipping it entirely still does it), not the timing (deferring it a
-// second still does it), not the argument name (a bare token does it too) —
-// and the very same store configuration works fine when the flag is off.
-//
-// The screenshot script therefore does not pass it, and captures the app with
-// whatever data it really has. Left here rather than deleted: the sample data
-// matches the iPhone's, and whatever this is will be worth finding.
+// The screenshot script passes "-SRWDemo 1" and this runs. The value is
+// never read, and it still has to be there: see the long note in
+// tools/make-mac-screenshots.sh. A bare "-SRWDemo" makes NSUserDefaults
+// swallow the next flag as its value and strand that flag's value as a bare
+// word, which AppKit reads as a file to open — and an app launched to open a
+// file gets no window at all. The app then runs and seeds in silence with
+// nothing on screen, which is exactly how this sample data got blamed, and
+// switched off, for a fault that had nothing to do with it.
 enum MacDemoData {
     static var isEnabled: Bool { CommandLine.arguments.contains("-SRWDemo") }
 
