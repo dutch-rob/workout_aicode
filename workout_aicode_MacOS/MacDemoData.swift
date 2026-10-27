@@ -54,6 +54,17 @@ enum MacDemoData {
         ("Calf raise",    3, 20, 150,  5,  70, [15, 12, 12], .calves),
     ]
 
+    /// A repeatable 0..<100 from two numbers, so the wobble below is the
+    /// same every run: two screenshot runs must make the same pictures, and
+    /// a random one would quietly change the graphs between them.
+    private static func wobble(_ a: Int, _ b: Int) -> Int {
+        var x = UInt64(bitPattern: Int64(a &* 73856093 ^ b &* 19349663 &+ 83492791))
+        x ^= x >> 33
+        x = x &* 0xff51afd7ed558ccd
+        x ^= x >> 29
+        return Int(x % 100)
+    }
+
     @MainActor
     static func seed(into context: ModelContext) {
         let unit = WeightUnit.current
@@ -99,15 +110,24 @@ enum MacDemoData {
 
             for (index, pair) in plan.enumerated() {
                 let (definition, row) = pair
-                let weight = row.weight + steps * row.step
-                let grams = Array(repeating: unit.grams(from: weight), count: row.reps.count)
+                // Held and backed-off weeks, and reps that move about. Adding
+                // the same step every fourth session drew nine flawless
+                // straight lines on the graphs screen, which looks like a
+                // formula rather than like training. Still only ever lands on
+                // a weight the machine has.
+                let held = wobble(session, index) < 22 ? 1.0 : 0.0
+                let weight = row.weight + max(0, steps - held) * row.step
+                let reps = row.reps.enumerated().map { set, count in
+                    max(6, count + wobble(session &* 31 &+ set, index) % 3 - 1)
+                }
+                let grams = Array(repeating: unit.grams(from: weight), count: reps.count)
                 let log = WorkoutLog(date: calendar.date(byAdding: .minute,
                                                          value: index * 6, to: at) ?? at,
                                      workoutId: workout.id,
                                      exerciseId: definition.id,
                                      weights: Array(repeating: Int(weight),
-                                                    count: row.reps.count),
-                                     reps: row.reps)
+                                                    count: reps.count),
+                                     reps: reps)
                 context.insert(log)
                 context.insert(LogWeights(logId: log.id, grams: grams))
             }

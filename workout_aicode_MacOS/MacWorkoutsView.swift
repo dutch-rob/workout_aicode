@@ -39,6 +39,9 @@ struct MacWorkoutsView: View {
             .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The seeded store arrives after the first draw, so this watches for
+        // it rather than running once.
+        .onChange(of: living.count, initial: true) { _, _ in showOneForAScreenshot() }
         .navigationTitle("Workouts")
         .toolbar {
             ToolbarItem {
@@ -46,6 +49,15 @@ struct MacWorkoutsView: View {
                     .help("Add a workout")
             }
         }
+    }
+
+    /// A capture of "No workout selected" shows the app doing nothing, with
+    /// two thirds of the window empty. Screenshot runs open the first one.
+    private func showOneForAScreenshot() {
+        #if DEBUG
+        guard MacDemoData.isEnabled, selection == nil else { return }
+        selection = living.first?.id
+        #endif
     }
 
     @ViewBuilder private var list: some View {

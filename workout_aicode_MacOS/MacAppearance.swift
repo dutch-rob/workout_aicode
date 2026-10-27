@@ -172,6 +172,10 @@ enum ScreenshotMode {
                                height: size.height - measured.height)
             if abs(offBy.width) < 0.5 && abs(offBy.height) < 0.5 {
                 settled += 1
+                // Whatever SwiftUI focused on opening draws a blue ring, and
+                // a focused number field draws its value selected. Neither
+                // belongs in a picture of the app sitting still.
+                window.makeFirstResponder(nil)
             } else {
                 settled = 0
                 var frame = window.frame

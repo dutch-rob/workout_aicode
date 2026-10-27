@@ -136,7 +136,8 @@ struct MacInfoView: View {
                 Label(item.title, systemImage: item.icon).tag(item)
             }
             .listStyle(.sidebar)
-            .frame(width: 210)
+            // Wide enough for "Your data and privacy", which was clipped.
+            .frame(width: 250)
 
             Divider()
 
