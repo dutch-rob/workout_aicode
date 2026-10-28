@@ -37,6 +37,9 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
     /// Which zone the current rate falls in, 1...5. Nil only before the first
     /// reading arrives — every actual heart rate is in a zone.
     @Published private(set) var currentZone: Int?
+    /// The boundaries in use and where they came from, for the line under
+    /// the band — see `HeartRateZones.summary`.
+    @Published private(set) var zoneSummary = ""
     /// Where inside that zone, 0...1, for the marker under the band.
     @Published private(set) var currentZoneFraction: Double = 0
     /// The exercise this session belongs to, for the screen to name.
@@ -118,6 +121,7 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
         await requestAuthorization()
 
         zones = await currentZones()
+        zoneSummary = zones.summary
         tally = ZoneTally(zones: zones)
         currentHeartRate = nil
         currentZone = nil
@@ -222,6 +226,7 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
         tick = Date()
         let zones = HeartRateZones()
         let zone = zones.zone(for: bpm)
+        zoneSummary = zones.summary
         currentHeartRate = bpm
         currentZone = zone
         currentZoneFraction = zones.fraction(forBeatsPerMinute: bpm, inZone: zone)

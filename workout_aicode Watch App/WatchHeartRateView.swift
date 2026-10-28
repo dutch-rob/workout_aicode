@@ -131,6 +131,17 @@ struct WatchHeartRateView: View {
             WatchHeartRateBand(zone: workout.currentZone,
                                fraction: workout.currentZoneFraction)
 
+            // Which boundaries these bands are drawn from, and whose they
+            // are. Without it there was no way to tell Apple's zones read
+            // wrongly from the app's own estimate used silently.
+            if !workout.zoneSummary.isEmpty {
+                Text(workout.zoneSummary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
             if let bpm = workout.currentHeartRate {
                 HStack(spacing: 4) {
                     Text("\(bpm)")

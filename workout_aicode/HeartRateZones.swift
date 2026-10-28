@@ -114,6 +114,19 @@ struct HeartRateZones: Equatable {
         self.source = source
     }
 
+    /// The boundaries and where they came from, small enough to sit under the
+    /// band: "Apple zones · 91·115·139·164".
+    ///
+    /// On screen because there was no way to tell the two apart. A ride
+    /// showed zone 4 at 128 bpm for someone whose own zone 3 runs 115–138,
+    /// and nothing in the app said whether it was reading Apple's boundaries
+    /// and getting them wrong, or quietly using its own. The numbers it is
+    /// actually using answer that in one glance.
+    var summary: String {
+        let origin = source == .healthKit ? "Apple zones" : "estimated zones"
+        return origin + " · " + boundaries.map(String.init).joined(separator: "·")
+    }
+
     /// Which zone a heart rate falls in: always 1...5.
     ///
     /// Never optional. Every heart rate is in a zone — a slow one is in zone 1,
