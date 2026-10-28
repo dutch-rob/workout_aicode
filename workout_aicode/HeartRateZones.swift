@@ -14,11 +14,15 @@ import Foundation
 // the boundaries the user set by hand in Health, whichever is active. When
 // that answers, these zones ARE Apple's and `source` says `.healthKit`.
 //
-// The arithmetic below is the fallback, for an older OS and for the case
-// where Health has no configuration to give. It follows Apple's documented
-// automatic zones, from heart rate reserve, and will not agree exactly with a
-// Watch whose maximum was measured from the user's own history — which is
-// exactly why reading the real one matters.
+// Two fallbacks, in order. The user's OWN boundaries, typed on the phone, if
+// they gave any — which is the only way to agree with the wrist on a Watch
+// that cannot run OS 27. Then the arithmetic below, which follows Apple's
+// documented automatic zones from heart rate reserve and will not agree
+// exactly with a Watch whose maximum was measured from the user's own
+// history — which is exactly why reading the real one matters.
+//
+// The OS 27 requirement is not academic: it needs a Series 9 or later, so a
+// Series 6 stays on 26.x for good and never gets the first route at all.
 //
 // (A note here once claimed this API did not exist, on the strength of a
 // search through HealthKit's Objective-C headers. It is declared in the Swift
@@ -34,10 +38,24 @@ import Foundation
 enum ZoneSource: String {
     /// Worked out here from resting and maximum heart rate.
     case estimated
-    /// Read from HealthKit — the same zones the Workout app uses. Not reachable
-    /// until the app is built against the OS 27 SDK; the case exists so the
-    /// call sites are already written for it.
+    /// Read from HealthKit — the same zones the Workout app uses. Needs
+    /// watchOS 27, and so a Series 9 or later.
     case healthKit
+    /// Typed in by the user, on the phone, and sent to the Watch. For the
+    /// Watch that cannot have `healthKit`: copying the four numbers out of
+    /// Health by hand is tedious but exact, which beats an estimate that is
+    /// neither.
+    case manual
+
+    /// How to name these on screen, where the whole point is to be honest
+    /// about which of the three is in play.
+    var label: String {
+        switch self {
+        case .estimated: return "estimated zones"
+        case .healthKit: return "Apple zones"
+        case .manual:    return "your zones"
+        }
+    }
 }
 
 struct HeartRateZones: Equatable {
@@ -123,8 +141,7 @@ struct HeartRateZones: Equatable {
     /// and getting them wrong, or quietly using its own. The numbers it is
     /// actually using answer that in one glance.
     var summary: String {
-        let origin = source == .healthKit ? "Apple zones" : "estimated zones"
-        return origin + " · " + boundaries.map(String.init).joined(separator: "·")
+        source.label + " · " + boundaries.map(String.init).joined(separator: "·")
     }
 
     /// Which zone a heart rate falls in: always 1...5.

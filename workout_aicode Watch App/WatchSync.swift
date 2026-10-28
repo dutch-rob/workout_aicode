@@ -402,10 +402,49 @@ enum WatchWorkoutMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// What the Watch last told the phone about itself.
+///
+/// Only its OS version so far, and only so the phone can stop offering a
+/// setting that device cannot use. It travels on the `requestSync` message,
+/// which the Watch app sends every time it opens, and is kept on the phone
+/// because the phone is where the settings screen is.
+///
+/// Zero when no Watch has ever said — a Watch app that predates this, or one
+/// that has not been opened since. The settings screen then offers the manual
+/// boundaries, on the grounds that a setting nobody needs is a smaller harm
+/// than one the user cannot reach.
+enum WatchSystemVersion {
+
+    static let key = "watchOSMajorVersion"
+
+    /// The version from which HealthKit will hand over the user's own zone
+    /// configuration — see `HeartRateZones`.
+    static let firstWithZoneConfiguration = 27
+
+    static var major: Int {
+        UserDefaults.standard.integer(forKey: key)
+    }
+
+    static var readsAppleZones: Bool {
+        major >= firstWithZoneConfiguration
+    }
+
+    /// "26.6" → 26. Anything unreadable is nothing heard.
+    static func majorVersion(of text: String) -> Int {
+        Int(text.split(separator: ".").first ?? "") ?? 0
+    }
+
+    static func record(_ text: String) {
+        let major = majorVersion(of: text)
+        guard major > 0 else { return }
+        UserDefaults.standard.set(major, forKey: key)
+    }
+}
+
 /// Settings that live on the phone but are acted on by the Watch.
 ///
-/// All three are sent with the definitions, like the rest-timer switch, and
-/// all three have a default that an older Watch build — or one that has not
+/// All of them are sent with the definitions, like the rest-timer switch, and
+/// all of them have a default that an older Watch build — or one that has not
 /// heard from the phone yet — falls back to.
 enum WatchPreferences {
 
@@ -426,6 +465,15 @@ enum WatchPreferences {
     /// One row of wheels with a reps/weights toggle, or both rows at once.
     static let wheelRowsKey = "watchWheelRows"
     static let defaultWheelRows = 1
+
+    /// The four heart rate zone thresholds, typed in by hand, comma-separated
+    /// — "91,115,139,164". Empty for "work them out", which is the default.
+    ///
+    /// Stored as text rather than as numbers because `@AppStorage` on the
+    /// settings screen holds one value, and four separate keys for four
+    /// numbers that are only ever meaningful together is four chances to be
+    /// half-saved.
+    static let zoneBoundariesKey = "watchZoneBoundaries"
 
     static var zoneTint: Double {
         let stored = UserDefaults.standard.object(forKey: zoneTintKey) as? Double
@@ -453,6 +501,38 @@ enum WatchPreferences {
     static func clampRows(_ value: Int) -> Int {
         value == 2 ? 2 : 1
     }
+
+    /// The thresholds as stored, or an empty array when there are none worth
+    /// using. Nothing half-valid ever comes out of here: a set of four that
+    /// does not make sense is no better than none, and a band drawn from it
+    /// would be a confident lie.
+    static var zoneBoundaries: [Int] {
+        parseBoundaries(UserDefaults.standard.string(forKey: zoneBoundariesKey) ?? "")
+    }
+
+    static func parseBoundaries(_ text: String) -> [Int] {
+        let numbers = text.split(separator: ",").compactMap {
+            Int($0.trimmingCharacters(in: .whitespaces))
+        }
+        return validBoundaries(numbers)
+    }
+
+    static func boundariesText(_ values: [Int]) -> String {
+        validBoundaries(values).map(String.init).joined(separator: ",")
+    }
+
+    /// Four thresholds, in order, no two the same, all of them a heart rate a
+    /// person could actually have. Anything else is []. The same shape
+    /// `HeartRateZones.init(boundaries:)` insists on, checked here too so the
+    /// settings screen can say whether what has been typed will be used.
+    static func validBoundaries(_ values: [Int]) -> [Int] {
+        guard values.count == HeartRateZones.zoneCount - 1,
+              values == values.sorted(),
+              Set(values).count == values.count,
+              values.allSatisfy({ $0 >= 40 && $0 <= 240 })
+        else { return [] }
+        return values
+    }
 }
 
 struct SyncPayload: Codable {
@@ -474,6 +554,10 @@ struct SyncPayload: Codable {
     var zoneTint: Double
     var restTaps: Int
     var wheelRows: Int
+    /// The four zone thresholds the user typed in, or empty for none. Only of
+    /// use to a Watch that cannot read them from Health itself — see
+    /// `WatchSystemVersion`.
+    var zoneBoundaries: [Int]
     /// Which unit to WRITE weights in. The numbers themselves are grams, as
     /// they are on the phone; this is only how they are read out.
     var weightUnit: String
@@ -491,7 +575,7 @@ struct SyncPayload: Codable {
 
     enum CodingKeys: String, CodingKey {
         case workouts, exercises, lastEntries, healthSharingEnabled, restTimerEnabled
-        case watchWorkoutMode, zoneTint, restTaps, wheelRows, weightUnit
+        case watchWorkoutMode, zoneTint, restTaps, wheelRows, zoneBoundaries, weightUnit
         case scheduleEnabled, scheduleDaysAhead, scheduleCount
     }
     init(workouts: [SyncWorkout], exercises: [SyncExercise],
@@ -501,6 +585,7 @@ struct SyncPayload: Codable {
          zoneTint: Double = WatchPreferences.defaultZoneTint,
          restTaps: Int = WatchPreferences.defaultRestTaps,
          wheelRows: Int = WatchPreferences.defaultWheelRows,
+         zoneBoundaries: [Int] = [],
          weightUnit: String = WeightUnit.regionDefault.rawValue,
          scheduleEnabled: Bool = false,
          scheduleDaysAhead: Int = WorkoutSchedule.defaultDaysAhead,
@@ -514,6 +599,7 @@ struct SyncPayload: Codable {
         self.zoneTint = zoneTint
         self.restTaps = restTaps
         self.wheelRows = wheelRows
+        self.zoneBoundaries = WatchPreferences.validBoundaries(zoneBoundaries)
         self.weightUnit = weightUnit
         self.scheduleEnabled = scheduleEnabled
         self.scheduleDaysAhead = scheduleDaysAhead
@@ -534,6 +620,10 @@ struct SyncPayload: Codable {
             try c.decodeIfPresent(Int.self, forKey: .restTaps) ?? WatchPreferences.defaultRestTaps)
         wheelRows = WatchPreferences.clampRows(
             try c.decodeIfPresent(Int.self, forKey: .wheelRows) ?? WatchPreferences.defaultWheelRows)
+        // Absent from a phone that predates them, and then the Watch works
+        // the zones out for itself exactly as it always did.
+        zoneBoundaries = WatchPreferences.validBoundaries(
+            try c.decodeIfPresent([Int].self, forKey: .zoneBoundaries) ?? [])
         weightUnit = try c.decodeIfPresent(String.self, forKey: .weightUnit)
             ?? WeightUnit.regionDefault.rawValue
         // Absent from a phone that predates scheduling, and then the Watch

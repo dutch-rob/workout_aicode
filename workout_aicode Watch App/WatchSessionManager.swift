@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import WatchConnectivity
+import WatchKit
 
 // MARK: - WatchSessionManager
 //
@@ -143,6 +144,13 @@ final class WatchSessionManager: NSObject, ObservableObject {
             zoneTint = payload.zoneTint
             restTaps = payload.restTaps
             wheelRows = payload.wheelRows
+            // Kept on this device, not just in memory: the zones are wanted at
+            // the start of a workout, which is exactly when the phone may be
+            // in a locker and unreachable. Under the same key the phone uses,
+            // so `WatchPreferences.zoneBoundaries` answers on either side.
+            UserDefaults.standard.set(
+                WatchPreferences.boundariesText(payload.zoneBoundaries),
+                forKey: WatchPreferences.zoneBoundariesKey)
             weightUnit = WeightUnit(rawValue: payload.weightUnit) ?? .regionDefault
             scheduleEnabled = payload.scheduleEnabled
             scheduleDaysAhead = payload.scheduleDaysAhead
@@ -168,7 +176,13 @@ final class WatchSessionManager: NSObject, ObservableObject {
     func requestSync() {
         let session = WCSession.default
         guard session.activationState == .activated, session.isReachable else { return }
-        session.sendMessage(["type": "requestSync"], replyHandler: { [weak self] reply in
+        // The phone is told which watchOS this is, every time: it is the only
+        // device with a settings screen, and what it can usefully offer there
+        // depends on whether this Watch can read zones out of Health at all.
+        // See `WatchSystemVersion`.
+        session.sendMessage(["type": "requestSync",
+                             "watchOS": WKInterfaceDevice.current().systemVersion],
+                            replyHandler: { [weak self] reply in
             DispatchQueue.main.async { self?.ingest(context: reply) }
         }, errorHandler: nil)
     }

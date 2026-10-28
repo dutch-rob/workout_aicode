@@ -320,6 +320,7 @@ final class AppStore: ObservableObject {
             zoneTint: WatchPreferences.zoneTint,
             restTaps: WatchPreferences.restTaps,
             wheelRows: WatchPreferences.wheelRows,
+            zoneBoundaries: WatchPreferences.zoneBoundaries,
             weightUnit: WeightUnit.current.rawValue,
             scheduleEnabled: WorkoutSchedule.isEnabled,
             scheduleDaysAhead: WorkoutSchedule.daysAhead,

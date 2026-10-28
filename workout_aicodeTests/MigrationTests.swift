@@ -2203,6 +2203,70 @@ struct LogListTests {
 @Test func zonesSayWhereTheyCameFrom() {
     // Nothing should ever claim to be the Workout app's own zones until it is.
     #expect(HeartRateZones().source == .estimated)
+    #expect(HeartRateZones().summary.hasPrefix("estimated zones"))
+
+    let typed = HeartRateZones(boundaries: [91, 115, 139, 164],
+                               restingHeartRate: 52, maximumHeartRate: 185,
+                               source: .manual)
+    #expect(typed?.summary == "your zones · 91·115·139·164")
+}
+
+// MARK: - Zone boundaries typed in by hand
+//
+// For a Watch too old for watchOS 27, which cannot read them from Health —
+// see HeartRateZones and WatchSystemVersion.
+
+@Test func aWatchVersionIsReadDownToItsMajorNumber() {
+    #expect(WatchSystemVersion.majorVersion(of: "26.6") == 26)
+    #expect(WatchSystemVersion.majorVersion(of: "27.0.1") == 27)
+    #expect(WatchSystemVersion.majorVersion(of: "11") == 11)
+    // Nothing heard is zero, not a guess.
+    #expect(WatchSystemVersion.majorVersion(of: "") == 0)
+    #expect(WatchSystemVersion.majorVersion(of: "beta") == 0)
+}
+
+@Test func onlyACompleteSetOfBoundariesIsEverUsed() {
+    #expect(WatchPreferences.validBoundaries([91, 115, 139, 164]) == [91, 115, 139, 164])
+    // Four, in order, none repeated, all of them a heart rate — anything else
+    // is no better than none at all.
+    #expect(WatchPreferences.validBoundaries([91, 115, 139]).isEmpty)
+    #expect(WatchPreferences.validBoundaries([91, 115, 139, 164, 180]).isEmpty)
+    #expect(WatchPreferences.validBoundaries([91, 139, 115, 164]).isEmpty)
+    #expect(WatchPreferences.validBoundaries([91, 115, 115, 164]).isEmpty)
+    #expect(WatchPreferences.validBoundaries([9, 115, 139, 164]).isEmpty)
+    #expect(WatchPreferences.validBoundaries([91, 115, 139, 900]).isEmpty)
+    #expect(WatchPreferences.validBoundaries([]).isEmpty)
+}
+
+@Test func boundariesSurviveBeingWrittenAndReadBack() {
+    let text = WatchPreferences.boundariesText([91, 115, 139, 164])
+    #expect(text == "91,115,139,164")
+    #expect(WatchPreferences.parseBoundaries(text) == [91, 115, 139, 164])
+    // Spaces from a paste, and a half-filled set from a settings screen in
+    // the middle of being typed.
+    #expect(WatchPreferences.parseBoundaries(" 91 , 115 ,139, 164") == [91, 115, 139, 164])
+    #expect(WatchPreferences.parseBoundaries("91,115").isEmpty)
+    #expect(WatchPreferences.parseBoundaries("").isEmpty)
+}
+
+@Test func theWatchIsSentTheBoundariesAndAPhoneWithoutThemSendsNone() throws {
+    let payload = SyncPayload(workouts: [], exercises: [], lastEntries: [:],
+                              zoneBoundaries: [91, 115, 139, 164])
+    let data = try JSONEncoder().encode(payload)
+    let back = try JSONDecoder().decode(SyncPayload.self, from: data)
+    #expect(back.zoneBoundaries == [91, 115, 139, 164])
+
+    // A phone that predates the setting sends no key at all, and the Watch
+    // then works the zones out for itself exactly as it always did.
+    var json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    json.removeValue(forKey: "zoneBoundaries")
+    let older = try JSONSerialization.data(withJSONObject: json)
+    #expect(try JSONDecoder().decode(SyncPayload.self, from: older).zoneBoundaries.isEmpty)
+
+    // Nonsense never reaches the wrist, whichever end it came from.
+    let bad = SyncPayload(workouts: [], exercises: [], lastEntries: [:],
+                          zoneBoundaries: [164, 139])
+    #expect(bad.zoneBoundaries.isEmpty)
 }
 
 // MARK: - Time in zone

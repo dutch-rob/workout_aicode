@@ -2613,6 +2613,54 @@ struct SettingsView: View {
     private var watchRecordsWorkouts: Bool {
         showsWatchSettings && watchWorkoutMode == .appleWorkout
     }
+    // MARK: Heart rate zones, typed in by hand
+    //
+    // Only offered to a Watch that cannot read them from Health itself. From
+    // watchOS 27 HealthKit hands over whatever the Workout app is using, which
+    // is better than anything that can be typed here — but that needs a Series
+    // 9 or later, so an older Watch would otherwise be stuck with an estimate
+    // from resting rate and age that quietly disagrees with the wrist.
+    //
+    // A Watch that has never said which watchOS it is on (`watchOSMajor` is 0)
+    // is offered the fields: a setting nobody needs is a smaller harm than one
+    // the user cannot reach.
+
+    private var enteredZoneNumbers: [Int] {
+        zoneText.compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    private var typedZoneBoundaries: [Int] {
+        WatchPreferences.validBoundaries(enteredZoneNumbers)
+    }
+
+    private var zoneTextIsEmpty: Bool {
+        zoneText.allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
+    private var zoneBoundariesState: String {
+        if zoneTextIsEmpty {
+            return "Not set. Your Watch works the zones out from your resting heart rate and your age."
+        }
+        if typedZoneBoundaries.isEmpty {
+            return "All four are needed, each higher than the one before. Until then your Watch works them out."
+        }
+        return "In use on your Watch."
+    }
+
+    private var zoneBoundariesExplanation: String {
+        let known = handoff.watchOSMajor
+        let watch = known > 0
+            ? "your Watch is on watchOS \(known), which has no way to hand them over"
+            : "an older Watch has no way to hand them over"
+        return "From watchOS 27 the app reads your zones straight out of Health, the same ones the Workout app uses — but that needs an Apple Watch Series 9 or later, and " + watch + ". Open Health › Browse › Heart › Heart Rate Zones and copy in the four numbers each zone starts at. Zone 1 has no bottom and zone 5 no top, so there are four, not six."
+    }
+
+    private func loadZoneText() {
+        let stored = WatchPreferences.parseBoundaries(zoneBoundariesText)
+        guard !stored.isEmpty else { return }
+        zoneText = stored.map(String.init)
+    }
+
     private var bodyWeightSource: BodyWeightSource {
         BodyWeightSource(rawValue: bodyWeightSourceRaw) ?? .health
     }
@@ -2639,6 +2687,11 @@ struct SettingsView: View {
     @AppStorage(WatchPreferences.zoneTintKey) private var zoneTint = WatchPreferences.defaultZoneTint
     @AppStorage(WatchPreferences.restTapsKey) private var restTaps = WatchPreferences.defaultRestTaps
     @AppStorage(WatchPreferences.wheelRowsKey) private var wheelRows = WatchPreferences.defaultWheelRows
+    @AppStorage(WatchPreferences.zoneBoundariesKey) private var zoneBoundariesText = ""
+    /// The four thresholds as typed, so a half-finished set of numbers can sit
+    /// on screen without being saved or acted on. Only a complete, valid four
+    /// reaches `zoneBoundariesText` and the Watch.
+    @State private var zoneText: [String] = ["", "", "", ""]
 
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("healthSharingEnabled") private var healthSharingEnabled = false
@@ -2798,6 +2851,44 @@ struct SettingsView: View {
                     Text("Heart rate band")
                 } footer: {
                     Text("How strongly the zone colours are drawn behind the exercise name on your Watch. The band above shows all five at the strength you pick, with a name over them as it will appear — strong enough to read at a glance, light enough to read the name through.")
+                }
+            }
+
+            if showsWatchSettings {
+                Section {
+                    if handoff.watchOSMajor >= WatchSystemVersion.firstWithZoneConfiguration {
+                        LabeledContent("Zone boundaries") {
+                            Text("From Apple Health").foregroundStyle(.secondary)
+                        }
+                    } else {
+                        ForEach(0..<4, id: \.self) { index in
+                            LabeledContent {
+                                TextField("—", text: $zoneText[index])
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                            } label: {
+                                Text("Zone \(index + 2) starts at")
+                            }
+                        }
+                        Text(zoneBoundariesState)
+                            .font(.footnote)
+                            .foregroundStyle(typedZoneBoundaries.isEmpty && !zoneTextIsEmpty
+                                             ? .orange : .secondary)
+                        if !zoneTextIsEmpty {
+                            Button("Work them out for me instead") {
+                                zoneText = ["", "", "", ""]
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Heart rate zones")
+                } footer: {
+                    Text(zoneBoundariesExplanation)
+                }
+                .onAppear { loadZoneText() }
+                .onChange(of: zoneText) { _, _ in
+                    zoneBoundariesText = WatchPreferences.boundariesText(enteredZoneNumbers)
+                    store.reloadAll()
                 }
             }
 

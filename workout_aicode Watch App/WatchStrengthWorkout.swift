@@ -50,6 +50,17 @@ enum WatchHealthAccess {
                                                 resting: resting, maximum: maximum) {
             return preferred
         }
+        // Next best: the four numbers the user copied out of Health by hand on
+        // the phone. Tedious to enter and exactly right, which is the better
+        // half of that bargain on a Watch too old for watchOS 27.
+        let typed = WatchPreferences.zoneBoundaries
+        if !typed.isEmpty,
+           let manual = HeartRateZones(boundaries: typed,
+                                       restingHeartRate: resting,
+                                       maximumHeartRate: maximum,
+                                       source: .manual) {
+            return manual
+        }
         return HeartRateZones(restingHeartRate: resting, maximumHeartRate: maximum)
     }
 

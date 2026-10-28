@@ -51,6 +51,11 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     /// redraw when a Watch is paired or unpaired while the app is open.
     @Published private(set) var watchAppInstalled = false
 
+    /// Major watchOS version of the paired Watch, 0 until one has said. See
+    /// `WatchSystemVersion`; published so the settings screen follows it
+    /// without being reopened.
+    @Published private(set) var watchOSMajor = WatchSystemVersion.major
+
     /// Role of THIS device in the shared workout session.
     @Published private(set) var role: HandoverRole = .none
     /// When set, ContentView should navigate into this workout. Cleared on consume.
@@ -742,7 +747,13 @@ extension PhoneSessionManager: WCSessionDelegate {
                  replyHandler: @escaping ([String: Any]) -> Void) {
         switch message["type"] as? String {
         case "requestSync":
+            let watchOS = message["watchOS"] as? String
             DispatchQueue.main.async {
+                // Which watchOS is on the wrist, for the settings screen — see
+                // `WatchSystemVersion`. Absent from a Watch build that predates
+                // this, and then nothing is recorded.
+                if let watchOS { WatchSystemVersion.record(watchOS) }
+                self.watchOSMajor = WatchSystemVersion.major
                 self.pushDefinitions()
                 replyHandler(["payload": self.store?.watchSyncPayloadData() ?? Data()])
             }
