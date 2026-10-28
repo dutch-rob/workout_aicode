@@ -20,9 +20,9 @@ import UserNotifications
 //
 // It runs on the log screen, as on the phone: no screen of its own. The Watch
 // used to cover everything with a countdown three seconds after the last turn
-// of the crown; now the screen greys the moment a set ends and the grey drains
-// across the whole rest, with the seconds beside the exercise name. The
-// wheels stay usable underneath, and turning one starts the rest again.
+// of the crown; now a white bar fills the left edge of the screen the moment a
+// set ends and drains away across the rest, with the seconds over the wheels.
+// The wheels stay usable throughout, and turning one starts the rest again.
 //
 // Why a scheduled notification and not only a Timer: during a rest the wrist
 // is down and the app is not frontmost, so a running timer in a suspended app
@@ -48,18 +48,18 @@ final class WatchRestTimer: ObservableObject {
     @Published private(set) var endsAt: Date?
     @Published private(set) var exerciseName = ""
     @Published private(set) var tick = Date()
-    /// The whole length of this rest, which the grey drains across.
+    /// The whole length of this rest, which the bar drains across.
     @Published private(set) var totalSeconds = 0
 
     var isRunning: Bool { endsAt != nil }
 
-    /// How much of the screen is grey: 1 as the rest starts, 0 when it is over.
+    /// How much of the bar is filled: 1 as the rest starts, 0 when it is over.
     ///
     /// Computed from the clock, deliberately, rather than being a piece of
     /// animated state. The crown reports every value it passes through, so one
     /// spin of the wheel is dozens of "set finished" events; restarting an
     /// animation on each of them once left SwiftUI blending dozens of
-    /// overlapping animations of the same property, and the grey crawled down
+    /// overlapping animations of the same property, and the fill crawled down
     /// the screen for far longer than intended. A number derived from two
     /// dates cannot pile up.
     var restFill: CGFloat {
@@ -96,10 +96,10 @@ final class WatchRestTimer: ObservableObject {
     /// once per value the crown passes through, and again the instant a finger
     /// lets go — which is the exact moment the wheel is about to decelerate
     /// onto a number. Doing the work there meant four published changes, a
-    /// redraw of the grey and a notification reschedule on the main thread
+    /// redraw of the bar and a notification reschedule on the main thread
     /// while the picker was settling, and the wheel came to rest one click
     /// past where it was let go. Reported from three sets of one real workout,
-    /// and only ever while a rest was running — which is when the grey and the
+    /// and only ever while a rest was running — which is when the bar and the
     /// counter are on screen to be redrawn.
     ///
     /// A third of a second later nobody can tell the difference, and the
@@ -186,12 +186,12 @@ final class WatchRestTimer: ObservableObject {
         WatchRestHaptics.strong(taps: WatchSessionManager.shared.restTaps)
     }
 
-    /// How often the clock is re-read, taken from how fast the grey actually
+    /// How often the clock is re-read, taken from how fast the bar actually
     /// moves: one tick per point of travel, and no faster.
     ///
     /// This was a flat fifteen times a second. A ninety-second rest drains
     /// about two points a second down a watch screen, so fourteen of every
-    /// fifteen of those ticks redrew the grey in the same place — all on the
+    /// fifteen of those ticks redrew the bar in the same place — all on the
     /// main thread, some of it inside the few hundred milliseconds a wheel
     /// spends settling onto a number.
     ///
@@ -300,25 +300,41 @@ enum WatchRestHaptics {
 
 // MARK: - The rest on screen
 
-/// Greys the screen the instant a rest starts and drains the grey down across
-/// the whole rest, as the phone does.
+/// The rest as a bar down the left edge of the screen, full at the start and
+/// drained away by the end.
 ///
-/// White rather than grey: the watch UI is on black, where a grey wash is
-/// almost invisible and a light one reads as exactly the same gesture.
+/// It used to be a wash of white at 22% over the WHOLE screen, including the
+/// wheels. A bar in the margin instead, for two reasons:
+///
+///   • The wheels. Every tick of the rest redraws this, and a full-screen
+///     overlay has to be composited back over the pickers each time —
+///     including during the few hundred milliseconds a wheel spends settling
+///     onto a number, which is exactly when a wheel was coming to rest one
+///     click past where it was let go. A bar of `barWidth` points touches
+///     about three per cent of the screen and none of the wheels.
+///   • It can be read. At 22% over black a wash is faint by design, because a
+///     stronger one would sit on top of the numbers. Nothing is under this, so
+///     it is plain white.
+///
+/// The log screen keeps `barWidth` clear at its leading edge, so the bar never
+/// crosses a label, a wheel or a button — see `WatchLogExerciseView.mainContent`.
 struct WatchRestDrain: ViewModifier {
     @ObservedObject private var timer = WatchRestTimer.shared
+
+    /// How wide the bar is, and how much room the log screen leaves for it.
+    static let barWidth: CGFloat = 5
 
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .bottom) {
                 // Measured against the screen rather than the laid-out content:
-                // the buttons sit in their own safe-area strip, and a grey that
-                // stopped short of them looked like a rendering fault.
+                // the buttons sit in their own safe-area strip, and a bar that
+                // stopped short of them would read as the rest being over.
                 //
                 // A Canvas, not a Rectangle with an animated height, and that
                 // is the whole point of it: the crown changes the picker's
                 // selection inside an animated transaction, which SwiftUI
-                // applied to the grey's height too, so it slid up from nothing
+                // applied to the bar's height too, so it slid up from nothing
                 // before it began draining. A Canvas has no animatable
                 // geometry: the closure runs, the rectangle is where it is.
                 Canvas { context, size in
@@ -326,8 +342,8 @@ struct WatchRestDrain: ViewModifier {
                     guard height > 0 else { return }
                     context.fill(
                         Path(CGRect(x: 0, y: size.height - height,
-                                    width: size.width, height: height)),
-                        with: .color(.white.opacity(0.22)))
+                                    width: Self.barWidth, height: height)),
+                        with: .color(.white))
                 }
                 .allowsHitTesting(false)
                 .ignoresSafeArea()

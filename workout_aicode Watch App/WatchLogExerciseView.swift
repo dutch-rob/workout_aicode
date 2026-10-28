@@ -97,7 +97,7 @@ struct WatchLogExerciseView: View {
             }
             .onEnded { value in
                 guard isHorizontalDrag == true else { isHorizontalDrag = nil; return }
-                let width = WKInterfaceDevice.current().screenBounds.width
+                let width = pageWidth
                 let dx = value.translation.width
                 if dx <= -swipeThreshold {
                     settle(to: -width, landingOn: nextUnloggedIndex)
@@ -114,6 +114,18 @@ struct WatchLogExerciseView: View {
     /// Finish the swipe: glide the strip a full page, then make that page the
     /// current one and re-centre. Because the neighbour is already on screen the
     /// swap is invisible — no flash, no second animation.
+    /// Width of one page: the room this screen actually has, which is the
+    /// screen less its own padding. Taken from the screen rather than from a
+    /// GeometryReader for the same reason `stripHeight` is — see there.
+    private var pageWidth: CGFloat {
+        WKInterfaceDevice.current().screenBounds.width - leadingInset - 3
+    }
+
+    /// Room left at the leading edge for the rest's bar, plus the margin the
+    /// screen had anyway. Nothing is drawn in here, so the bar crosses no
+    /// label, wheel or button — see `WatchRestDrain`.
+    private var leadingInset: CGFloat { WatchRestDrain.barWidth + 3 }
+
     private func settle(to offset: CGFloat, landingOn index: Int) {
         withAnimation(.easeInOut(duration: 0.2)) { dragOffsetX = offset }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.21) {
@@ -124,7 +136,7 @@ struct WatchLogExerciseView: View {
     }
 
     private var swipeThreshold: CGFloat {
-        max(30, WKInterfaceDevice.current().screenBounds.width * 0.25)
+        max(30, pageWidth * 0.25)
     }
 
     // MARK: - Swipe pages
@@ -137,7 +149,7 @@ struct WatchLogExerciseView: View {
     // only built while an actual horizontal drag is in progress.
 
     private func swipePages(current: SyncExercise) -> some View {
-        let w = WKInterfaceDevice.current().screenBounds.width
+        let w = pageWidth
         return HStack(spacing: 0) {
             neighbourPage(index: prevUnloggedIndex).frame(width: w)
             currentPage(for: current).frame(width: w)
@@ -395,7 +407,9 @@ struct WatchLogExerciseView: View {
                 }
             }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.horizontal, 3)
+        // Asymmetric: the leading side also carries the rest's bar.
+        .padding(.leading, leadingInset)
+        .padding(.trailing, 3)
         .padding(.top, 6)
         // Enough room for button text descenders (the "g" in "log" was clipped).
         .padding(.bottom, 6)

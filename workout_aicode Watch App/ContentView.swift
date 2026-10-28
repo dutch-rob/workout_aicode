@@ -107,10 +107,10 @@ struct ContentView: View {
                                 onDismiss: { session.dismissPaused() })
             }
         }
-        // The rest, as a grey draining down whatever screen is up — the log
-        // screen, or the Paused screen while the phone rests. No screen of its
-        // own any more. The buzz at the end comes from a scheduled
-        // notification, not from this being on screen.
+        // The rest, as a bar draining down the left edge of whatever screen
+        // is up — the log screen, or the Paused screen while the phone rests.
+        // No screen of its own any more. The buzz at the end comes from a
+        // scheduled notification, not from this being on screen.
         .modifier(WatchRestDrain())
         // Asked after the workout screen has gone, as on the phone.
         .sheet(item: $session.justFinished) { finished in
