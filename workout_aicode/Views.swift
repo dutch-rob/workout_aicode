@@ -1666,11 +1666,17 @@ struct LogsListView: View {
         if logs.isEmpty {
             ContentUnavailableView("No logs yet", systemImage: "doc.text", description: Text("Start logging your workouts to see them here."))
         } else {
-            List(compactRows()) { row in
-                VStack(spacing: 2) {
-                    Rectangle()
-                        .fill(Color.secondary.opacity(1.0))
-                        .frame(height: row.isWorkout ? 3 : 1)
+            let rows = compactRows()
+            List(rows) { row in
+                VStack(spacing: 4) {
+                    // Every row carries the rule above it, except the first:
+                    // there the card's own top edge already does the job, and
+                    // a rule drawn flush against it read as a stray border.
+                    if row.id != rows.first?.id {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(1.0))
+                            .frame(height: row.isWorkout ? 3 : 1)
+                    }
                     HStack(alignment: .center, spacing: 8) {
                         Group {
                             if row.isWorkout {
@@ -1692,7 +1698,18 @@ struct LogsListView: View {
                     }
                 }
                 .listRowSeparator(.hidden)
+                // A row's own insets, because the standard ones left a blank
+                // line under every exercise: the two numbers rows are about
+                // 26pt each and the default padding added 34pt of nothing
+                // between one exercise and the next, which read as a third,
+                // empty row. The rule above each row is drawn here rather
+                // than by the list, so the top inset is the rule's own.
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 8, trailing: 20))
             }
+            // The grey above the first rule matched neither the grey beside
+            // the list nor anything else. With the 8pt the shell already puts
+            // under the tab picker, this makes it the same 20pt as the sides.
+            .contentMargins(.top, 12, for: .scrollContent)
         }
     }
 
