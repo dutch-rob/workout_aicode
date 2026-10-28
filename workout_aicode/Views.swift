@@ -50,6 +50,8 @@ struct EditWorkoutsView: View {
     @State private var workoutPendingDelete: WorkoutDef?
     @State private var editMode: EditMode = .inactive
     @State private var pendingNewWorkout: WorkoutDef? = nil
+    /// The workout waiting to be joined to one the user is about to pick.
+    @State private var mergeSource: WorkoutDef? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -109,6 +111,30 @@ struct EditWorkoutsView: View {
                                     showDeleteConfirm = true
                                 } label: { Label("Delete", systemImage: "trash") }
                             }
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                Button {
+                                    pendingNewWorkout = store.duplicateWorkout(workout)
+                                } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+                                    .tint(.blue)
+                                if store.workouts.count >= 2 {
+                                    Button { mergeSource = workout } label: {
+                                        Label("Merge", systemImage: "arrow.triangle.merge")
+                                    }
+                                    .tint(.indigo)
+                                }
+                            }
+                            // The same two on a long press, because a swipe
+                            // that only deletes is the one people learn.
+                            .contextMenu {
+                                Button {
+                                    pendingNewWorkout = store.duplicateWorkout(workout)
+                                } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+                                if store.workouts.count >= 2 {
+                                    Button { mergeSource = workout } label: {
+                                        Label("Merge with…", systemImage: "arrow.triangle.merge")
+                                    }
+                                }
+                            }
                         }
                         .onMove { indices, newOffset in
                             var newOrder = store.workouts
@@ -142,6 +168,25 @@ struct EditWorkoutsView: View {
             Button("Cancel", role: .cancel) { workoutPendingDelete = nil }
         } message: {
             Text("Are you sure you want to delete this workout?")
+        }
+        // Which workout to add on the end. Both originals are left alone, so
+        // there is nothing here to undo — the result is a third workout, and
+        // it opens for editing so the name can be changed straight away.
+        .confirmationDialog("Add which workout's exercises?",
+                            isPresented: Binding(get: { mergeSource != nil },
+                                                 set: { if !$0 { mergeSource = nil } }),
+                            titleVisibility: .visible) {
+            if let first = mergeSource {
+                ForEach(store.workouts.filter { $0.id != first.id }) { other in
+                    Button(other.name.isEmpty ? "(unnamed)" : other.name) {
+                        pendingNewWorkout = store.mergeWorkouts(first, other)
+                        mergeSource = nil
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { mergeSource = nil }
+        } message: {
+            Text("A new workout is made from \(mergeSource?.name ?? "this one") followed by the one you pick. Neither is changed.")
         }
     }
 }

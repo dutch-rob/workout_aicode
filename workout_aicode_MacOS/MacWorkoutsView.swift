@@ -81,6 +81,18 @@ struct MacWorkoutsView: View {
                         }
                     }
                     .tag(workout.id)
+                    .contextMenu {
+                        Button("Duplicate") { duplicate(workout) }
+                        if living.count >= 2 {
+                            Menu("Merge with") {
+                                ForEach(living.filter { $0.id != workout.id }) { other in
+                                    Button(other.name.isEmpty ? "(unnamed)" : other.name) {
+                                        merge(workout, other)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 .onDelete(perform: delete)
             }
@@ -90,6 +102,31 @@ struct MacWorkoutsView: View {
     private func create() {
         let workout = WorkoutDef(name: "New workout",
                                  sortIndex: (workouts.map(\.sortIndex).max() ?? 0) + 1)
+        context.insert(workout)
+        DraftMode.note(workout: workout.id, in: context)
+        try? context.save()
+        selection = workout.id
+    }
+
+    /// A copy under a new name, over the SAME exercises — see
+    /// WorkoutComposition for why they are not copied too.
+    private func duplicate(_ workout: WorkoutDef) {
+        add(WorkoutComposition.copy(
+            of: workout,
+            named: WorkoutComposition.copyName(for: workout, among: living),
+            among: living))
+    }
+
+    /// A third workout: this one's exercises, then the other's, with anything
+    /// in both appearing once. Neither original is touched.
+    private func merge(_ first: WorkoutDef, _ second: WorkoutDef) {
+        add(WorkoutComposition.merge(
+            first, second,
+            named: WorkoutComposition.mergedName(first, second, among: living),
+            among: living))
+    }
+
+    private func add(_ workout: WorkoutDef) {
         context.insert(workout)
         DraftMode.note(workout: workout.id, in: context)
         try? context.save()

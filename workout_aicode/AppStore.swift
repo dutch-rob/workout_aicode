@@ -91,6 +91,32 @@ final class AppStore: ObservableObject {
         reloadAll()
     }
 
+    /// A copy of a workout under a new name, listing the SAME exercises.
+    ///
+    /// Not copies of the exercises: see WorkoutComposition for why, and what
+    /// copying them would do to the history.
+    @discardableResult
+    func duplicateWorkout(_ workout: WorkoutDef) -> WorkoutDef {
+        let made = WorkoutComposition.copy(
+            of: workout,
+            named: WorkoutComposition.copyName(for: workout, among: workouts),
+            among: workouts)
+        saveWorkout(made)
+        return made
+    }
+
+    /// One workout holding the first's exercises and then the second's, with
+    /// anything in both appearing once. Neither original is touched.
+    @discardableResult
+    func mergeWorkouts(_ first: WorkoutDef, _ second: WorkoutDef) -> WorkoutDef {
+        let made = WorkoutComposition.merge(
+            first, second,
+            named: WorkoutComposition.mergedName(first, second, among: workouts),
+            among: workouts)
+        saveWorkout(made)
+        return made
+    }
+
     func reorderWorkouts(_ newOrder: [WorkoutDef]) {
         for (idx, workout) in newOrder.enumerated() {
             workout.sortIndex = idx
