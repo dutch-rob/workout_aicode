@@ -13,9 +13,20 @@ enum MacAppearanceKey {
 /// How large the app draws its text.
 ///
 /// macOS has no system-wide Dynamic Type the way iOS does, so the size is the
-/// app's own setting rather than something inherited. The cases are SwiftUI's,
-/// which means every text style scales together and nothing has to be
-/// hand-sized: a heading stays a heading.
+/// app's own setting rather than something inherited.
+///
+/// It used to be handed to `.dynamicTypeSize` at the root of both scenes,
+/// which compiles on a Mac and does NOTHING: rendered through `ImageRenderer`,
+/// the same `Text` measures 68×16 points at `.xSmall`, at `.xxLarge` and at
+/// `.accessibility3` alike, and `@ScaledMetric` is just as inert. The setting
+/// was there, it saved, and not a pixel moved — reported from a real Mac,
+/// after a restart, which is what sent this looking.
+///
+/// So the app scales its own text: each style is asked for as a system font
+/// at the point size macOS gives that style, times `scale`. Every style still
+/// moves together and nothing is hand-sized — a heading stays a heading.
+/// What does NOT move is the window chrome AppKit draws for itself: the
+/// titles, menus and toolbar.
 enum MacTextSize: String, CaseIterable, Identifiable {
     case small, medium, large, extraLarge
 
@@ -30,12 +41,13 @@ enum MacTextSize: String, CaseIterable, Identifiable {
         }
     }
 
-    var dynamicTypeSize: DynamicTypeSize {
+    /// Against `.medium`, which is what the app has always drawn at.
+    var scale: CGFloat {
         switch self {
-        case .small:      return .small
-        case .medium:     return .medium
-        case .large:      return .large
-        case .extraLarge: return .xxLarge
+        case .small:      return 0.85
+        case .medium:     return 1
+        case .large:      return 1.15
+        case .extraLarge: return 1.35
         }
     }
 
@@ -46,6 +58,88 @@ enum MacTextSize: String, CaseIterable, Identifiable {
     static var current: MacTextSize {
         MacTextSize(rawValue: UserDefaults.standard.string(forKey: MacAppearanceKey.textSize) ?? "")
             ?? .default
+    }
+}
+
+// MARK: - Text at the chosen size
+
+extension Font {
+    /// A text style at the app's chosen size.
+    ///
+    /// The point size is macOS's own for that style — 13 for the body, 11 for
+    /// a caption — so at `.medium` this is exactly the font the app drew
+    /// before there was a setting. Rounded to a whole point, because half a
+    /// point of difference is not a size anybody asked for and does cost
+    /// crispness.
+    static func mac(_ style: Font.TextStyle, _ size: MacTextSize) -> Font {
+        let base = NSFont.preferredFont(forTextStyle: style.nsTextStyle)
+        // Asked of the font rather than listed here, because asking for a
+        // system font at a size loses the weight the style carries and a
+        // headline that comes back at regular weight stops being one. On this
+        // Mac the headline is the only bold style; which ones are is macOS's
+        // business, not a table to keep in step with it.
+        let weight: Font.Weight =
+            base.fontDescriptor.symbolicTraits.contains(.bold) ? .bold : .regular
+        return .system(size: (base.pointSize * size.scale).rounded(), weight: weight)
+    }
+}
+
+private extension Font.TextStyle {
+    /// SwiftUI's styles are AppKit's under different names, give or take.
+    var nsTextStyle: NSFont.TextStyle {
+        switch self {
+        case .largeTitle:  return .largeTitle
+        case .title:       return .title1
+        case .title2:      return .title2
+        case .title3:      return .title3
+        case .headline:    return .headline
+        case .subheadline: return .subheadline
+        case .body:        return .body
+        case .callout:     return .callout
+        case .footnote:    return .footnote
+        case .caption:     return .caption1
+        case .caption2:    return .caption2
+        @unknown default:  return .body
+        }
+    }
+}
+
+private struct MacTextSizeKey: EnvironmentKey {
+    /// Read fresh rather than fixed, so a view that somehow sits outside both
+    /// scenes still draws at the chosen size instead of the default one.
+    static var defaultValue: MacTextSize { .current }
+}
+
+extension EnvironmentValues {
+    var macTextSize: MacTextSize {
+        get { self[MacTextSizeKey.self] }
+        set { self[MacTextSizeKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Put at the root of a scene: sets the default font for everything that
+    /// does not ask for a style of its own, and carries the size down to the
+    /// ones that do.
+    func macTextScaled(_ size: MacTextSize) -> some View {
+        environment(\.macTextSize, size)
+            .font(.mac(.body, size))
+    }
+
+    /// `.macFont(.caption)` where a plain SwiftUI app would say
+    /// `.font(.caption)`. The style is the same one; this is the hook that
+    /// lets the setting reach it.
+    func macFont(_ style: Font.TextStyle) -> some View {
+        modifier(MacFont(style: style))
+    }
+}
+
+private struct MacFont: ViewModifier {
+    @Environment(\.macTextSize) private var size
+    let style: Font.TextStyle
+
+    func body(content: Content) -> some View {
+        content.font(.mac(style, size))
     }
 }
 

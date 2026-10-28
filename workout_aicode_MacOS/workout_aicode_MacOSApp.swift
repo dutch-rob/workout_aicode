@@ -19,7 +19,7 @@ struct workout_aicode_MacOSApp: App {
             ContentView()
                 .environmentObject(setup)
                 .modelContainer(setup.container)
-                .dynamicTypeSize(size.dynamicTypeSize)
+                .macTextScaled(size)
                 .remembersItsFrameUnlessCapturing()
         }
         .defaultSize(width: 1000, height: 680)
@@ -48,7 +48,7 @@ struct workout_aicode_MacOSApp: App {
             MacSettingsView()
                 .environmentObject(setup)
                 .modelContainer(setup.container)
-                .dynamicTypeSize(size.dynamicTypeSize)
+                .macTextScaled(size)
                 .frame(minWidth: 480, minHeight: 420)
         }
     }

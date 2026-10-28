@@ -139,9 +139,9 @@ struct MacEditLogsView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Edit logs").font(.title3).bold()
+                Text("Edit logs").macFont(.title3).bold()
                 Text("Changes are draft changes until you say otherwise.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .macFont(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Label("Draft", systemImage: "pencil.and.outline")
@@ -155,7 +155,7 @@ struct MacEditLogsView: View {
     private var footer: some View {
         HStack {
             Text("\(rows.count) rows")
-                .font(.caption).foregroundStyle(.secondary)
+                .macFont(.caption).foregroundStyle(.secondary)
             Spacer()
             Button("Done") { finish() }
                 .keyboardShortcut(.defaultAction)
@@ -192,7 +192,7 @@ struct MacEditLogsView: View {
             }
             Text("").frame(width: 26)
         }
-        .font(.caption).bold()
+        .macFont(.caption).bold()
         .foregroundStyle(.secondary)
         .padding(.vertical, 6)
         .background(.regularMaterial)
@@ -213,7 +213,7 @@ struct MacEditLogsView: View {
                 // A ride has no sets. Showing empty weight boxes would invite
                 // someone to type a number into a row that has no use for one.
                 Text("aerobic · \(minutesSeconds(seconds))")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .macFont(.callout).foregroundStyle(.secondary)
                     .frame(width: CGFloat(setColumns) * 82, alignment: .leading)
             } else {
                 ForEach(0..<setColumns, id: \.self) { i in
@@ -305,7 +305,7 @@ struct MacEditLogsView: View {
             // two come to disagree.
             if let machine {
                 Text("machine \(WeightText.string(grams: machine, in: WeightUnit.current))")
-                    .font(.caption2)
+                    .macFont(.caption2)
                     .foregroundStyle(.secondary)
             }
         }

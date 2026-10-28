@@ -143,14 +143,14 @@ struct MacInfoView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text(topic.title).font(.title2).bold()
+                    Text(topic.title).macFont(.title2).bold()
                     ForEach(Array(topic.paragraphs.enumerated()), id: \.offset) { _, text in
                         Text(.init(text))
                     }
                     if topic == .theMacApp {
                         Divider()
                         Text("The full guide, including the Apple Watch and the rest timer, is on the iPhone under info.")
-                            .font(.footnote).foregroundStyle(.secondary)
+                            .macFont(.footnote).foregroundStyle(.secondary)
                         BuildStampView()
                     }
                     Spacer(minLength: 0)
@@ -171,7 +171,7 @@ struct MacInfoView: View {
 /// The Mac's own build stamp — same reasoning as the phone's and the Watch's.
 struct BuildStampView: View {
     var body: some View {
-        Text(summary).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
+        Text(summary).macFont(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
     }
 
     private var summary: String {

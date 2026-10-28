@@ -36,8 +36,8 @@ struct MacSettingsView: View {
             } header: {
                 Text("Appearance")
             } footer: {
-                Text("How large this app draws its text. A Mac has no system-wide setting for it the way an iPhone does, so it is the app's own — and screens differ enough that the same size is small on one and large on another. It applies here only; your iPhone and Watch are unaffected.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("How large this app draws its text. A Mac has no system-wide setting for it the way an iPhone does, so it is the app's own — and screens differ enough that the same size is small on one and large on another. It applies here only; your iPhone and Watch are unaffected. The menu bar, the window title and the toolbar are macOS's own and stay the size it draws them.")
+                    .macFont(.caption).foregroundStyle(.secondary)
             }
 
             Section {
@@ -54,7 +54,7 @@ struct MacSettingsView: View {
                     // unit, and nothing can be shown until somebody says what
                     // the numbers logged so far were in.
                     Text("The weights you have logged so far — what were they in?")
-                        .font(.callout).bold()
+                        .macFont(.callout).bold()
                     HStack {
                         ForEach(WeightUnit.allCases) { unit in
                             Button(unit == .kilograms ? "Kilograms" : "Pounds") {

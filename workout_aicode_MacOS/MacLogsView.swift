@@ -97,7 +97,7 @@ struct MacLogsView: View {
                             }
                             Spacer()
                             Text(countLine)
-                                .font(.caption).foregroundStyle(.secondary)
+                                .macFont(.caption).foregroundStyle(.secondary)
                         }
                         HStack(spacing: 8) {
                             Picker("", selection: $byExercise) {
@@ -134,7 +134,7 @@ struct MacLogsView: View {
                             }
                             Spacer()
                         }
-                        .font(.callout)
+                        .macFont(.callout)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -227,7 +227,7 @@ struct MacLogsView: View {
             }
             Spacer(minLength: 0)
         }
-        .font(.caption)
+        .macFont(.caption)
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
     }
@@ -241,7 +241,7 @@ struct MacLogsView: View {
                 if active {
                     Image(systemName: order == .newestFirst || order == .nameZA
                           ? "chevron.down" : "chevron.up")
-                        .font(.caption2)
+                        .macFont(.caption2)
                 }
             }
         }
@@ -290,10 +290,10 @@ struct MacLogsView: View {
                     HStack(spacing: 6) {
                         foldButton(session.id)
                         Text(session.workoutName.isEmpty ? "Workout" : session.workoutName)
-                            .font(.headline).foregroundStyle(.blue)
+                            .macFont(.headline).foregroundStyle(.blue)
                         Spacer()
                         Text(session.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.subheadline).foregroundStyle(.blue)
+                            .macFont(.subheadline).foregroundStyle(.blue)
                     }
                 }
             }
@@ -314,7 +314,7 @@ struct MacLogsView: View {
                                                               time: .shortened))
                                     Text(entry.workoutName.isEmpty ? "Workout"
                                                                    : entry.workoutName)
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .macFont(.caption).foregroundStyle(.secondary)
                                 }
                                 .frame(width: 200, alignment: .leading)
                                 if let result = aerobicResult(for: entry.log) {
@@ -331,14 +331,14 @@ struct MacLogsView: View {
                     HStack(spacing: 6) {
                         foldButton(history.id)
                         Text(history.name.isEmpty ? "(deleted exercise)" : history.name)
-                            .font(.headline).foregroundStyle(.blue)
+                            .macFont(.headline).foregroundStyle(.blue)
                         Spacer()
                         if let last = history.mostRecent {
                             Text(last.date.formatted(date: .abbreviated, time: .shortened))
-                                .font(.subheadline).foregroundStyle(.blue)
+                                .macFont(.subheadline).foregroundStyle(.blue)
                             if !last.workoutName.isEmpty {
                                 Text("· \(last.workoutName)")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .macFont(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -389,7 +389,7 @@ struct MacLogsView: View {
                                                                     previous: previousWeight,
                                                                     increment: incrementForLog))
                     Text("\(reps)")
-                        .font(.caption)
+                        .macFont(.caption)
                         .foregroundStyle(LogComparison.repsColour(current: reps,
                                                                   previous: previousReps,
                                                                   currentWeight: weight,
@@ -403,7 +403,7 @@ struct MacLogsView: View {
         // Said once at the head of the row rather than on every set.
         .overlay(alignment: .leading) {
             Text("w\nr")
-                .font(.caption2).foregroundStyle(.secondary)
+                .macFont(.caption2).foregroundStyle(.secondary)
                 .offset(x: -14)
         }
     }
@@ -433,7 +433,7 @@ struct MacLogsView: View {
                 Text("no heart rate").foregroundStyle(.secondary)
             }
         }
-        .font(.callout)
+        .macFont(.callout)
         .monospacedDigit()
     }
 

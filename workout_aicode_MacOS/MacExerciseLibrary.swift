@@ -110,7 +110,7 @@ struct MacTemplateRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
                 Text(name)
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+                Text(detail).macFont(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Button(action: add) { Image(systemName: "plus.circle") }

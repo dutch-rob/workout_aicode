@@ -53,7 +53,7 @@ struct MacGraphsView: View {
 
                     if !pending.isEmpty {
                         Text(pendingMessage(pending))
-                            .font(.footnote).foregroundStyle(.secondary)
+                            .macFont(.footnote).foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
                             .padding(.bottom, 20)
@@ -90,13 +90,13 @@ struct MacExerciseChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(stat.name).font(.headline)
+            Text(stat.name).macFont(.headline)
             HStack(spacing: 8) {
                 Text(formatTrend(stat.trendPerWeek))
-                    .font(.subheadline).bold()
+                    .macFont(.subheadline).bold()
                     .foregroundStyle(trendColor(stat.trendPerWeek))
                 Text("· \(stat.sessions.count) of \(stat.totalSessions) workouts")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .macFont(.caption).foregroundStyle(.secondary)
             }
 
             Chart {
@@ -223,7 +223,7 @@ struct MacProgressView: View {
 
                     Divider()
                     Text(footnote(stats))
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .macFont(.footnote).foregroundStyle(.secondary)
                         .padding(12)
                 }
             }

@@ -113,11 +113,11 @@ struct MacExercisesView: View {
                 Button("All groups") { sieve.filter = .all }
                     .disabled(sieve.filter == .all)
                 Text(showingLine)
-                    .font(.callout).foregroundStyle(.secondary)
+                    .macFont(.callout).foregroundStyle(.secondary)
             }
 
             Text("Click a muscle, or the heart, to show what works it. Click an exercise in the list to open it.")
-                .font(.footnote).foregroundStyle(.secondary)
+                .macFont(.footnote).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
 
@@ -228,7 +228,7 @@ struct MacExercisesView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
                 Text(subtitle(exercise))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .macFont(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             // Made during the draft in progress: marked so it is obvious what
@@ -390,7 +390,7 @@ struct MacExerciseForm: View {
                     Toggle("Subtracted from body weight", isOn: $exercise.subtractsFromBodyWeight)
                     if exercise.subtractsFromBodyWeight {
                         Text("For machines that take weight off you instead of adding it, such as an assisted chin-up. What is logged is what you lifted — your body weight less what you set on the machine. Your body weight is set on the iPhone.")
-                            .font(.footnote)
+                            .macFont(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -470,7 +470,7 @@ struct MacExerciseForm: View {
                     .foregroundStyle(blocked ? .secondary : .primary)
                 Spacer()
                 if isPrimary {
-                    Text("primary").font(.caption).foregroundStyle(.secondary)
+                    Text("primary").macFont(.caption).foregroundStyle(.secondary)
                 }
             }
             .contentShape(Rectangle())

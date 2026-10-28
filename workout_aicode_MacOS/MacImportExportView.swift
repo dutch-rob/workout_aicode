@@ -72,7 +72,7 @@ struct MacImportExportView: View {
 
     private var exportSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Export").font(.headline)
+            Text("Export").macFont(.headline)
             HStack(spacing: 10) {
                 Button("Export JSON…") { exportJSON() }
                     .disabled(logs.isEmpty && workouts.isEmpty && exercises.isEmpty)
@@ -80,7 +80,7 @@ struct MacImportExportView: View {
                     .disabled(logs.isEmpty)
             }
             Text("JSON holds everything — workouts, exercises, every logged set and the weights beside them — and is what **Import** reads back. The spreadsheet is one row per set, with the weight written in \(WeightUnit.current.label) and a column saying so.")
-                .font(.callout).foregroundStyle(.secondary)
+                .macFont(.callout).foregroundStyle(.secondary)
         }
     }
 
@@ -148,7 +148,7 @@ struct MacImportExportView: View {
 
     private var importSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Import").font(.headline)
+            Text("Import").macFont(.headline)
             HStack(spacing: 10) {
                 Button("Choose a file…") { importing = true }
                 if undo != nil {
@@ -160,7 +160,7 @@ struct MacImportExportView: View {
                 fileCard(chosen)
             } else {
                 Text("Pick a JSON file exported by this app, on any of your devices. Nothing changes until you say so: the file is read and described first.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .macFont(.callout).foregroundStyle(.secondary)
             }
         }
     }
@@ -168,22 +168,22 @@ struct MacImportExportView: View {
     private func fileCard(_ file: ChosenFile) -> some View {
         let p = file.preview
         return VStack(alignment: .leading, spacing: 8) {
-            Text(file.name).font(.headline)
+            Text(file.name).macFont(.headline)
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 3) {
                 line("Workouts", "\(p.workouts)", p.workouts - workouts.count)
                 line("Exercises", "\(p.exercises)", p.exercises - exercises.count)
                 line("Logged exercises", "\(p.logs)", p.logs - logs.count)
             }
-            .font(.callout)
+            .macFont(.callout)
 
             if let oldest = p.oldest, let newest = p.newest {
                 Text("Covering \(oldest.formatted(date: .abbreviated, time: .omitted)) to \(newest.formatted(date: .abbreviated, time: .omitted)).")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .macFont(.callout).foregroundStyle(.secondary)
             }
             if !p.hasWeightsInGrams {
                 Label("This file was written before weights had a unit, so its numbers carry none. They are imported as they are and the app asks once what they meant.",
                       systemImage: "info.circle")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .macFont(.callout).foregroundStyle(.secondary)
             }
 
             HStack(spacing: 10) {
@@ -196,7 +196,7 @@ struct MacImportExportView: View {
             .padding(.top, 2)
 
             Text("**Merge** adds what is missing and never overwrites a set you already have. **Replace** throws everything away first. Either way a copy of what you have now is kept, so it can be undone.")
-                .font(.footnote).foregroundStyle(.secondary)
+                .macFont(.footnote).foregroundStyle(.secondary)
         }
         .padding(12)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
