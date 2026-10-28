@@ -78,6 +78,8 @@ final class WatchRestTimer: ObservableObject {
 
     private var ticker: Timer?
     private var scheduleWork: DispatchWorkItem?
+    /// A restart waiting for the wheel to stop moving — see `setFinished`.
+    private var restartWork: DispatchWorkItem?
 
     /// The phone is driving and its rest ends at `date`. `total` is the full
     /// length; a phone from before it was sent leaves it out, and the time
@@ -89,10 +91,29 @@ final class WatchRestTimer: ObservableObject {
 
     /// A set was logged, or a wheel moved, here on the Watch. Starts the rest
     /// or starts it again from the top.
+    ///
+    /// Coalesced, and deliberately NOT done on the spot. The wheels call this
+    /// once per value the crown passes through, and again the instant a finger
+    /// lets go — which is the exact moment the wheel is about to decelerate
+    /// onto a number. Doing the work there meant four published changes, a
+    /// redraw of the grey and a notification reschedule on the main thread
+    /// while the picker was settling, and the wheel came to rest one click
+    /// past where it was let go. Reported from three sets of one real workout,
+    /// and only ever while a rest was running — which is when the grey and the
+    /// counter are on screen to be redrawn.
+    ///
+    /// A third of a second later nobody can tell the difference, and the
+    /// wheel has stopped by then.
     func setFinished(exercise: String, seconds: Int) {
         guard seconds > 0 else { return }
-        _ = begin(endsAt: Date().addingTimeInterval(Double(seconds)),
-                  total: seconds, exercise: exercise)
+        restartWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            _ = self.begin(endsAt: Date().addingTimeInterval(Double(seconds)),
+                           total: seconds, exercise: exercise)
+        }
+        restartWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     /// A rest handed over from the phone, carried on from where it is.
@@ -108,6 +129,9 @@ final class WatchRestTimer: ObservableObject {
         exerciseName = exercise
         tick = Date()
         scheduleNotificationSoon()
+        // Remade rather than left running: a rest of a different length wants
+        // a different rate, and `startTicking` keeps whatever is already there.
+        stopTicking()
         startTicking()
         return true
     }
@@ -134,6 +158,8 @@ final class WatchRestTimer: ObservableObject {
     /// The phone's rest was skipped, the workout ended, or the phone took the
     /// workout over. Local only: tells nobody.
     func cancel() {
+        restartWork?.cancel()
+        restartWork = nil
         scheduleWork?.cancel()
         scheduleWork = nil
         endsAt = nil
@@ -149,6 +175,8 @@ final class WatchRestTimer: ObservableObject {
     }
 
     private func finish() {
+        restartWork?.cancel()
+        restartWork = nil
         scheduleWork?.cancel()
         scheduleWork = nil
         endsAt = nil
@@ -158,13 +186,27 @@ final class WatchRestTimer: ObservableObject {
         WatchRestHaptics.strong(taps: WatchSessionManager.shared.restTaps)
     }
 
-    /// Fifteen times a second while a rest runs: the grey is drawn from the
-    /// clock, so this is its smoothness, and a watch screen is small enough
-    /// that fifteen steps read as continuous. Stops with the rest — this is a
-    /// watch battery.
+    /// How often the clock is re-read, taken from how fast the grey actually
+    /// moves: one tick per point of travel, and no faster.
+    ///
+    /// This was a flat fifteen times a second. A ninety-second rest drains
+    /// about two points a second down a watch screen, so fourteen of every
+    /// fifteen of those ticks redrew the grey in the same place — all on the
+    /// main thread, some of it inside the few hundred milliseconds a wheel
+    /// spends settling onto a number.
+    ///
+    /// Never slower than twice a second: the counter beside the wheels counts
+    /// whole seconds and must not skip one.
+    private var tickInterval: TimeInterval {
+        guard totalSeconds > 0 else { return 0.5 }
+        let screenPoints = 220.0
+        return min(0.5, max(1.0 / 15, Double(totalSeconds) / screenPoints))
+    }
+
+    /// Runs only while a rest does — this is a watch battery.
     private func startTicking() {
         guard ticker == nil else { return }
-        let t = Timer(timeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: tickInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let endsAt = self.endsAt else { return }
                 self.tick = Date()
