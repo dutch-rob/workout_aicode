@@ -71,7 +71,7 @@ struct MacWorkoutsView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(workout.name.isEmpty ? "(unnamed)" : workout.name)
                             Text("\(workout.exerciseOrder.count) exercises")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .macFont(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         if draft?.contains(workout: workout.id) == true {
@@ -94,6 +94,7 @@ struct MacWorkoutsView: View {
                         }
                     }
                 }
+                .onMove(perform: reorder)
                 .onDelete(perform: delete)
             }
         }
@@ -131,6 +132,23 @@ struct MacWorkoutsView: View {
         DraftMode.note(workout: workout.id, in: context)
         try? context.save()
         selection = workout.id
+    }
+
+    /// Drag to reorder, which the phone has had all along and this list had
+    /// not — the exercises inside a workout could be dragged here, the
+    /// workouts themselves could not.
+    ///
+    /// The order IS `sortIndex`, which the query sorts by, so a move is
+    /// written as a fresh run of indices down the list as shown. Deleted
+    /// workouts are not in `living` and keep whatever index they had: they are
+    /// on their way out, and the query never shows them again.
+    private func reorder(_ offsets: IndexSet, _ destination: Int) {
+        var order = living
+        order.move(fromOffsets: offsets, toOffset: destination)
+        for (index, workout) in order.enumerated() {
+            workout.sortIndex = index
+        }
+        try? context.save()
     }
 
     private func delete(_ offsets: IndexSet) {
@@ -191,7 +209,7 @@ struct MacWorkoutDetail: View {
         VStack(alignment: .leading, spacing: 0) {
             TextField("Workout name", text: $workout.name)
                 .textFieldStyle(.roundedBorder)
-                .font(.title3)
+                .macFont(.title3)
                 .padding()
 
             HSplitView {
@@ -205,7 +223,7 @@ struct MacWorkoutDetail: View {
     private var chosen: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("In this workout — drag to reorder")
-                .font(.caption).foregroundStyle(.secondary)
+                .macFont(.caption).foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
             List {
                 ForEach(inWorkout) { exercise in
@@ -239,7 +257,7 @@ struct MacWorkoutDetail: View {
     private var library: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Add an exercise — ticked ones are already in")
-                .font(.caption).foregroundStyle(.secondary)
+                .macFont(.caption).foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
 
             // The same body as the exercises screen, and for the same reason:
@@ -257,7 +275,7 @@ struct MacWorkoutDetail: View {
                         .buttonStyle(.link)
                 }
             } label: {
-                Text(bodyLabel).font(.caption)
+                Text(bodyLabel).macFont(.caption)
             }
             .padding(.horizontal, 8)
 
