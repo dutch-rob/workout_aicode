@@ -20,7 +20,7 @@ import UserNotifications
 //
 // It runs on the log screen, as on the phone: no screen of its own. The Watch
 // used to cover everything with a countdown three seconds after the last turn
-// of the crown; now a white bar fills the left edge of the screen the moment a
+// of the crown; now a red bar fills the left edge of the screen the moment a
 // set ends and drains away across the rest, with the seconds over the wheels.
 // The wheels stay usable throughout, and turning one starts the rest again.
 //
@@ -300,29 +300,43 @@ enum WatchRestHaptics {
 
 // MARK: - The rest on screen
 
-/// The rest as a bar down the left edge of the screen, full at the start and
+/// The rest as a bar up the left edge of the screen, full at the start and
 /// drained away by the end.
 ///
 /// It used to be a wash of white at 22% over the WHOLE screen, including the
-/// wheels. A bar in the margin instead, for two reasons:
+/// wheels, and then a 5pt white sliver in the margin beside them. It is now
+/// wide enough to run under the "weight" and "reps" labels, for three reasons:
 ///
 ///   • The wheels. Every tick of the rest redraws this, and a full-screen
 ///     overlay has to be composited back over the pickers each time —
 ///     including during the few hundred milliseconds a wheel spends settling
 ///     onto a number, which is exactly when a wheel was coming to rest one
 ///     click past where it was let go. A bar of `barWidth` points touches
-///     about three per cent of the screen and none of the wheels.
-///   • It can be read. At 22% over black a wash is faint by design, because a
-///     stronger one would sit on top of the numbers. Nothing is under this, so
-///     it is plain white.
+///     under a tenth of the screen and none of the wheels.
+///   • The corners. The screen is a rounded rectangle, so the left edge is
+///     cut away at either end: a 5pt bar first appeared about 20pt down from
+///     the top and was gone about 20pt short of the bottom, which is the
+///     first and last few seconds of every rest. The bar looked part-drained
+///     the moment it started and empty before it was — reported from a real
+///     workout. This width clears the curve within about 5pt of either end.
+///   • It can be read. At 22% over black a wash is faint by design, because
+///     a stronger one would sit on top of the numbers. The row labels are the
+///     one column with no numbers in it, so the bar can be as strong as it
+///     likes there.
 ///
-/// The log screen keeps `barWidth` clear at its leading edge, so the bar never
-/// crosses a label, a wheel or a button — see `WatchLogExerciseView.mainContent`.
+/// Why drawn over everything, and why additive: a bar UNDER the content would
+/// disappear at exactly the two places the ends of it fall — behind the zone
+/// band at the top and behind the buttons at the bottom. So it goes on top,
+/// and `.plusLighter` adds it to what is already there rather than hiding it:
+/// black becomes the bar's red, and anything already white STAYS white. The
+/// row labels therefore read straight through the bar, which is why they are
+/// plain white rather than `.secondary` — see `WatchLogExerciseView.rowLabel`.
 struct WatchRestDrain: ViewModifier {
     @ObservedObject private var timer = WatchRestTimer.shared
 
-    /// How wide the bar is, and how much room the log screen leaves for it.
-    static let barWidth: CGFloat = 5
+    /// How wide the bar is: the log screen's own margin plus its row-label
+    /// column, so it covers the labels and stops short of the wheels.
+    static let barWidth: CGFloat = 20
 
     func body(content: Content) -> some View {
         content
@@ -343,8 +357,9 @@ struct WatchRestDrain: ViewModifier {
                     context.fill(
                         Path(CGRect(x: 0, y: size.height - height,
                                     width: Self.barWidth, height: height)),
-                        with: .color(.white))
+                        with: .color(.red))
                 }
+                .blendMode(.plusLighter)
                 .allowsHitTesting(false)
                 .ignoresSafeArea()
             }

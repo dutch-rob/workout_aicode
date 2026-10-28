@@ -121,10 +121,13 @@ struct WatchLogExerciseView: View {
         WKInterfaceDevice.current().screenBounds.width - leadingInset - 3
     }
 
-    /// Room left at the leading edge for the rest's bar, plus the margin the
-    /// screen had anyway. Nothing is drawn in here, so the bar crosses no
-    /// label, wheel or button — see `WatchRestDrain`.
-    private var leadingInset: CGFloat { WatchRestDrain.barWidth + 3 }
+    /// The screen's own margin, the same on both sides.
+    ///
+    /// It used to be wider on the leading side to keep the rest's bar clear of
+    /// everything. The bar now runs UNDER the row labels instead — the one
+    /// column with no numbers in it — so it needs no room of its own, and the
+    /// wheels got those points back. See `WatchRestDrain`.
+    private var leadingInset: CGFloat { 3 }
 
     private func settle(to offset: CGFloat, landingOn index: Int) {
         withAnimation(.easeInOut(duration: 0.2)) { dragOffsetX = offset }
@@ -328,9 +331,13 @@ struct WatchLogExerciseView: View {
         // "machine" for the ones that take weight off you: the wheel is what
         // you set on the machine, not what you lift.
         let assisted = exerciseAt(currentIndex)?.subtractsFromBodyWeight == true
+        // Plain white, not `.secondary`, and this is load-bearing: the rest's
+        // bar is drawn over this column and added to what is underneath, so
+        // white is the one colour it cannot tint — see `WatchRestDrain`. Grey
+        // went pink under it; white reads the same with the bar or without.
         return Text(metric == .reps ? "reps" : (assisted ? "machine" : "weight"))
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.white)
             .fixedSize()
             .rotationEffect(.degrees(-90))
             .frame(width: rowLabelWidth)
@@ -407,7 +414,6 @@ struct WatchLogExerciseView: View {
                 }
             }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Asymmetric: the leading side also carries the rest's bar.
         .padding(.leading, leadingInset)
         .padding(.trailing, 3)
         .padding(.top, 6)
@@ -418,8 +424,9 @@ struct WatchLogExerciseView: View {
     }
 
     /// Width of the vertical row label; the value row reserves the same width so
-    /// the numbers line up with the wheel columns.
-    private let rowLabelWidth: CGFloat = 13
+    /// the numbers line up with the wheel columns. Together with `leadingInset`
+    /// this is what the rest's bar covers — see `WatchRestDrain.barWidth`.
+    private let rowLabelWidth: CGFloat = 16
     /// Height for the wheel row. Sized from the real screen height, NOT the
     /// height the layout offers — watchOS hands the content area more height
     /// than is actually visible, so sizing from that pushes the buttons off the

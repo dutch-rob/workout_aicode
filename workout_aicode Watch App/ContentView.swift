@@ -81,6 +81,18 @@ struct ContentView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     WatchStrengthWorkout.shared.showDemoZone(bpm: 131)
                 }
+            // Both at once. Not an App Store screen: it is here because the
+            // rest's bar is drawn OVER the zone band, and the only way to see
+            // whether it still reads there is to put the two on screen
+            // together — see `WatchRestDrain`.
+            case "restzone":
+                path = [DemoMode.workoutId]
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    WatchStrengthWorkout.shared.showDemoZone(bpm: 131)
+                    WatchRestTimer.shared.showDemoCountdown(
+                        exercise: DemoMode.restExercise,
+                        remaining: DemoMode.restRemaining)
+                }
             case "rest":
                 path = [DemoMode.workoutId]
                 // After the log screen exists, so the rest lands on it.

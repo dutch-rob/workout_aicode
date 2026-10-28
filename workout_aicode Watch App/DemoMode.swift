@@ -7,7 +7,8 @@ import Foundation
 // Watch screens without needing a paired phone to sync data first:
 //
 //   -SRWDemo               seed sample workouts directly into WatchSessionManager
-//   -SRWScreen <name>      open a screen: log | paused
+//   -SRWScreen <name>      open a screen: log | paused | rest | restzone
+//   -SRWRest <seconds>     how much of the demo rest is left (default 68 of 90)
 //
 // DEBUG-only, so none of this can ship.
 
@@ -19,7 +20,20 @@ enum DemoMode {
     // show the same rest.
     static let restExercise = "Lats pull down"
     static let restTotal = 90
-    static let restRemaining = 68
+    /// How much of the rest is left, overridable with `-SRWRest 88`.
+    ///
+    /// Overridable because the ENDS are what needed looking at: the bar got
+    /// wider after a real workout where its first and last seconds were lost
+    /// in the screen's rounded corners, and a fixed 68 of 90 shows neither
+    /// end. 68 is what the App Store captures use.
+    static var restRemaining: Int {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "-SRWRest"), i + 1 < args.count,
+           let seconds = Int(args[i + 1]) {
+            return seconds
+        }
+        return 68
+    }
 
     static var screen: String? {
         let args = CommandLine.arguments
