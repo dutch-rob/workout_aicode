@@ -132,6 +132,9 @@ final class WatchStrengthWorkout: NSObject, ObservableObject {
     private var builder: HKLiveWorkoutBuilder?
     private var zones = HeartRateZones()
 
+    /// A session is being built right now — see `start`.
+    private var starting = false
+
     @Published private(set) var isRunning = false
     /// 1...5, nil until the first reading arrives — a normal few seconds.
     @Published private(set) var currentZone: Int?
@@ -158,7 +161,19 @@ final class WatchStrengthWorkout: NSObject, ObservableObject {
 
     /// `workoutStartedAt` is the start of the WORKOUT, not of this session.
     func start(workoutStartedAt start: Date) async {
-        guard !isRunning, !WatchAerobicWorkout.shared.isRunning else { return }
+        // `starting`, because everything between here and `isRunning` being
+        // set is an `await` and this is now asked for from more than one place
+        // — see `WatchLogExerciseView.startAppleWorkoutIfChosen`. Without it
+        // two asks a moment apart would each build a session.
+        //
+        // `standingAside`, because the way back from an aerobic exercise is
+        // `resumeAfterAerobic`, which starts from NOW on purpose. Coming back
+        // through here instead would back-date a new session over the cardio
+        // minutes that were just written.
+        guard !isRunning, !starting, !standingAside,
+              !WatchAerobicWorkout.shared.isRunning else { return }
+        starting = true
+        defer { starting = false }
         await WatchHealthAccess.requestAuthorization(store)
         zones = await WatchHealthAccess.zones(from: store)
         workoutStartedAt = start

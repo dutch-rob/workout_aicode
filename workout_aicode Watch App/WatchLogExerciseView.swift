@@ -19,6 +19,7 @@ import WatchKit
 struct WatchLogExerciseView: View {
     @ObservedObject private var session = WatchSessionManager.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     let workout: SyncWorkout
     /// Clears the navigation path in ContentView — deterministic pop.
@@ -41,6 +42,12 @@ struct WatchLogExerciseView: View {
     @State private var isHorizontalDrag: Bool? = nil
     /// Minutes chosen per exercise, for the aerobic ones.
     @State private var durations: [Int] = []
+    /// The exercise order the three arrays above were built against.
+    ///
+    /// They are POSITIONAL — `weights[i]` belongs to whatever is `i`th in
+    /// `exerciseOrder` — and the phone can edit a workout while it is being
+    /// logged here. See `followTheWorkout`.
+    @State private var preparedOrder: [String] = []
 
     // MARK: - Body
 
@@ -77,6 +84,14 @@ struct WatchLogExerciseView: View {
             // The phone's switch, flipped while this workout is already under
             // way — see watchModeChanged.
             .onChange(of: session.workoutMode) { _, mode in watchModeChanged(to: mode) }
+            // The workout itself, edited on the phone while it is being logged
+            // here — see followTheWorkout.
+            .onChange(of: workout.exerciseOrder) { _, order in followTheWorkout(order) }
+            // An Apple workout that is not running when it should be — see
+            // startAppleWorkoutIfChosen.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { startAppleWorkoutIfChosen() }
+            }
             // Swipe left/right to move between exercises without logging, as on
             // the phone. Simultaneous so the wheels keep their own scrolling.
             .simultaneousGesture(exerciseSwipeGesture)
@@ -512,6 +527,16 @@ struct WatchLogExerciseView: View {
     /// back-dated to it so Health records the whole thing rather than the part
     /// done at the machine. Only the heart rate is missing from the earlier
     /// stretch, which is unavoidable — nothing was on the wrist for it.
+    ///
+    /// Asked again every time this screen comes back to the front, not only
+    /// when it opens. A workout came back from the gym with no zone band at
+    /// all, and it took force-quitting the app to get one; nothing here ends
+    /// a session, so it was either never started — this screen can be open
+    /// before the phone's first answer arrives, and the mode reads as
+    /// hand-over until it does — or HealthKit failed it mid-workout, which
+    /// `didFailWithError` handles in silence. Either way the next wrist-raise
+    /// now puts it right instead of the rest of the workout going unrecorded.
+    /// `start` does nothing when a session is already running.
     private func startAppleWorkoutIfChosen() {
         guard session.workoutMode == .appleWorkout else { return }
         let start = startedAt
@@ -778,18 +803,60 @@ struct WatchLogExerciseView: View {
     }
 
     private func prepareBuffers() {
-        weights = workout.exerciseOrder.map { exId in
-            session.lastWeightsGrams(workoutId: workout.id, exerciseId: exId)
-        }
-        reps = workout.exerciseOrder.map { exId in
-            session.lastEntry(workoutId: workout.id, exerciseId: exId)?.reps ?? []
-        }
-        // Where the last session of this exercise left the wheel, not a flat
-        // twenty minutes for everything.
-        durations = workout.exerciseOrder.map { exId in
-            let last = session.lastEntry(workoutId: workout.id, exerciseId: exId)?.durationSeconds ?? 0
-            return last > 0 ? last : 20 * 60
-        }
+        weights = workout.exerciseOrder.map(lastWeights)
+        reps = workout.exerciseOrder.map(lastReps)
+        durations = workout.exerciseOrder.map(lastDuration)
+        preparedOrder = workout.exerciseOrder
+    }
+
+    private func lastWeights(_ exId: String) -> [Int] {
+        session.lastWeightsGrams(workoutId: workout.id, exerciseId: exId)
+    }
+
+    private func lastReps(_ exId: String) -> [Int] {
+        session.lastEntry(workoutId: workout.id, exerciseId: exId)?.reps ?? []
+    }
+
+    /// Where the last session of this exercise left the wheel, not a flat
+    /// twenty minutes for everything.
+    private func lastDuration(_ exId: String) -> Int {
+        let last = session.lastEntry(workoutId: workout.id, exerciseId: exId)?.durationSeconds ?? 0
+        return last > 0 ? last : 20 * 60
+    }
+
+    /// The phone edited this workout while it was being logged here.
+    ///
+    /// Everything on this screen is by POSITION, and the phone pushes the new
+    /// definitions the moment a workout is saved. Taking the first exercise
+    /// out mid-workout therefore slid every wheel up one: the first remaining
+    /// exercise opened on nothing, the second opened on the first's weights,
+    /// the third on the second's — and stayed that way, because the buffers
+    /// were only ever built when this screen first appeared. It took force-
+    /// quitting the app to put right. Reported from a real workout.
+    ///
+    /// So they are rebuilt here, carried across by exercise id rather than by
+    /// position: an exercise that is still in the workout keeps the wheels it
+    /// had, turned-but-not-yet-logged numbers included; one just added opens
+    /// on its own last session; one that has gone takes its numbers with it.
+    /// What was logged stays logged, and the exercise in front of you stays in
+    /// front of you even if it moved. If it is the one that was removed, the
+    /// nearest one still there takes its place.
+    ///
+    /// The re-indexing itself is `ExerciseOrderChange`, which is where its
+    /// reasoning and its tests are.
+    private func followTheWorkout(_ newOrder: [String]) {
+        guard didPrepare, newOrder != preparedOrder else { return }
+        let was = preparedOrder
+        weights = ExerciseOrderChange.carry(weights, from: was, to: newOrder, fresh: lastWeights)
+        reps = ExerciseOrderChange.carry(reps, from: was, to: newOrder, fresh: lastReps)
+        durations = ExerciseOrderChange.carry(durations, from: was, to: newOrder,
+                                              fresh: lastDuration)
+        loggedIndices = ExerciseOrderChange.carry(loggedIndices, from: was, to: newOrder)
+        preparedOrder = newOrder
+        currentIndex = ExerciseOrderChange.position(of: currentIndex, from: was, to: newOrder)
+        // The phone may take this over at any moment, and what it would be
+        // handed is built from these arrays.
+        session.updateLiveSnapshot(currentSnapshot())
     }
 
     private func setIndex(_ index: Int) {

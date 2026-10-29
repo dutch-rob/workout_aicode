@@ -93,6 +93,16 @@ struct ContentView: View {
                         exercise: DemoMode.restExercise,
                         remaining: DemoMode.restRemaining)
                 }
+            // The phone editing the workout while it is open here. Not an
+            // App Store screen: it is how the wiring behind
+            // `followTheWorkout` is looked at without a paired phone. The
+            // first exercise goes, so the screen should land on the second
+            // one WITH ITS OWN numbers (Chest press, 40 and 45).
+            case "edited":
+                path = [DemoMode.workoutId]
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    session.dropFirstDemoExercise()
+                }
             case "rest":
                 path = [DemoMode.workoutId]
                 // After the log screen exists, so the rest lands on it.

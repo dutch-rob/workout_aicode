@@ -78,6 +78,17 @@ final class WatchSessionManager: NSObject, ObservableObject {
     }
     /// Force the Paused screen for a screenshot of the hand-over prompt.
     func showDemoPaused() { role = .paused }
+    /// The phone taking an exercise out of a workout that is open on the
+    /// Watch right now, which is what a real phone's push amounts to here.
+    /// The log screen is supposed to follow it — see `followTheWorkout`.
+    func dropFirstDemoExercise() {
+        guard let at = workouts.firstIndex(where: { $0.id == DemoMode.workoutId }),
+              !workouts[at].exerciseOrder.isEmpty else { return }
+        var edited = workouts
+        edited[at] = SyncWorkout(id: edited[at].id, name: edited[at].name,
+                                 exerciseOrder: Array(edited[at].exerciseOrder.dropFirst()))
+        workouts = edited
+    }
     /// Settings normally arrive from the phone. A simulator has no phone, so a
     /// screenshot run can set them directly: `-SRWRows 2`, `-SRWTint 0.8`.
     func applyDemoPreferences() {
