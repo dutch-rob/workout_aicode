@@ -2,6 +2,8 @@
 
 A practical workout tracker for iPhone and Apple Watch, available in the Apple App Store as **SetsRepsWheels**.
 
+There is a Mac app in here as well (`workout_aicode_MacOS`), in the Mac App Store under the same name: the same workouts, exercises and logs on a big screen, with the two lists side by side, a log editor, the graphs and statistics, and import/export. With iCloud sharing switched on it works from the same data as your iPhone; with it off it keeps its own store, and the export file moves things across. The guide below is the iPhone's, which is the fuller of the two — the Mac app carries its own under **info**, and its Help menu opens it.
+
 Source: https://github.com/dutch-rob/workout_aicode
 
 ---
@@ -16,6 +18,7 @@ I made this app for myself because I wanted logging to be quicker than in the ap
 - [Logging a workout](#logging-a-workout) — the wheels, the buttons, skipping an exercise
 - [Aerobic exercises](#aerobic-exercises) — cardio, with heart rate on the Watch
 - [The rest timer](#the-rest-timer) — optional, off by default
+- [Scheduling the next one](#scheduling-the-next-one) — optional, off by default
 - [The Apple Watch app](#the-apple-watch-app) — logging at the machine
 - [Handing a workout over](#handing-a-workout-over) — moving between iPhone and Watch
 - [Apple Health](#apple-health) — optional, off by default
@@ -65,11 +68,22 @@ If you have one, the Watch does the measuring, and it does it as a **real Apple 
 
 While it runs, the Watch shows your heart rate and which of five zones you are in, as a coloured band. You can start on either device and stop on either; whichever you use, the other follows.
 
-The zones are worked out from your resting heart rate and your age, following the method Apple describes for its automatic zones. Expect them to be close to what the Workout app shows rather than identical — Apple uses a maximum heart rate measured from your own history, which no app can read.
+From **watchOS 27** the zones are your own: Health hands over the very boundaries the Workout app is using, whether those are the ones it worked out for you or ones you set by hand, and the band here agrees with the one on your wrist. That needs an Apple Watch Series 9 or later, since no earlier Watch can run watchOS 27.
+
+On an older Watch, the zones are worked out from your resting heart rate and your age, following the method Apple describes for its automatic zones. Expect them to be in the right area rather than identical — Apple uses a maximum heart rate measured from your own history, which no app can read, so a rate your Watch calls zone 3 may well show here as zone 4. If that bothers you, type the real boundaries in under **Settings › Heart rate zones**: open Health › Browse › Heart › Heart Rate Zones, copy the four numbers each zone starts at, and the Watch uses those instead. The line under the band on the Watch always says which of the three it is using.
 
 Without a Watch everything works except the heart rate. The countdown runs, the session is logged with its duration, and the screen says plainly that heart rate needs a Watch rather than leaving a blank space. The session is still written to Apple Health as a workout of the chosen activity — the Fitness app has been on iPhone in its own right since iOS 16, with a Move ring but no Exercise or Stand ring — so it counts for what it can.
 
 If a Watch is there but nothing arrives from it for a while, the screen says that too, and points at Settings › Health on the Watch. It does not claim to know that permission was refused: HealthKit deliberately will not say whether a read was denied, so the app reports what it can actually see — that no readings are coming — and names the likeliest fix.
+
+### Only one workout at a time
+**Your Watch runs one workout at a time.** That is watchOS, not this app, and there is no way round it: no app can see another app's workout session, let alone share one.
+
+So starting a cardio session here ends whatever workout was already running. If you began a ride by holding your Watch to the machine, the machine stops showing your heart rate the moment you tap **start** here — that link belonged to the workout it just replaced. The same happens to a workout you started yourself in the Workout app.
+
+Pick one, in advance. If you want the machine, or the Workout app, to have the ride, let it: start it there and leave the **start** button here alone. If you would rather have the ride in your log with its time in each zone, start it here and do not tap the reader. Either way, nothing is lost twice over — a ride recorded by the Workout app is still in Health and Fitness, it simply is not attached to the exercise in your log.
+
+Weights are not affected while *Workouts on the Watch* is set to **hand over between devices**, which is the default: no workout session is started for the weights at all. With **Apple workout on the Watch** the whole workout is a session, and takes the Watch for its whole length.
 
 ## The rest timer
 Off unless you switch it on, in Settings. With it off the app behaves exactly as it always has.
@@ -82,11 +96,20 @@ Earlier versions took the screen away for a separate countdown with a **skip res
 
 While a rest runs you are free to put the phone in your pocket or use something else. The countdown is only a display: the rest is kept by the clock, and a notification arrives when it is over whether or not the app is on screen. How loudly that lands is the phone's business rather than the app's — an app cannot buzz you while it is in the background, so what you feel is whatever your Sounds & Haptics settings do for a notification. An Apple Watch that was nearby when the rest started is told when it ends and taps your wrist itself, which is the more dependable tap on the shoulder.
 
-It works the same way on the Apple Watch: the wheel or the **log** button starts the rest, the screen lightens and drains across it, and the seconds sit beside the exercise name with a tap to end them. One difference the hardware forces — the Digital Crown only reports a wheel that actually lands on a new number, so on the Watch repeating a set exactly is best logged with the **log** button rather than by nudging a wheel back where it was.
+It works the same way on the Apple Watch, though it looks different there: a red bar fills the left edge of the screen when the rest starts and drains away as it runs, under the **weight** and **reps** labels, where it crosses nothing you need to read. The seconds show small over the wheels, or beside the exercise name, and tapping them ends the rest. One difference the hardware forces — the Digital Crown only reports a wheel that actually lands on a new number, so on the Watch repeating a set exactly is best logged with the **log** button rather than by nudging a wheel back where it was.
 
 Whichever device you are logging on runs the rest, and ending it on one calls it off on the other. A rest started on the Watch stays on the Watch, so your phone does not buzz in a locker for a set you logged at the machine. If you move the workout between devices in the middle of a rest, the rest moves with it and carries on where it was — the time the hand-over takes comes off the rest rather than being added to it.
 
 How long the rest is belongs to the exercise, because a heavy compound needs longer than a light isolation movement. The first-run question sets what new exercises start with, from 0:15 up to 5:00 in quarter minutes and 1:30 by default; any exercise can be given its own on its *edit exercise* screen, and Settings holds the starting value for new ones.
+
+## Scheduling the next one
+Off unless you switch it on, in Settings under **Schedule the next workout**.
+
+With it on, finishing a workout offers to put the next one in your calendar. The moment is deliberate: you have just trained, so you know when you are coming back. It proposes the time this workout began, rounded up to the quarter hour, a chosen number of days from now — and you can change the day and time before adding anything. The event is as long as the workout you have just done, rounded up the same way, because whatever you usually take is what you just took.
+
+You can put in just the next one or the next few at a spacing you choose, and you can say which calendar they go in. Scheduling again later moves what has changed and leaves the rest exactly where it is, so an event you have edited by hand — a different time, an alarm, somebody invited — keeps your edit.
+
+Nothing is ever added without you asking, and the app only ever touches events it added itself: each one carries a mark of its own, and anything else in your calendars is left alone and never read. Delete one in the Calendar app and it stays deleted. iOS asks for full access to Calendars rather than add-only, and that is the reason — finding the app's own events again is what makes moving them possible instead of leaving a trail of duplicates behind.
 
 ## If the app closes mid-workout
 iPhones close apps that have been in a pocket for a while — that is iOS reclaiming memory, and no app can prevent it. Opening SetsRepsWheels again within the hour takes you straight back to the workout you were in, on the exercise you were on, with everything you had already logged and every number you had dialled into the wheels. A badge says **Carried on from earlier** so you can tell it apart from a fresh start.
@@ -123,6 +146,8 @@ What it costs is the way back. A workout on your wrist cannot return to the phon
 While a workout is running on your Watch, the phone keeps out of the way: the workouts, *edit workouts*, *exercise library* and *settings* are greyed out, and a workout screen says where the workout is and offers the way back to the start screen. Your logs, graphs, progress and this information screen are all still there to read.
 
 Cardio inside such a workout is still recorded as its own Apple workout of the activity you chose, because watchOS runs one workout at a time. A session with a bike ride in the middle therefore arrives in Health as three: strength, the ride, then strength again — which is what you did.
+
+That same rule means an Apple workout here ends one started anywhere else, including by holding your Watch to a machine — see [Only one workout at a time](#only-one-workout-at-a-time) above. In this mode it is the whole workout that takes the Watch, not just the cardio.
 
 ### Keeping the app on screen between sets
 Lower your wrist and the Watch goes back to the clock face, and by default raising it again only returns you to the app for about two minutes — roughly one rest. After that you have to find the app again to log the next set.
@@ -164,7 +189,7 @@ Once you have a workout, **new workout** on the start screen becomes **edit work
 
 **quit** leaves without keeping anything you changed on that screen, and **save** keeps it. A workout needs a name before it can be saved, and the name has to be one you are not already using: two workouts with the same name cannot be told apart in your logs.
 
-Back in *edit workouts* you can likewise reorder your workouts and remove one with the red icon.
+Back in *edit workouts* you can likewise reorder your workouts and remove one with the red icon. Swiping a workout to the right offers two more: **Duplicate**, which copies it under a new name over the same exercises, and **Merge**, which makes a third workout out of this one and another — this one's exercises, then the other's, with anything in both appearing once. Neither original is changed, so a split routine can be tried out before anything is thrown away. The same two are on a long press.
 
 ## The exercise library
 **exercise library** holds every exercise: the ones you have made and the ready-made ones you have not taken yet, together in one list.
@@ -263,8 +288,10 @@ The settings screen has:
    - **Body weight** — from Apple Health or set by hand, used only by exercises marked *subtracted from body weight*. Shown only when you have one. See [Machines that take weight off you](#machines-that-take-weight-off-you) above.
    - **Wheels on the Watch** — one row with a reps/weights toggle, or both rows at once. See [The Apple Watch app](#the-apple-watch-app) above. One row by default.
    - **Heart rate band** — how strongly the zone colours are drawn behind the exercise name on the Watch, from barely there to full strength, with a preview to judge it against. Only shown when the Watch records Apple workouts.
+   - **Heart rate zones** — the four boundaries between the five zones. On watchOS 27 and later there is nothing to set: they come from Health. On an older Watch you can copy them in by hand rather than let the app estimate them. See [Aerobic exercises](#aerobic-exercises) above.
    - **Remember an exercise across workouts** — on by default: a wheel opens on the last time you did that exercise, whichever workout you did it in, so splitting or reorganising a routine keeps your numbers. Turn it off if you want each workout to remember its own — a heavy day and a light day that share an exercise.
    - **Numbers for a new exercise** — the sets, weight range, increment and rest each new exercise starts with. Exercises you already have are not changed.
+   - **Schedule the next workout** — whether finishing a workout offers to put the next one in your calendar, and how far ahead. Off by default, see [Scheduling the next one](#scheduling-the-next-one) above.
    - **One-rep max formula** — which of the three formulas the statistics use. Epley by default.
    - **Workouts in the trend** — how many recent workouts the trend line uses, 16 by default and never fewer than 8.
    - **Averaging in graphs** — smooths the dots over this many workouts, 3 by default; set it to off to see every workout as logged.

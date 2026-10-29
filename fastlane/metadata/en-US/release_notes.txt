@@ -1,0 +1,17 @@
+Kilograms or pounds. Weights have a unit now. Pick yours in Settings — the app starts from wherever you are — and everything already logged comes with you, converted once and shown the way you chose. Wheels step in fractions too, so 2.5 kg and 1.25 kg increments work properly.
+
+Machines that take weight off you. An exercise can be marked as assisted: the wheel is what you set on the machine, and the app works out what you actually lifted from your body weight, which it can take from Apple Health.
+
+Your workout as a real Apple workout. New under Settings › Workouts on the Watch: let the Watch record the whole session as an Apple workout, so it lands in Fitness with your heart rate and counts towards your rings. While it runs, the five heart rate zones sit as a coloured band behind the exercise name, with a marker showing where in the zone you are. How strongly it is drawn is yours to set.
+
+Zones that are actually yours. On watchOS 27 the app reads the very boundaries the Workout app is using, straight out of Health. On an older Watch you can type your four numbers in under Settings › Heart rate zones rather than let the app estimate them — and the Watch always says which of the three it is using.
+
+More room on the Watch. Weights and repetitions can show as two rows of wheels at once instead of one row with a toggle. Logging slides on to the next exercise, and you can swipe between exercises without logging. The rest shows as a bar down the side of the screen that drains as it runs, so the wheels stay usable the whole way through. The taps at the end of a rest are now one to five, because one is easy to miss in a gym.
+
+Scheduling the next one. Optional, and off until you switch it on: finishing a workout can offer to put the next one in your calendar, at the time you trained today. It only ever touches events it put there itself.
+
+Duplicate and merge workouts. Swipe a workout to the right to copy it, or to make a third one out of two — for splitting a routine without throwing the old one away.
+
+Also: opening the iPhone no longer takes a workout off the Watch; the logs filter filters what you can see; blank rows no longer appear in the log list; a set with no repetitions is not counted as a set; and the wheels settle where you let go of them.
+
+There is a Mac app now as well, in the Mac App Store under the same name.
