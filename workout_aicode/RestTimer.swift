@@ -269,11 +269,16 @@ final class RestTimer: ObservableObject {
     /// points a second, and twenty steps of that read as continuous.
     private func startTicking() {
         guard ticker == nil else { return }
-        let t = Timer(timeInterval: 1.0 / 20, repeats: true) { [weak self] _ in
+        // Captures nothing. A Timer's block is `@Sendable` and this class is
+        // `@MainActor`, so capturing `self` — even weakly — is an error under
+        // the Swift 6 language mode. Naming the singleton inside the hop to the
+        // main actor says the same thing and stays correct there.
+        let t = Timer(timeInterval: 1.0 / 20, repeats: true) { _ in
             Task { @MainActor in
-                guard let self, let endsAt = self.endsAt else { return }
-                self.tick = Date()
-                if endsAt <= self.tick { self.complete() }
+                let timer = RestTimer.shared
+                guard let endsAt = timer.endsAt else { return }
+                timer.tick = Date()
+                if endsAt <= timer.tick { timer.complete() }
             }
         }
         // .common so the countdown keeps running while a wheel is being

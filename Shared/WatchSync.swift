@@ -3,10 +3,9 @@ import Foundation
 // MARK: - Watch ⇄ Phone sync contract
 //
 // Plain Codable value types used as the wire format between the iPhone and the
-// Apple Watch. A byte-identical copy of this file lives in the Watch App target
-// ("workout_aicode Watch App/WatchSync.swift"). The two targets are separate
-// synchronized folders and do not share source, so the JSON keys defined here
-// MUST stay in sync on both sides.
+// Apple Watch. Both ends compile THIS file — it is in Shared/, which every
+// target synchronizes — so the JSON keys below cannot drift apart. They were
+// once two hand-synced copies, which is the failure this placement removes.
 //
 // Direction of travel:
 //   • Phone → Watch : SyncPayload (workout + exercise definitions, prefill

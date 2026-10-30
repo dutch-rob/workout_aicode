@@ -113,7 +113,11 @@ enum LogComparison {
     /// chin-up turns green, though nothing about the training changed. Half an
     /// increment is the line between "you did something different" and "you
     /// had breakfast".
-    static func tolerance(forIncrement increment: Int) -> Double {
+    ///
+    /// `nonisolated` because it is arithmetic on an Int and nothing more, and
+    /// because it is passed by name to `map` below — a function VALUE, which
+    /// carries no actor with it, so an isolated one cannot be handed over.
+    nonisolated static func tolerance(forIncrement increment: Int) -> Double {
         Double(max(1, increment)) / 2
     }
 

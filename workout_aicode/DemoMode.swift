@@ -122,7 +122,6 @@ enum DemoMode {
     private static let upperDays: [Int] = (0..<12).map { 79 - $0 * 7 }
     private static let lowerDays: [Int] = (0..<12).map { 75 - $0 * 7 }
 
-    @discardableResult
     /// One aerobic exercise, on the end of leg day. Without it every demo
     /// screen shows a library and a log with no cardio in them, and the AE
     /// filter photographs as an empty list.

@@ -206,11 +206,16 @@ final class WatchRestTimer: ObservableObject {
     /// Runs only while a rest does — this is a watch battery.
     private func startTicking() {
         guard ticker == nil else { return }
-        let t = Timer(timeInterval: tickInterval, repeats: true) { [weak self] _ in
+        // Captures nothing. A Timer's block is `@Sendable` and this class is
+        // `@MainActor`, so capturing `self` — even weakly — is an error under
+        // the Swift 6 language mode. Naming the singleton inside the hop to the
+        // main actor says the same thing and stays correct there.
+        let t = Timer(timeInterval: tickInterval, repeats: true) { _ in
             Task { @MainActor in
-                guard let self, let endsAt = self.endsAt else { return }
-                self.tick = Date()
-                if endsAt <= self.tick { self.finish() }
+                let timer = WatchRestTimer.shared
+                guard let endsAt = timer.endsAt else { return }
+                timer.tick = Date()
+                if endsAt <= timer.tick { timer.finish() }
             }
         }
         RunLoop.main.add(t, forMode: .common)

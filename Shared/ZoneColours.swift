@@ -2,8 +2,7 @@ import SwiftUI
 
 // MARK: - Zone colours
 //
-// A byte-identical copy of this file lives in the Watch App target
-// ("workout_aicode Watch App/ZoneColours.swift"). Shared because the two ends
+// In Shared/, so the phone and the Watch draw from the same table. They
 // disagreed once already: the Watch drew zone 1 blue while the phone drew every
 // lit zone red, so the same heart rate was a different colour depending on
 // which device you looked at.

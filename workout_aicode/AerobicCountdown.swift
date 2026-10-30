@@ -341,11 +341,13 @@ final class AerobicCountdown: ObservableObject {
 
     private func startTicking() {
         ticker?.invalidate()
-        let t = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+        // Captures nothing — see the same block in RestTimer.
+        let t = Timer(timeInterval: 0.2, repeats: true) { _ in
             Task { @MainActor in
-                guard let self, let endsAt = self.endsAt else { return }
-                self.tick = Date()
-                if endsAt <= self.tick { self.complete() }
+                let clock = AerobicCountdown.shared
+                guard let endsAt = clock.endsAt else { return }
+                clock.tick = Date()
+                if endsAt <= clock.tick { clock.complete() }
             }
         }
         RunLoop.main.add(t, forMode: .common)

@@ -1,14 +1,15 @@
-import HealthKit
-
 // MARK: - Which Apple workout to start
 //
-// A byte-identical copy of this file lives in the Watch App target
-// ("workout_aicode Watch App/WatchAerobicActivity.swift"). It is duplicated
-// rather than left on the Watch alone so the phone's tests can hold it against
-// AerobicActivity.allCases: twenty-nine hand-written cases is exactly the sort
-// of list where one gets forgotten, and a forgotten one does not fail — it
-// quietly starts a workout called "Other".
+// HealthKit is the Watch's and the phone's; the Mac has no such framework, so
+// this file compiles away there rather than being kept out of that target by
+// hand. It lives in Shared/ rather than on the Watch alone so the phone's tests
+// can hold it against AerobicActivity.allCases: twenty-nine hand-written cases
+// is exactly the sort of list where one gets forgotten, and a forgotten one
+// does not fail — it quietly starts a workout called "Other".
 //
+#if canImport(HealthKit)
+import HealthKit
+
 // The phone stores an activity as a plain string (see AerobicActivity in
 // Models.swift) so the database does not depend on HealthKit's numbering. This
 // is where that string becomes a workout configuration.
@@ -66,3 +67,5 @@ enum WatchAerobicActivity {
         }
     }
 }
+
+#endif

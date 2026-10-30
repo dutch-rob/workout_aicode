@@ -2,9 +2,8 @@ import Foundation
 
 // MARK: - Heart rate zones
 //
-// A byte-identical copy of this file lives in the Watch App target
-// ("workout_aicode Watch App/HeartRateZones.swift"), like WatchSync.swift and
-// BuildStamp.swift. Keep them the same.
+// In Shared/, so both ends compile the same boundaries: a zone the phone drew
+// differently from the Watch would be the same heart rate telling two stories.
 //
 // THIS IS A STAND-IN, and the seam is the point of it.
 //

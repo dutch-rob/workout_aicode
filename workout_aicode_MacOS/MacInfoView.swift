@@ -168,16 +168,13 @@ struct MacInfoView: View {
     }
 }
 
-/// The Mac's own build stamp — same reasoning as the phone's and the Watch's.
+/// The Mac's own build stamp — same reasoning as the phone's and the Watch's,
+/// and the same facts, from Shared/BuildStamp.swift. Version and build only:
+/// this window is not the one being chased through TestFlight, so the date
+/// that answers "is this the binary I just made?" would be noise here.
 struct BuildStampView: View {
     var body: some View {
-        Text(summary).macFont(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
-    }
-
-    private var summary: String {
-        let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(version) (\(build))"
+        Text("\(BuildStamp.version) (\(BuildStamp.build))")
+            .macFont(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
     }
 }

@@ -1,19 +1,17 @@
-import SwiftUI
+import Foundation
 
 // MARK: - Which build am I looking at?
-//
-// A copy of this file lives in the Watch App target
-// ("workout_aicode Watch App/BuildStamp.swift"). The two targets are separate
-// synchronized folders and do not share source — the same arrangement as
-// WatchSync.swift. `BuildStamp` itself must stay identical; `BuildStampView`
-// deliberately does not, because the full string will not fit across a watch
-// face at this size.
 //
 // This exists because the question "is the thing on my wrist the build I just
 // made?" had no answer from inside the app, and a round of testing went into
 // chasing a bug that may already have been fixed in a build that was never
-// installed. Each target stamps itself, so the Watch's line is the Watch's own
-// build and not the phone's.
+// installed. Each target stamps ITSELF — every value below reads this
+// binary's own bundle — so the Watch's line is the Watch's build and not the
+// phone's, though all three compile this one file.
+//
+// How it is drawn is each platform's own business, and differs: see
+// `BuildStampView` in the phone's and the Watch's folders, and in
+// MacInfoView.swift. A watch face has no room for the date at footnote size.
 
 enum BuildStamp {
 
@@ -48,28 +46,5 @@ enum BuildStamp {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return "\(head) · \(formatter.string(from: builtAt))"
-    }
-}
-
-/// The stamp as it appears at the foot of a screen: quiet, and never in the way
-/// of anything. It is a diagnostic, not a feature.
-struct BuildStampView: View {
-    var body: some View {
-        // Hidden during a screenshot run: this is a diagnostic for TestFlight,
-        // and a version string in an App Store screenshot is just clutter that
-        // goes stale the moment the next build is made.
-        #if DEBUG
-        if DemoMode.isEnabled { EmptyView() } else { stamp }
-        #else
-        stamp
-        #endif
-    }
-
-    @ViewBuilder private var stamp: some View {
-        Text(BuildStamp.summary)
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
     }
 }

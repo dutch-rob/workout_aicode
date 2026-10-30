@@ -275,8 +275,9 @@ final class WatchAerobicWorkout: NSObject, ObservableObject {
 
     private func startTicking() {
         stopTicking()
-        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick = Date() }
+        // Captures nothing — see the same block in WatchRestTimer.
+        let t = Timer(timeInterval: 1, repeats: true) { _ in
+            Task { @MainActor in WatchAerobicWorkout.shared.tick = Date() }
         }
         RunLoop.main.add(t, forMode: .common)
         ticker = t
