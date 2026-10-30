@@ -90,9 +90,12 @@ DUO_SCREENS=("workouts:logs:01_workouts"      "log:graphs:02_log_exercise"
              "rest:logs:03_rest_timer"        "aerobic:graphs:04_aerobic"
              "library:logs:05_library"        "progress:graphs:06_progress"
              "info:logs:07_info")
+# "tworows" is the same log screen with both rows of wheels on it at once,
+# which is a setting the phone normally sends; the Watch infers it from the
+# screen name here, since this script passes a screen and nothing else.
 WATCH_SCREENS=("workouts:01_watch_workouts" "log:02_watch_log"
-               "heart:03_watch_heart_rate" "rest:04_watch_rest_timer"
-               "paused:05_watch_handover")
+               "tworows:03_watch_two_rows" "heart:04_watch_heart_rate"
+               "rest:05_watch_rest_timer" "paused:06_watch_handover")
 
 shoot() {   # udid  devlabel  bundle  screen  filelabel  settle  minkb  side  display
   local udid="$1" dev="$2" bundle="$3" screen="$4" label="$5"

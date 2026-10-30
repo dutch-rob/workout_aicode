@@ -72,6 +72,10 @@ struct ContentView: View {
             session.applyDemoPreferences()
             switch DemoMode.screen {
             case "log":    path = [DemoMode.workoutId]
+            // The log screen with both rows of wheels; the layout itself comes
+            // from the preference this screen name sets — see
+            // `applyDemoPreferences`.
+            case "tworows": path = [DemoMode.workoutId]
             case "paused": session.showDemoPaused()
             case "heart":
                 WatchAerobicWorkout.shared.showDemoHeartRate(

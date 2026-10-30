@@ -97,6 +97,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
            let rows = Int(args[i + 1]) {
             wheelRows = WatchPreferences.clampRows(rows)
         }
+        // The screen that exists to show two rows brings its own setting: the
+        // screenshot script names a screen and passes nothing else.
+        if DemoMode.screen == "tworows" { wheelRows = 2 }
         if let i = args.firstIndex(of: "-SRWTint"), i + 1 < args.count,
            let tint = Double(args[i + 1]) {
             zoneTint = WatchPreferences.clampTint(tint)

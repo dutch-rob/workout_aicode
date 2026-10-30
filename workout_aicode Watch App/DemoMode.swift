@@ -7,7 +7,7 @@ import Foundation
 // Watch screens without needing a paired phone to sync data first:
 //
 //   -SRWDemo               seed sample workouts directly into WatchSessionManager
-//   -SRWScreen <name>      open a screen: log | paused | rest | restzone
+//   -SRWScreen <name>      open a screen: log | tworows | paused | rest | restzone
 //   -SRWRest <seconds>     how much of the demo rest is left (default 68 of 90)
 //
 // DEBUG-only, so none of this can ship.
