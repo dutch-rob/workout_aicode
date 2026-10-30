@@ -59,10 +59,6 @@ HEIGHT="${SIZE##*x}"
 SCREENS="${SCREENS:-workouts exercises logs graphs progress importExport settings info}"
 
 mkdir -p "$OUT"
-# Clear what is there first. A capture left behind by an earlier run looks
-# exactly like one this run made — which is how a picture of a desktop,
-# taken before the window-id fix, survived two runs and nearly went to Apple.
-rm -f "$OUT"/*.png
 # Asks the window server which window belongs to the app. Compiled fresh each
 # run — it is thirty lines and takes a moment, and a stale binary beside the
 # source would be one more thing that can quietly be wrong.
@@ -138,6 +134,13 @@ MSG
   exit 1
 fi
 rm -f "$probe"
+
+# Only now clear what is there. A capture left behind by an earlier run looks
+# exactly like one this run made — which is how a picture of a desktop, taken
+# before the window-id fix, survived two runs and nearly went to Apple. It
+# used to be cleared at the top, which meant a run that could not capture
+# anything still threw away the pictures from the run that could.
+rm -f "$OUT"/*.png
 
 shoot() {
   local screen="$1"
