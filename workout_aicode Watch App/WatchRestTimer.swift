@@ -54,27 +54,15 @@ final class WatchRestTimer: ObservableObject {
     var isRunning: Bool { endsAt != nil }
 
     /// How much of the bar is filled: 1 as the rest starts, 0 when it is over.
-    ///
-    /// Computed from the clock, deliberately, rather than being a piece of
-    /// animated state. The crown reports every value it passes through, so one
-    /// spin of the wheel is dozens of "set finished" events; restarting an
-    /// animation on each of them once left SwiftUI blending dozens of
-    /// overlapping animations of the same property, and the fill crawled down
-    /// the screen for far longer than intended. A number derived from two
-    /// dates cannot pile up.
+    /// The arithmetic, and why it is arithmetic rather than animated state,
+    /// is in `RestBar` — which the phone's countdown uses as well.
     var restFill: CGFloat {
-        guard let endsAt, totalSeconds > 0 else { return 0 }
-        return max(0, min(1, CGFloat(endsAt.timeIntervalSince(tick) / Double(totalSeconds))))
+        RestBar.fill(endsAt: endsAt, now: tick, total: TimeInterval(totalSeconds))
     }
 
-    var remainingSeconds: Int {
-        guard let endsAt else { return 0 }
-        return max(0, Int(endsAt.timeIntervalSince(tick).rounded(.up)))
-    }
+    var remainingSeconds: Int { RestBar.remaining(endsAt: endsAt, now: tick) }
 
-    var label: String {
-        String(format: "%d:%02d", remainingSeconds / 60, remainingSeconds % 60)
-    }
+    var label: String { RestBar.label(endsAt: endsAt, now: tick) }
 
     private var ticker: Timer?
     private var scheduleWork: DispatchWorkItem?

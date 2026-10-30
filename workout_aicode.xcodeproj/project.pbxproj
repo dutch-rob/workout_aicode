@@ -52,6 +52,13 @@
 			remoteGlobalIDString = 15DD49342F594E7100D778CD;
 			remoteInfo = workout_aicode;
 		};
+		5E7A000A3100BEEF00C0FFEE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 15DD492D2F594E7100D778CD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 15D8AEA93037BDBD009A6CBC;
+			remoteInfo = workout_aicode_MacOS;
+		};
 		EEEE0004EEEE0004EEEE0004 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 15DD492D2F594E7100D778CD /* Project object */;
@@ -100,6 +107,7 @@
 		15DD49352F594E7100D778CD /* workout_aicode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = workout_aicode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD49442F594E7600D778CD /* workout_aicodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD494E2F594E7600D778CD /* workout_aicodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E7A00083100BEEF00C0FFEE /* workout_aicode_MacOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicode_MacOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -141,6 +149,11 @@
 		221D23E429084D4197CA186D /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		5E7A00073100BEEF00C0FFEE /* workout_aicode_MacOSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = workout_aicode_MacOSTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -197,6 +210,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E7A00053100BEEF00C0FFEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -230,6 +250,7 @@
 				153422742FAD953D00895019 /* workout_aicode Watch AppTests */,
 				1534227E2FAD953D00895019 /* workout_aicode Watch AppUITests */,
 				15D8AEAB3037BDBD009A6CBC /* workout_aicode_MacOS */,
+				5E7A00073100BEEF00C0FFEE /* workout_aicode_MacOSTests */,
 				153422942FAD9F5600895019 /* Frameworks */,
 				15DD49362F594E7100D778CD /* Products */,
 				15D8AEB63037C258009A6CBC /* Recovered References */,
@@ -247,6 +268,7 @@
 				153422712FAD953D00895019 /* workout_aicode Watch AppTests.xctest */,
 				1534227B2FAD953D00895019 /* workout_aicode Watch AppUITests.xctest */,
 				15D8AEAA3037BDBD009A6CBC /* workout_aicode_MacOS.app */,
+				5E7A00083100BEEF00C0FFEE /* workout_aicode_MacOSTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -436,6 +458,29 @@
 			productReference = 15DD494E2F594E7600D778CD /* workout_aicodeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		5E7A00003100BEEF00C0FFEE /* workout_aicode_MacOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E7A00013100BEEF00C0FFEE /* Build configuration list for PBXNativeTarget "workout_aicode_MacOSTests" */;
+			buildPhases = (
+				5E7A00043100BEEF00C0FFEE /* Sources */,
+				5E7A00053100BEEF00C0FFEE /* Frameworks */,
+				5E7A00063100BEEF00C0FFEE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5E7A00093100BEEF00C0FFEE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				5E7A00073100BEEF00C0FFEE /* workout_aicode_MacOSTests */,
+			);
+			name = workout_aicode_MacOSTests;
+			packageProductDependencies = (
+			);
+			productName = workout_aicode_MacOSTests;
+			productReference = 5E7A00083100BEEF00C0FFEE /* workout_aicode_MacOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -498,6 +543,7 @@
 				153422702FAD953D00895019 /* workout_aicode Watch AppTests */,
 				1534227A2FAD953D00895019 /* workout_aicode Watch AppUITests */,
 				15D8AEA93037BDBD009A6CBC /* workout_aicode_MacOS */,
+				5E7A00003100BEEF00C0FFEE /* workout_aicode_MacOSTests */,
 			);
 		};
 /* End PBXProject section */
@@ -562,6 +608,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E7A00063100BEEF00C0FFEE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -614,6 +667,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E7A00043100BEEF00C0FFEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -641,6 +701,11 @@
 			isa = PBXTargetDependency;
 			target = 15DD49342F594E7100D778CD /* workout_aicode */;
 			targetProxy = 15DD494F2F594E7600D778CD /* PBXContainerItemProxy */;
+		};
+		5E7A00093100BEEF00C0FFEE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 15D8AEA93037BDBD009A6CBC /* workout_aicode_MacOS */;
+			targetProxy = 5E7A000A3100BEEF00C0FFEE /* PBXContainerItemProxy */;
 		};
 		EEEE0003EEEE0003EEEE0003 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1229,6 +1294,52 @@
 			};
 			name = Release;
 		};
+		5E7A00023100BEEF00C0FFEE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 96ND29QYH3;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode-MacOSTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/workout_aicode_MacOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/workout_aicode_MacOS";
+			};
+			name = Debug;
+		};
+		5E7A00033100BEEF00C0FFEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 96ND29QYH3;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode-MacOSTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/workout_aicode_MacOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/workout_aicode_MacOS";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1309,6 +1420,15 @@
 			buildConfigurations = (
 				15DD495F2F594E7600D778CD /* Debug */,
 				15DD49602F594E7600D778CD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E7A00013100BEEF00C0FFEE /* Build configuration list for PBXNativeTarget "workout_aicode_MacOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E7A00023100BEEF00C0FFEE /* Debug */,
+				5E7A00033100BEEF00C0FFEE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

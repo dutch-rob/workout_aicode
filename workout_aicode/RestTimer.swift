@@ -112,10 +112,7 @@ final class RestTimer: ObservableObject {
 
     var isRunning: Bool { endsAt != nil }
 
-    var remainingSeconds: Int {
-        guard let endsAt else { return 0 }
-        return max(0, Int(endsAt.timeIntervalSince(tick).rounded(.up)))
-    }
+    var remainingSeconds: Int { RestBar.remaining(endsAt: endsAt, now: tick) }
 
     // MARK: - The rest, drawn on the log screen
     //
@@ -133,7 +130,7 @@ final class RestTimer: ObservableObject {
     /// How much of the log screen is grey: 1 when the rest starts, 0 when it
     /// is over.
     var restFill: CGFloat {
-        Self.restFill(endsAt: endsAt, now: tick, total: TimeInterval(totalSeconds))
+        RestBar.fill(endsAt: endsAt, now: tick, total: TimeInterval(totalSeconds))
     }
 
     /// Computed from the clock rather than held as animated state, for the
@@ -141,10 +138,11 @@ final class RestTimer: ObservableObject {
     /// every value it passes, and restarting an animation on each one leaves
     /// SwiftUI blending a stack of them. A number derived from two dates cannot
     /// pile up, and cannot outlive being cancelled.
+    /// Now `RestBar.fill`, which the Watch uses too — the reasoning above is
+    /// kept here because this is where it was learnt.
     nonisolated static func restFill(endsAt: Date?, now: Date,
                                      total: TimeInterval) -> CGFloat {
-        guard let endsAt, total > 0 else { return 0 }
-        return max(0, min(1, CGFloat(endsAt.timeIntervalSince(now) / total)))
+        RestBar.fill(endsAt: endsAt, now: now, total: total)
     }
 
     private var ticker: Timer?

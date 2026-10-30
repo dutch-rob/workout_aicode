@@ -118,10 +118,8 @@ final class AppStore: ObservableObject {
     }
 
     func reorderWorkouts(_ newOrder: [WorkoutDef]) {
-        for (idx, workout) in newOrder.enumerated() {
-            workout.sortIndex = idx
-        }
-        StoreSave.save(context)
+        WorkoutOrder.renumber(newOrder)
+        StoreSave.save(context, doing: "reordering your workouts")
         reloadAll()
     }
 

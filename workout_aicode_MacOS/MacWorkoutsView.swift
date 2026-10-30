@@ -142,13 +142,12 @@ struct MacWorkoutsView: View {
     /// written as a fresh run of indices down the list as shown. Deleted
     /// workouts are not in `living` and keep whatever index they had: they are
     /// on their way out, and the query never shows them again.
+    /// The same numbering the phone does — see `WorkoutOrder`. A list that
+    /// came back in a different order on the other device would look like the
+    /// drag had not taken.
     private func reorder(_ offsets: IndexSet, _ destination: Int) {
-        var order = living
-        order.move(fromOffsets: offsets, toOffset: destination)
-        for (index, workout) in order.enumerated() {
-            workout.sortIndex = index
-        }
-        StoreSave.save(context)
+        WorkoutOrder.renumber(WorkoutOrder.moved(living, from: offsets, to: destination))
+        StoreSave.save(context, doing: "reordering your workouts")
     }
 
     private func delete(_ offsets: IndexSet) {
