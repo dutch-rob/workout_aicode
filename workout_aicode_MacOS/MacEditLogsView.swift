@@ -395,7 +395,7 @@ struct MacEditLogsView: View {
         context.insert(log)
         context.insert(LogWeights(logId: log.id, grams: weights))
         DraftMode.note(log: log.id, in: context)
-        try? context.save()
+        StoreSave.save(context)
 
         newExercise = nil
         newWeights = [0, 0, 0]
@@ -411,7 +411,7 @@ struct MacEditLogsView: View {
         context.delete(log)
         // Saved at once, so the query that feeds this table stops handing back
         // a row whose record has gone.
-        try? context.save()
+        StoreSave.save(context)
     }
 
     // MARK: Leaving
@@ -420,7 +420,7 @@ struct MacEditLogsView: View {
         for log in logs where !log.isDeleted {
             LogEditing.trimEmptyTrailingSets(log, in: context)
         }
-        try? context.save()
+        StoreSave.save(context)
 
         if changed {
             leaving = true               // ask; the dialog's buttons do the rest

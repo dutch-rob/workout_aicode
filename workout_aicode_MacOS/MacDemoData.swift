@@ -138,7 +138,7 @@ enum MacDemoData {
         // The question about what old weights meant must not appear over a
         // screenshot: this data was written in the unit being read.
         UserDefaults.standard.set(unit.rawValue, forKey: WeightHistory.statedUnitKey)
-        try? context.save()
+        StoreSave.save(context)
 
     }
 }

@@ -42,6 +42,8 @@ struct ContentView: View {
                 }
         }
         .toolbar { DraftToolbar() }
+        // A write that did not work — see StoreSave. The phone has the same.
+        .reportsSaveFailures()
     }
 
     private func row(_ item: MacSection) -> some View {

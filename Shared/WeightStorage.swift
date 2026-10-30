@@ -234,7 +234,7 @@ enum WeightHistory {
         if UserDefaults.standard.string(forKey: WeightUnit.key) == nil {
             UserDefaults.standard.set(unit.rawValue, forKey: WeightUnit.key)
         }
-        try? context.save()
+        StoreSave.save(context)
         return filled
     }
 }

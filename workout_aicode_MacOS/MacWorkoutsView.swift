@@ -105,7 +105,7 @@ struct MacWorkoutsView: View {
                                  sortIndex: (workouts.map(\.sortIndex).max() ?? 0) + 1)
         context.insert(workout)
         DraftMode.note(workout: workout.id, in: context)
-        try? context.save()
+        StoreSave.save(context)
         selection = workout.id
     }
 
@@ -130,7 +130,7 @@ struct MacWorkoutsView: View {
     private func add(_ workout: WorkoutDef) {
         context.insert(workout)
         DraftMode.note(workout: workout.id, in: context)
-        try? context.save()
+        StoreSave.save(context)
         selection = workout.id
     }
 
@@ -148,7 +148,7 @@ struct MacWorkoutsView: View {
         for (index, workout) in order.enumerated() {
             workout.sortIndex = index
         }
-        try? context.save()
+        StoreSave.save(context)
     }
 
     private func delete(_ offsets: IndexSet) {
@@ -158,7 +158,7 @@ struct MacWorkoutsView: View {
             DraftMode.forget(id: workout.id, in: context)
             context.delete(workout)
         }
-        try? context.save()
+        StoreSave.save(context)
     }
 }
 
@@ -370,6 +370,6 @@ struct MacWorkoutDetail: View {
         context.insert(exercise)
         DraftMode.note(exercise: exercise.id, in: context)
         workout.exerciseOrder.append(exercise.id)
-        try? context.save()
+        StoreSave.save(context)
     }
 }

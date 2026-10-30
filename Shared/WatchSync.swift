@@ -293,7 +293,11 @@ struct SessionSnapshot: Codable, Equatable {
     /// How old a snapshot may be and still be offered for taking over. Same
     /// hour as the phone's OpenWorkoutPolicy.idleLimit — a test holds the two
     /// together, since the Watch cannot see Shared/.
-    static let staleAfter: TimeInterval = 3600
+    /// The same hour that decides a workout is over — a session the phone
+    /// would already have closed must not be offered to the Watch as one to
+    /// carry on. It was written out as 3600 here while the Watch could not
+    /// see Shared/; it can now, so there is one hour rather than two.
+    static var staleAfter: TimeInterval { OpenWorkoutPolicy.idleLimit }
 
     func isFresh(now: Date = Date()) -> Bool {
         guard let updatedAt else { return false }

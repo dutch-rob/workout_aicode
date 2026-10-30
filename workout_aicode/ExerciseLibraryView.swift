@@ -393,7 +393,7 @@ struct ExerciseLibraryView: View {
         } else {
             workout.exerciseOrder.append(exercise.id)
         }
-        try? context.save()
+        StoreSave.save(context)
     }
 }
 
@@ -690,6 +690,6 @@ struct WorkoutMembershipSection: View {
         } else {
             workout.exerciseOrder.append(exercise.id)
         }
-        try? context.save()
+        StoreSave.save(context)
     }
 }

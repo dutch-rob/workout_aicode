@@ -993,6 +993,12 @@ enum WorkoutMigrationPlan: SchemaMigrationPlan {
                 UserDefaults.standard.set(data, forKey: snapshotKey)
             }
             for log in oldLogs { context.delete(log) }
+            // Deliberately NOT StoreSave: a migration stage runs off the main
+            // actor while the container is being opened, and there is no app
+            // yet to show an alert to. A failure here surfaces as the
+            // container refusing to open, which AppSetup already catches and
+            // answers with the inferred load, the V1 recovery and, last, a
+            // fresh store — a far better answer than a banner.
             try? context.save()
         },
         didMigrate: { context in
@@ -1012,7 +1018,7 @@ enum WorkoutMigrationPlan: SchemaMigrationPlan {
                     context.insert(log)
                 }
             }
-            try? context.save()
+            try? context.save()   // see the note in willMigrate above
             UserDefaults.standard.removeObject(forKey: snapshotKey)
         }
     )

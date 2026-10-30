@@ -202,6 +202,10 @@ struct ContentView: View {
         .sheet(isPresented: $survey.pending) { SurveyView() }
         // Asked once, on a fresh install, before there is anything to set up.
         .sheet(isPresented: $askDefaults) { ExerciseDefaultsView() }
+        // A write to the store that did not work. Here rather than at each
+        // screen: a save can fail during a set, and the user should hear
+        // about it when they are next somewhere they can read it.
+        .reportsSaveFailures()
         .task {
             // Straight back into an interrupted workout. A launch that finds an
             // unfinished session is almost always iOS having killed the app
@@ -385,7 +389,7 @@ struct ContentView: View {
     context.insert(e2)
     context.insert(w1)
     context.insert(w2)
-    try? context.save()
+    StoreSave.save(context)
     store.reloadAll()
 
     return ContentView()

@@ -2056,8 +2056,9 @@ struct LogListTests {
 }
 
 @Test func aStashedWorkoutGoesStaleAfterTheSameHourAsAutoEnd() {
-    // The Watch cannot see Shared/, so the hour is written twice. A workout
-    // the phone would already have closed must not be offered to the Watch.
+    // One hour, now that both ends compile Shared/. Kept as a test because
+    // the two were separate literals once, and a workout the phone would
+    // already have closed must not be offered to the Watch to carry on.
     #expect(SessionSnapshot.staleAfter == OpenWorkoutPolicy.idleLimit)
 
     let now = Date(timeIntervalSince1970: 1_000_000)
@@ -2070,14 +2071,27 @@ struct LogListTests {
     #expect(!stamped(OpenWorkoutPolicy.idleLimit + 1).isFresh(now: now))
 }
 
-@Test func theTwoCopiesOfTheSyncContractAreIdentical() throws {
-    // Edited in pairs by hand; a snapshot field added to one side only would
-    // decode as absent on the other and quietly drop the rest.
-    let here = URL(fileURLWithPath: #filePath)
+@Test func thereIsOnlyOneCopyOfTheSyncContract() throws {
+    // This test used to read two files and check they were byte-identical:
+    // the phone's and the Watch's, edited in pairs by hand, where a snapshot
+    // field added to one side only would decode as absent on the other and
+    // quietly drop the rest.
+    //
+    // Both targets now compile Shared/WatchSync.swift, so there is nothing to
+    // keep in step — and this guards the arrangement rather than the copies.
+    // A per-target copy reappearing would shadow the shared one for that
+    // target, which is the old failure wearing a new hat.
+    let root = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent()
-    let phone = try Data(contentsOf: here.appendingPathComponent("workout_aicode/WatchSync.swift"))
-    let watch = try Data(contentsOf: here.appendingPathComponent("workout_aicode Watch App/WatchSync.swift"))
-    #expect(phone == watch)
+    let shared = root.appendingPathComponent("Shared/WatchSync.swift")
+    #expect(FileManager.default.fileExists(atPath: shared.path))
+
+    for copy in ["workout_aicode/WatchSync.swift",
+                 "workout_aicode Watch App/WatchSync.swift"] {
+        #expect(!FileManager.default.fileExists(
+            atPath: root.appendingPathComponent(copy).path),
+                "\(copy) is back; the wire format belongs in Shared/ only")
+    }
 }
 
 // MARK: - The countdowns must not rebuild the screen they sit on

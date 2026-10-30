@@ -257,7 +257,7 @@ struct MacExercisesView: View {
     private func insert(_ exercise: ExerciseDef) {
         context.insert(exercise)
         DraftMode.note(exercise: exercise.id, in: context)
-        try? context.save()
+        StoreSave.save(context)
         selection = exercise.id
     }
 
@@ -279,7 +279,7 @@ struct MacExercisesView: View {
         let exercise = ExerciseDefaults.makeExercise(name: "New exercise")
         context.insert(exercise)
         DraftMode.note(exercise: exercise.id, in: context)
-        try? context.save()
+        StoreSave.save(context)
         selection = exercise.id
     }
 
@@ -293,7 +293,7 @@ struct MacExercisesView: View {
             DraftMode.forget(id: exercise.id, in: context)
             context.delete(exercise)
         }
-        try? context.save()
+        StoreSave.save(context)
     }
 }
 

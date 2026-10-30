@@ -5,10 +5,19 @@ import SwiftData
 //
 // The rules for a transfer file, away from any one screen: what a file may
 // say, what replacing means, what merging means, and what the user is told
-// afterwards. The iPhone grew its own copy of this inside a view; the Mac
-// uses this one. (The phone's is still its own — converging it is worth
-// doing, and is worth doing with a device in hand rather than before a
-// submission.)
+// afterwards.
+//
+// The FORMAT is all here, and both apps use it: what an export says it is,
+// what metadata it carries, what the counts count, how a file of any version
+// is read back, and what a spreadsheet row looks like. It did not start that
+// way — the phone grew its own copy inside a view, and the two had already
+// drifted: the phone wrote its version string as a literal while the Mac read
+// it from `currentVersion`, and its spreadsheet was still the one from before
+// weights had a unit, bare numbers with no column saying what they were.
+//
+// What each screen still owns is what it DOES with a file — which buttons it
+// offers, what it says afterwards, whether it backs up first. That is a
+// screen's business and differs on purpose.
 //
 // Nothing here presents anything. It throws or returns a summary, and the
 // screen decides how to say it.
@@ -244,6 +253,50 @@ enum LogTransfer {
     }
 
     // MARK: Writing it out
+
+    /// The envelope an export writes.
+    ///
+    /// One place, because an envelope that does not match what `load` and
+    /// `validate` expect is a file that leaves one app and is refused by the
+    /// other — and the counts here are checked against the data there.
+    /// `device` is the one thing the caller supplies: only it knows what it
+    /// is running on.
+    @MainActor
+    static func envelope(workouts: [WorkoutDef], exercises: [ExerciseDef],
+                         logs: [WorkoutLog],
+                         aerobicResults: [AerobicResult] = [],
+                         assistedResults: [AssistedResult] = [],
+                         logWeights: [LogWeights] = [],
+                         device: ExportEnvelope.DeviceInfo) -> ExportEnvelope {
+        let bundle = Bundle.main
+        return ExportEnvelope(
+            exportVersion: currentVersion,
+            appIdentifier: bundle.bundleIdentifier ?? "",
+            appVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+            build: bundle.infoDictionary?["CFBundleVersion"] as? String ?? "",
+            exportedAt: ISO8601DateFormatter().string(from: Date()),
+            device: device,
+            locale: Locale.current.identifier,
+            timeZone: TimeZone.current.identifier,
+            counts: ExportEnvelope.Counts(workouts: workouts.count,
+                                          exercises: exercises.count,
+                                          logs: logs.count),
+            data: ExportEnvelope.AllData(workouts: workouts, exercises: exercises,
+                                         logs: logs,
+                                         aerobicResults: aerobicResults,
+                                         assistedResults: assistedResults,
+                                         logWeights: logWeights))
+    }
+
+    /// Pretty-printed, because a file a person may open in a text editor to
+    /// see what is in it should be readable when they do.
+    @MainActor
+    static func encoded(_ envelope: ExportEnvelope) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted]
+        return try encoder.encode(envelope)
+    }
+
 
     /// Every logged set as a row, for a spreadsheet.
     ///

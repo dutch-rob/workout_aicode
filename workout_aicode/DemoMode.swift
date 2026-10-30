@@ -112,7 +112,7 @@ enum DemoMode {
         addHistory(for: upper, upperBody, daysAgo: upperDays, hour: 18, into: ctx)
         addHistory(for: lower, lowerBody, daysAgo: lowerDays, hour: 9, into: ctx)
         addAerobic(to: lower, into: ctx)
-        try? ctx.save()
+        StoreSave.save(ctx)
     }
 
     /// Twelve sessions each, roughly weekly. Counted in days ago, so the list
@@ -206,7 +206,7 @@ enum DemoMode {
         // The logs belong to it.
         let logs = (try? ctx.fetch(FetchDescriptor<WorkoutLog>())) ?? []
         for log in logs { log.workoutId = workout.id }
-        try? ctx.save()
+        StoreSave.save(ctx)
     }
 
     /// DEBUG only: loads an export from the app's own Documents folder into
@@ -246,7 +246,7 @@ enum DemoMode {
         for result in envelope.data.aerobicResults ?? [] { ctx.insert(result) }
         for result in envelope.data.assistedResults ?? [] { ctx.insert(result) }
         for weights in envelope.data.logWeights ?? [] { ctx.insert(weights) }
-        try? ctx.save()
+        StoreSave.save(ctx)
     }
 
     /// DEBUG only: an exercise with no history at all, first in the workout,
@@ -261,7 +261,7 @@ enum DemoMode {
                                    primaryMuscle: .chest)
         ctx.insert(exercise)
         workout.exerciseOrder.insert(exercise.id, at: 0)
-        try? ctx.save()
+        StoreSave.save(ctx)
     }
 
     /// Screenshot/demo only: makes the first exercise an assisted machine, so
@@ -279,7 +279,7 @@ enum DemoMode {
               let exercise = try? ctx.fetch(FetchDescriptor<ExerciseDef>())
                   .first(where: { $0.id == firstId }) else { return }
         exercise.subtractsFromBodyWeight = true
-        try? ctx.save()
+        StoreSave.save(ctx)
     }
 
     private static func build(_ name: String, _ rows: [Row],

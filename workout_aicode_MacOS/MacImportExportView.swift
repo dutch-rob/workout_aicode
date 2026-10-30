@@ -85,32 +85,17 @@ struct MacImportExportView: View {
     }
 
     private func envelope() -> ExportEnvelope {
-        let bundle = Bundle.main
-        return ExportEnvelope(
-            exportVersion: LogTransfer.currentVersion,
-            appIdentifier: bundle.bundleIdentifier ?? "",
-            appVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-            build: bundle.infoDictionary?["CFBundleVersion"] as? String ?? "",
-            exportedAt: ISO8601DateFormatter().string(from: Date()),
-            device: ExportEnvelope.DeviceInfo(model: "Mac", system: "macOS",
-                                              version: ProcessInfo.processInfo
-                                                  .operatingSystemVersionString),
-            locale: Locale.current.identifier,
-            timeZone: TimeZone.current.identifier,
-            counts: ExportEnvelope.Counts(workouts: workouts.count,
-                                          exercises: exercises.count,
-                                          logs: logs.count),
-            data: ExportEnvelope.AllData(workouts: workouts, exercises: exercises,
-                                         logs: logs,
-                                         aerobicResults: aerobicResults,
-                                         assistedResults: assistedResults,
-                                         logWeights: logWeights))
+        LogTransfer.envelope(
+            workouts: workouts, exercises: exercises, logs: logs,
+            aerobicResults: aerobicResults, assistedResults: assistedResults,
+            logWeights: logWeights,
+            device: ExportEnvelope.DeviceInfo(
+                model: "Mac", system: "macOS",
+                version: ProcessInfo.processInfo.operatingSystemVersionString))
     }
 
     private func encodedData() throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
-        return try encoder.encode(envelope())
+        try LogTransfer.encoded(envelope())
     }
 
     private func exportJSON() {

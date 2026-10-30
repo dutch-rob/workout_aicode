@@ -46,7 +46,7 @@ enum DraftMode {
         if let existing = active(in: context) { return existing }
         let session = DraftSession()
         context.insert(session)
-        try? context.save()
+        StoreSave.save(context)
         return session
     }
 
@@ -55,7 +55,7 @@ enum DraftMode {
     static func keepAll(in context: ModelContext) {
         guard let session = active(in: context) else { return }
         context.delete(session)
-        try? context.save()
+        StoreSave.save(context)
     }
 
     /// Ends the session and removes what was made during it.
@@ -98,7 +98,7 @@ enum DraftMode {
             }
         }
         context.delete(session)
-        try? context.save()
+        StoreSave.save(context)
     }
 
     // MARK: Recording
@@ -111,21 +111,21 @@ enum DraftMode {
         guard let session = active(in: context) else { return }
         guard !session.exerciseIds.contains(id) else { return }
         session.exerciseIds.append(id)
-        try? context.save()
+        StoreSave.save(context)
     }
 
     static func note(workout id: UUID, in context: ModelContext) {
         guard let session = active(in: context) else { return }
         guard !session.workoutIds.contains(id) else { return }
         session.workoutIds.append(id)
-        try? context.save()
+        StoreSave.save(context)
     }
 
     static func note(log id: UUID, in context: ModelContext) {
         guard let session = active(in: context) else { return }
         guard !session.logIds.contains(id) else { return }
         session.logIds.append(id)
-        try? context.save()
+        StoreSave.save(context)
     }
 
     /// Something made during the draft was deleted by hand — stop offering it
@@ -135,6 +135,6 @@ enum DraftMode {
         session.exerciseIds.removeAll { $0 == id }
         session.workoutIds.removeAll { $0 == id }
         session.logIds.removeAll { $0 == id }
-        try? context.save()
+        StoreSave.save(context)
     }
 }

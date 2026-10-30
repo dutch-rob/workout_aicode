@@ -28,7 +28,7 @@ final class AppStore: ObservableObject {
                     changed = true
                 }
             }
-            if changed { try? context.save() }
+            if changed { StoreSave.save(context) }
             exercises = try context.fetch(exercisesDescriptor)
         } catch {
             workouts = []
@@ -46,17 +46,17 @@ final class AppStore: ObservableObject {
             if existing.isEmpty {
                 context.insert(workout)
             }
-            try? context.save()
+            StoreSave.save(context)
         } catch {
             context.insert(workout)
-            try? context.save()
+            StoreSave.save(context)
         }
         reloadAll()
     }
 
     func deleteWorkout(_ workout: WorkoutDef) {
         context.delete(workout)
-        try? context.save()
+        StoreSave.save(context)
         reloadAll()
     }
 
@@ -68,10 +68,10 @@ final class AppStore: ObservableObject {
             if existing.isEmpty {
                 context.insert(exercise)
             }
-            try? context.save()
+            StoreSave.save(context)
         } catch {
             context.insert(exercise)
-            try? context.save()
+            StoreSave.save(context)
         }
         reloadAll()
     }
@@ -87,7 +87,7 @@ final class AppStore: ObservableObject {
             }
         }
         context.delete(exercise)
-        try? context.save()
+        StoreSave.save(context, doing: "deleting an exercise")
         reloadAll()
     }
 
@@ -121,7 +121,7 @@ final class AppStore: ObservableObject {
         for (idx, workout) in newOrder.enumerated() {
             workout.sortIndex = idx
         }
-        try? context.save()
+        StoreSave.save(context)
         reloadAll()
     }
 
@@ -396,7 +396,7 @@ final class AppStore: ObservableObject {
                                          maximumHeartRate: maximumHeartRate,
                                          zoneSeconds: zoneSeconds))
         }
-        try? context.save()
+        StoreSave.save(context, doing: "saving a set logged on your Watch")
         reloadAll()
     }
 

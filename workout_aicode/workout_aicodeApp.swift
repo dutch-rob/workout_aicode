@@ -132,7 +132,7 @@ final class AppSetup: ObservableObject {
         try? ctx.delete(model: WorkoutLog.self)
         try? ctx.delete(model: WorkoutDef.self)
         try? ctx.delete(model: ExerciseDef.self)
-        try? ctx.save()
+        StoreSave.save(ctx)
         store.reloadAll()
     }
 
@@ -216,7 +216,7 @@ final class AppSetup: ObservableObject {
                                       weights: s.weights, reps: s.reps))
             }
         }
-        try? ctx.save()
+        StoreSave.save(ctx)
     }
 
     // MARK: - Container factory
@@ -392,7 +392,7 @@ final class AppSetup: ObservableObject {
                                   sortIndex: w.sortIndex))
         }
         for l in v2Logs { ctx.insert(l) }
-        try? ctx.save()
+        StoreSave.save(ctx)
         v2Store.reloadAll()
 
         return (v2Container, v2Store)

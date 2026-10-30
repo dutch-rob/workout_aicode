@@ -309,7 +309,7 @@ struct EditWorkoutView: View {
             } else {
                 workout.name = o.name
                 workout.exerciseOrder = o.order
-                try? context.save()
+                StoreSave.save(context)
             }
         }
         dismiss()
@@ -623,7 +623,7 @@ struct EditExerciseView: View {
                 exercise.restSeconds = o.restSeconds
                 exercise.kind = o.kind
                 exercise.aerobicActivity = o.activity
-                try? context.save()
+                StoreSave.save(context)
             }
         }
         dismiss()
@@ -682,6 +682,11 @@ struct LogExerciseView: View {
     @State private var reps: [[Int]] = []
 
     @State private var loggedIndices: Set<Int> = []
+    /// The exercise order every array above is indexed against, and `true`
+    /// once there is one. The workout can be edited while it is open here —
+    /// see `followTheWorkout`.
+    @State private var preparedOrder: [UUID] = []
+    @State private var didPrepare = false
     /// What the wheel is set to, per exercise: how long you mean to go.
     @State private var durations: [Int] = []
     /// What each aerobic session came to, per exercise. Held here rather than
@@ -778,6 +783,9 @@ struct LogExerciseView: View {
                 .onChange(of: loggedIndices) { _, _ in
                     handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
                 }
+                // The workout itself, edited elsewhere while it is being
+                // logged here — see followTheWorkout.
+                .onChange(of: exerciseIds) { _, order in followTheWorkout(order) }
                 .onDisappear { handoff.leaveSession(); restTimer.cancel(); aerobic.cancel() }
                 // Reloaded state after reclaiming the session in place.
                 .onChange(of: handoff.adoptSnapshot) { _, _ in
@@ -908,6 +916,10 @@ struct LogExerciseView: View {
         loggedIndices = Set(snap.loggedIndices)
         startedAt     = Date(timeIntervalSince1970: snap.startedAt)
         ensureBufferShape()
+        // These arrays are the other device's now, so this is the order they
+        // are indexed against. A snapshot carries no order of its own.
+        preparedOrder = exerciseIds
+        didPrepare    = true
         // Clamp: a stale snapshot may point past the current exercise list.
         currentIndex  = min(max(0, snap.currentIndex),
                             max(0, exerciseIds.count - 1))
@@ -1295,30 +1307,72 @@ struct LogExerciseView: View {
 
     private func prepareBuffers() {
         let last = store.lastEntries(for: workout)
-        weights = exerciseIds.map { exId -> [Int] in
-            guard let log = last[exId] else { return [] }
-            let exercise = allExercises.first(where: { $0.id == exId })
-            // Put last time's numbers on this wheel's steps, so the wheel
-            // opens where it is expected to rather than at its lowest value.
-            func snapped(_ grams: [Int]) -> [Int] {
-                guard let exercise else { return grams }
-                return grams.map { WeightWheel.snap($0, for: exercise) }
-            }
-            // An assisted machine's wheel shows what you SET on it, so it has
-            // to open on last time's setting — the log holds what was lifted,
-            // which is a different number and would creep every session as
-            // body weight moved.
-            if exercise?.subtractsFromBodyWeight == true,
-               let assisted = store.assistedResult(forLogId: log.id),
-               let settings = assisted.machineSettingsGrams, !settings.isEmpty {
-                return snapped(settings)
-            }
-            return snapped(store.weightsGrams(forLogId: log.id))
-        }
-        reps = exerciseIds.map { exId in last[exId]?.reps ?? [] }
+        weights = exerciseIds.map { freshWeights(for: $0, last: last) }
+        reps = exerciseIds.map { last[$0]?.reps ?? [] }
         // Pre-filled from the last session of each aerobic exercise, so the
         // wheel opens where it was left, exactly like the weight wheels.
-        durations = exerciseIds.map { AerobicDefaults.lastMinutes(for: $0) * 60 }
+        durations = exerciseIds.map(freshDuration(for:))
+        preparedOrder = exerciseIds
+        didPrepare = true
+    }
+
+    /// Where one exercise's wheels open: last time's numbers, or nothing.
+    private func freshWeights(for exId: UUID, last: [UUID: WorkoutLog]) -> [Int] {
+        guard let log = last[exId] else { return [] }
+        let exercise = allExercises.first(where: { $0.id == exId })
+        // Put last time's numbers on this wheel's steps, so the wheel
+        // opens where it is expected to rather than at its lowest value.
+        func snapped(_ grams: [Int]) -> [Int] {
+            guard let exercise else { return grams }
+            return grams.map { WeightWheel.snap($0, for: exercise) }
+        }
+        // An assisted machine's wheel shows what you SET on it, so it has
+        // to open on last time's setting — the log holds what was lifted,
+        // which is a different number and would creep every session as
+        // body weight moved.
+        if exercise?.subtractsFromBodyWeight == true,
+           let assisted = store.assistedResult(forLogId: log.id),
+           let settings = assisted.machineSettingsGrams, !settings.isEmpty {
+            return snapped(settings)
+        }
+        return snapped(store.weightsGrams(forLogId: log.id))
+    }
+
+    private func freshDuration(for exId: UUID) -> Int {
+        AerobicDefaults.lastMinutes(for: exId) * 60
+    }
+
+    /// The workout changed while it is open here: an exercise reordered or
+    /// taken out on the Mac and brought over by iCloud, or one deleted from
+    /// the library, which drops it out of `exerciseIds`. Without this every
+    /// array slides up by one and the wheels belong to the wrong exercise —
+    /// the Watch had exactly this, reported from a real workout.
+    ///
+    /// The re-indexing itself is `ExerciseOrderChange`, which is where its
+    /// reasoning and its tests are.
+    private func followTheWorkout(_ newOrder: [UUID]) {
+        guard didPrepare, newOrder != preparedOrder else { return }
+        let was = preparedOrder
+        let last = store.lastEntries(for: workout)
+        weights = ExerciseOrderChange.carry(weights, from: was, to: newOrder) {
+            freshWeights(for: $0, last: last)
+        }
+        reps = ExerciseOrderChange.carry(reps, from: was, to: newOrder) {
+            last[$0]?.reps ?? []
+        }
+        durations = ExerciseOrderChange.carry(durations, from: was, to: newOrder,
+                                              fresh: freshDuration(for:))
+        // An aerobic session belongs to the exercise it was run for, so it
+        // travels with it; an exercise that has just arrived has not run one.
+        summaries = ExerciseOrderChange.carry(summaries, from: was, to: newOrder) { _ in nil }
+        actualSeconds = ExerciseOrderChange.carry(actualSeconds, from: was, to: newOrder) { _ in 0 }
+        loggedIndices = ExerciseOrderChange.carry(loggedIndices, from: was, to: newOrder)
+        preparedOrder = newOrder
+        currentIndex = ExerciseOrderChange.position(of: currentIndex, from: was, to: newOrder)
+        ensureBufferShape()
+        // The Watch may take this over at any moment, and what it would be
+        // handed is built from these arrays.
+        handoff.updateLiveSnapshot(currentSnapshot())
     }
 
     /// Guarantee one weights/reps row per exercise. An adopted snapshot can be
@@ -2057,42 +2111,22 @@ struct ImportExportView: View {
         exportURL = nil
     }
     
+    /// The same envelope the Mac writes — see `LogTransfer.envelope`. It was
+    /// built here once, with its version string as a literal, which is how
+    /// the two ends drift.
     private func buildExportEnvelope() -> ExportEnvelope {
-        let bundle = Bundle.main
-        return ExportEnvelope(
-            exportVersion: "logJSON.4",
-            appIdentifier: bundle.bundleIdentifier ?? "",
-            appVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-            build: bundle.infoDictionary?["CFBundleVersion"] as? String ?? "",
-            exportedAt: ISO8601DateFormatter().string(from: Date()),
-            device: ExportEnvelope.DeviceInfo(
-                model: UIDevice.current.model,
-                system: UIDevice.current.systemName,
-                version: UIDevice.current.systemVersion
-            ),
-            locale: Locale.current.identifier,
-            timeZone: TimeZone.current.identifier,
-            counts: ExportEnvelope.Counts(
-                workouts: workouts.count,
-                exercises: exercises.count,
-                logs: logs.count
-            ),
-            data: ExportEnvelope.AllData(
-                workouts: workouts,
-                exercises: exercises,
-                logs: logs,
-                aerobicResults: aerobicResults,
-                assistedResults: assistedResults,
-                logWeights: logWeights
-            )
-        )
+        LogTransfer.envelope(
+            workouts: workouts, exercises: exercises, logs: logs,
+            aerobicResults: aerobicResults, assistedResults: assistedResults,
+            logWeights: logWeights,
+            device: ExportEnvelope.DeviceInfo(model: UIDevice.current.model,
+                                              system: UIDevice.current.systemName,
+                                              version: UIDevice.current.systemVersion))
     }
 
     private func exportJSON() {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
         do {
-            let jsonData = try encoder.encode(buildExportEnvelope())
+            let jsonData = try LogTransfer.encoded(buildExportEnvelope())
             let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("workout-logs.json")
             try jsonData.write(to: fileURL, options: .atomic)
             exportURL = fileURL
@@ -2122,49 +2156,12 @@ struct ImportExportView: View {
     /// Returns an envelope in the *current* (logJSON.2) flat shape regardless
     /// of whether the source file is logJSON.1 or logJSON.2. Old single-row,
     /// multi-entry logs get expanded into one flat WorkoutLog per entry.
+    /// One reader for both apps — see `LogTransfer.load`, which is where the
+    /// older formats and what they turn into are described.
     private func loadEnvelope(from url: URL) throws -> ExportEnvelope {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-        let data = try Data(contentsOf: url)
-
-        // Peek at exportVersion without committing to either schema yet.
-        struct VersionPeek: Decodable { let exportVersion: String }
-        let version = (try? JSONDecoder().decode(VersionPeek.self, from: data))?.exportVersion ?? ""
-
-        let decoder = JSONDecoder()
-        if version == "logJSON.2" || version == "logJSON.3" || version == "logJSON.4" {
-            // Each version only ADDS optional arrays, so an older file decodes
-            // into the current shape with none of them. A file older than
-            // logJSON.4 holds weights without a unit; they are imported as
-            // they are and the app asks, once, what they meant.
-            return try decoder.decode(ExportEnvelope.self, from: data)
-        } else if version.hasPrefix("logJSON.1") {
-            let legacy = try decoder.decode(LegacyExportEnvelope.self, from: data)
-            let flatLogs: [WorkoutLog] = legacy.data.logs.flatMap { $0.flatten() }
-            return ExportEnvelope(
-                exportVersion: "logJSON.2",            // normalized
-                appIdentifier: legacy.appIdentifier,
-                appVersion:    legacy.appVersion,
-                build:         legacy.build,
-                exportedAt:    legacy.exportedAt,
-                device:        legacy.device,
-                locale:        legacy.locale,
-                timeZone:      legacy.timeZone,
-                counts: ExportEnvelope.Counts(
-                    workouts:  legacy.data.workouts.count,
-                    exercises: legacy.data.exercises.count,
-                    logs:      flatLogs.count            // flattened count
-                ),
-                data: ExportEnvelope.AllData(
-                    workouts:  legacy.data.workouts,
-                    exercises: legacy.data.exercises,
-                    logs:      flatLogs
-                )
-            )
-        } else {
-            // Try V2 anyway so a forward-compat exportVersion still parses.
-            return try decoder.decode(ExportEnvelope.self, from: data)
-        }
+        return try LogTransfer.load(try Data(contentsOf: url))
     }
 
     private func validateImport(at url: URL) {
@@ -2431,36 +2428,17 @@ struct ImportExportView: View {
         }
     }
 
+    /// The same spreadsheet the Mac writes — see `LogTransfer.tsv`.
+    ///
+    /// This used to be its own, and was still logTSV.1: the raw numbers off
+    /// each log with no column saying what unit they were in, which is the
+    /// exact problem units were added to solve. It also quoted a name
+    /// containing a comma and not one containing a tab, in a file whose
+    /// columns are separated by tabs.
     private func makeTSV() -> String {
-        // Header
-        var lines: [String] = ["date\ttime\tworkout\texercise\tset\tweight\treps\tlog output version: logTSV.1"]
-        let dateFormatter = DateFormatter()
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-        dateFormatter.timeZone = TimeZone.current
-        dateFormatter.dateFormat = "yyyy-MM-dd\tHH:mm"
-        // Logs are reverse sorted; export newest first is fine
-        for log in logs {
-            let workoutName = workouts.first(where: { $0.id == log.workoutId })?.name ?? "Workout"
-            let exerciseName = exercises.first(where: { $0.id == log.exerciseId })?.name ?? "Exercise"
-            let count = max(log.weights.count, log.reps.count)
-            for i in 0..<count {
-                let weight = i < log.weights.count ? log.weights[i] : 0
-                let reps   = i < log.reps.count    ? log.reps[i]    : 0
-                let dateStr = dateFormatter.string(from: log.date)
-                let quotedWorkout = quoteIfNeeded(workoutName)
-                let quotedExercise = quoteIfNeeded(exerciseName)
-                lines.append("\(dateStr)\t\(quotedWorkout)\t\(quotedExercise)\t\(i+1)\t\(weight)\t\(reps)")
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    private func quoteIfNeeded(_ s: String) -> String {
-        if s.contains(",") || s.contains("\"") || s.contains("\n") {
-            let escaped = s.replacingOccurrences(of: "\"", with: "\"\"")
-            return "\"\(escaped)\""
-        }
-        return s
+        LogTransfer.tsv(logs: logs, workouts: workouts, exercises: exercises,
+                        weightsByLog: LogWeightsIndex.byLogId(logWeights),
+                        unit: .current)
     }
 
 }
@@ -3058,7 +3036,7 @@ struct SettingsView: View {
     let w2 = WorkoutDef(name: "Leg Day")
     context.insert(w1)
     context.insert(w2)
-    try? context.save()
+    StoreSave.save(context)
     store.reloadAll()
     return NavigationStack { EditWorkoutsView() }
         .environmentObject(store)
@@ -3076,7 +3054,7 @@ struct SettingsView: View {
     context.insert(e1)
     context.insert(e2)
     context.insert(workout)
-    try? context.save()
+    StoreSave.save(context)
     store.reloadAll()
     return NavigationStack { EditWorkoutView(workout: workout) }
         .environmentObject(store)
@@ -3092,7 +3070,7 @@ struct SettingsView: View {
     let e2 = ExerciseDef(name: "Deadlift")
     context.insert(e1)
     context.insert(e2)
-    try? context.save()
+    StoreSave.save(context)
     store.reloadAll()
     return NavigationStack { ExerciseLibraryView() }
         .environmentObject(store)
@@ -3107,7 +3085,7 @@ struct SettingsView: View {
     let workout = WorkoutDef(name: "Arms", exerciseOrder: [e1.id])
     context.insert(e1)
     context.insert(workout)
-    try? context.save()
+    StoreSave.save(context)
     store.reloadAll()
     return NavigationStack { LogExerciseView(workout: workout) }
         .environmentObject(store)
@@ -3135,7 +3113,7 @@ struct SettingsView: View {
     context.insert(workout)
     context.insert(log1)
     context.insert(log2)
-    try? context.save()
+    StoreSave.save(context)
     store.reloadAll()
 
     return NavigationStack { LogsStatsView() }
