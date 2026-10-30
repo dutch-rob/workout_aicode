@@ -25,10 +25,76 @@ struct MuscleBodyPicker: View {
     /// instead", and a button that means nothing is worse than no button.
     var aerobic: Binding<Bool>? = nil
 
-    /// How tall to draw. Height is what limits these — each half is only about
-    /// 0.28 as wide as it is high — so this is the one dial worth having: a Mac
-    /// window has room the phone does not.
+    /// How tall to draw, at MOST. Height is what limits these — each half is
+    /// only about 0.28 as wide as it is high — so this is the one dial worth
+    /// having: a Mac window has room the phone does not.
+    ///
+    /// At most, because a column narrower than two figures this tall cannot
+    /// have them: see `drawnHeight`.
     var height: CGFloat = 400
+
+    /// The width this picker was actually given, once it has been laid out —
+    /// 0 on the very first pass.
+    @State private var offeredWidth: CGFloat = 0
+
+    /// The height the figures are really drawn at.
+    ///
+    /// Both halves are drawn to ONE height, which is the whole point of
+    /// working it out here rather than leaving it to the HStack. Left to
+    /// itself the stack squeezes the two figures to the same WIDTH, and since
+    /// the front half is the wider of the two — 0.280 against 0.247 — equal
+    /// widths mean a shorter front body standing beside a taller back one.
+    /// It looked like a drawing mistake and was reported as one.
+    ///
+    /// Squeezing is also how the picture ends up smaller than the space it
+    /// was given: everything below comes out of the width, so what is left
+    /// over after the labels decides the height, and a column with room to
+    /// spare draws at `height`.
+    private var drawnHeight: CGFloat {
+        guard offeredWidth > 0 else { return height }
+        return Self.heightThatFits(width: offeredWidth, atMost: height)
+    }
+
+    /// The tallest the two figures can be drawn side by side in `width`.
+    ///
+    /// The label columns and the captions between the figures are fixed, so
+    /// they come off the top; what is left is divided by the two aspects,
+    /// which is the width a figure of a given height needs.
+    static func heightThatFits(width: CGFloat, atMost cap: CGFloat) -> CGFloat {
+        let fixed = labelColumnWidth * 2 + captionColumnWidth
+        let perPointOfHeight = FigureGeometry.front.aspect + FigureGeometry.back.aspect
+        guard perPointOfHeight > 0 else { return cap }
+        // A floor rather than nothing: a sliver of a body is still a body, and
+        // a zero-height diagram would take the connectors and labels with it.
+        return max(40, min(cap, (width - fixed) / perPointOfHeight))
+    }
+
+    /// Fixed furniture either side of, and between, the two figures.
+    static let labelColumnWidth: CGFloat = 76
+    static let captionColumnWidth: CGFloat = 18
+
+    /// How big the aerobic heart is drawn and how far it keeps from the front
+    /// figure's left and bottom edges.
+    ///
+    /// Fractions of the height, every one of them, because the dead corner it
+    /// has to stay inside is a fraction of the height: the figure is only
+    /// 0.28 as wide as it is tall, so a heart of a fixed 42 points sat in open
+    /// space beside a 420-point figure and on the ankle of a 260-point one.
+    /// The numbers are the ones that looked right at 420, kept as ratios.
+    static func aerobicHeart(forHeight height: CGFloat)
+        -> (size: CGFloat, leading: CGFloat, bottom: CGFloat) {
+        (height / 10, height / 15, height / 70)
+    }
+
+    /// What the two figures come out as in `width` — the same height, always,
+    /// which is the whole of the fix for a front body that used to stand
+    /// shorter than the back one beside it.
+    static func figureSizes(width: CGFloat, atMost cap: CGFloat)
+        -> (front: CGSize, back: CGSize) {
+        let height = heightThatFits(width: width, atMost: cap)
+        return (CGSize(width: naturalWidth(of: .front, height: height), height: height),
+                CGSize(width: naturalWidth(of: .back, height: height), height: height))
+    }
 
     /// One answer at a time: clicking the selected group again clears it.
     /// This picker is a filter on both platforms — what an exercise's OWN
@@ -38,6 +104,7 @@ struct MuscleBodyPicker: View {
     }
 
     var body: some View {
+        let drawn = drawnHeight
         HStack(alignment: .top, spacing: 0) {
             labelColumn(Self.frontLabels, trailing: true)
             // The aerobic filter sits in the empty corner beside the front
@@ -47,27 +114,35 @@ struct MuscleBodyPicker: View {
             // for it in the label column instead moved every label up, which
             // was a lot of disturbance for one button.
             figure(isBack: false, labels: Self.frontLabels)
-                .frame(maxWidth: Self.naturalWidth(of: .front, height: height))
+                .frame(maxWidth: Self.naturalWidth(of: .front, height: drawn))
                 .overlay(alignment: .bottomLeading) {
                     if let aerobic {
-                        AerobicFilterButton(isOn: aerobic)
-                            // Clear of the Quads connector, which runs
-                            // diagonally through the corner on its way up to
-                            // the thigh. Far enough right to sit in open space,
-                            // not so far as to touch the foot.
-                            .padding(.leading, 28)
-                            .padding(.bottom, 6)
+                        let heart = Self.aerobicHeart(forHeight: drawn)
+                        // Clear of the Quads connector, which runs diagonally
+                        // through the corner on its way up to the thigh. Far
+                        // enough right to sit in open space, not so far as to
+                        // touch the foot — see `aerobicHeart` for why none of
+                        // these three is a fixed number of points.
+                        AerobicFilterButton(isOn: aerobic, size: heart.size)
+                            .padding(.leading, heart.leading)
+                            .padding(.bottom, heart.bottom)
                     }
                 }
             viewCaptions
             figure(isBack: true, labels: Self.backLabels)
-                .frame(maxWidth: Self.naturalWidth(of: .back, height: height))
+                .frame(maxWidth: Self.naturalWidth(of: .back, height: drawn))
             labelColumn(Self.backLabels, trailing: false)
         }
         // The taller the frame the bigger the bodies. On the phone the row of
         // controls that used to sit above the picture now sits below it beside
         // "all muscle groups", which paid for some of this.
-        .frame(height: height)
+        .frame(height: drawn)
+        // What came back is what this picker was allowed to take: its own
+        // width where there was room, the column's where there was not. The
+        // second case is the one worth knowing about, and it settles after one
+        // pass — at the height it reports the figures fit exactly, so the
+        // width that comes back next is the same one.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { offeredWidth = $0 }
     }
 
     // MARK: Which label goes on which side
@@ -194,7 +269,7 @@ struct MuscleBodyPicker: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(width: 18)
+        .frame(width: Self.captionColumnWidth)
     }
 
     private func rotatedLabel(_ text: String) -> some View {
@@ -338,7 +413,7 @@ struct MuscleBodyPicker: View {
         }
         // Narrow on purpose: whatever the labels take, the two figures divide
         // between them, and the artwork is width-limited here.
-        .frame(width: 76)
+        .frame(width: Self.labelColumnWidth)
     }
 
     /// Labels are spread evenly down the column rather than placed at their

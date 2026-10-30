@@ -25,7 +25,13 @@ struct MacWorkoutsView: View {
 
     var body: some View {
         HSplitView {
-            list.frame(minWidth: 200, idealWidth: 240, maxHeight: .infinity)
+            // A ceiling as well as a floor. Both halves of an HSplitView grow,
+            // so with only a minimum stated this list took half the window to
+            // show a name and a count, and the workout being edited — three
+            // columns of its own — got the other half. The divider still
+            // moves; it moves within a range that leaves the detail its room.
+            list.frame(minWidth: 200, idealWidth: 240, maxWidth: 300,
+                       maxHeight: .infinity)
             Group {
                 if let selected {
                     MacWorkoutDetail(workout: selected, allExercises: exercises)
@@ -226,21 +232,53 @@ struct MacWorkoutDetail: View {
                 .padding(.horizontal, 8)
             List {
                 ForEach(inWorkout) { exercise in
-                    Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
+                    chosenRow(exercise)
                 }
                 .onMove { from, to in
                     workout.exerciseOrder.move(fromOffsets: from, toOffset: to)
+                    StoreSave.save(context, doing: "reordering this workout")
                 }
                 .onDelete { offsets in
-                    // Taking an exercise out of a workout never deletes the
-                    // exercise itself — it is very likely in others.
                     for index in offsets.sorted(by: >) {
                         workout.exerciseOrder.remove(at: index)
                     }
+                    StoreSave.save(context, doing: "taking an exercise out of this workout")
                 }
             }
         }
-        .frame(minWidth: 200, maxHeight: .infinity)
+        // Names, and nothing else: past a point the extra width is blank, and
+        // the body diagram in the pane beside it has a use for it.
+        .frame(minWidth: 200, maxWidth: 340, maxHeight: .infinity)
+    }
+
+    /// One exercise in the workout, with the way back out of it.
+    ///
+    /// `.onDelete` is on the ForEach above as well, and on a Mac that is the
+    /// Delete key on a selected row — which this list has no selection to
+    /// offer. So for a while there was no way at all to take an exercise out
+    /// of a workout here. The button is the mirror of the `+` in the library
+    /// on the other side of the pane, and the menu is for whoever right-clicks
+    /// before looking.
+    private func chosenRow(_ exercise: ExerciseDef) -> some View {
+        HStack {
+            Text(exercise.name.isEmpty ? "(unnamed)" : exercise.name)
+            Spacer()
+            Button { remove(exercise) } label: { Image(systemName: "minus.circle") }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Take out of this workout")
+        }
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button("Take out of this workout") { remove(exercise) }
+        }
+    }
+
+    /// Taking an exercise out of a workout never deletes the exercise itself —
+    /// it is very likely in others, and it keeps its own history either way.
+    private func remove(_ exercise: ExerciseDef) {
+        workout.exerciseOrder.removeAll { $0 == exercise.id }
+        StoreSave.save(context, doing: "taking an exercise out of this workout")
     }
 
     private var muscleBinding: Binding<MuscleGroup?> {
@@ -265,9 +303,13 @@ struct MacWorkoutDetail: View {
             // folds away because this pane shares a window with the workout
             // itself, and some days you know exactly what you are adding.
             DisclosureGroup(isExpanded: $showBody) {
+                // A ceiling, not a size: the picker draws as big as the
+                // column allows and stops here. 260 was a size chosen for the
+                // narrowest this pane gets, and every window wider than that
+                // got the same small bodies.
                 MuscleBodyPicker(selection: muscleBinding,
                                  aerobic: aerobicBinding,
-                                 height: 260)
+                                 height: 360)
                     .padding(.vertical, 4)
                 if sieve.filter != .all {
                     Button("All groups") { sieve.filter = .all }
