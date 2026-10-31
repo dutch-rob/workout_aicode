@@ -75,7 +75,7 @@ fi
 # tidy up after itself once it has exited.
 rm -f "$HOME/Library/Containers/$BUNDLE/Data/tmp"/srw-shots-*.sqlite* 2>/dev/null
 
-APP=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 4 -name "workout_aicode_MacOS.app" \
+APP=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 4 -name "SetsRepsWheels.app" \
       -path "*Debug*" 2>/dev/null | head -1)
 if [ -z "$APP" ]; then
   echo "No built Mac app found. Build the workout_aicode_MacOS scheme first." >&2
@@ -158,7 +158,7 @@ shoot() {
   # where the old id file only ever meant the app got as far as writing one.
   local pid="" wid="" gw="" gh="" waited=0
   while [ $waited -lt 40 ]; do
-    [ -n "$pid" ] || pid=$(pgrep -n workout_aicode_MacOS 2>/dev/null)
+    [ -n "$pid" ] || pid=$(pgrep -n SetsRepsWheels 2>/dev/null)
     if [ -n "$pid" ]; then
       wid="" gw="" gh=""
       read -r wid gw gh < <("$HELPER" "$pid" 2>/dev/null) || true

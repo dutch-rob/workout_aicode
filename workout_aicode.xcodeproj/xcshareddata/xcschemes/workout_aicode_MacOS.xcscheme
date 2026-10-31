@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "15D8AEA93037BDBD009A6CBC"
-               BuildableName = "workout_aicode_MacOS.app"
+               BuildableName = "SetsRepsWheels.app"
                ReferencedContainer = "container:workout_aicode.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -57,7 +57,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "15D8AEA93037BDBD009A6CBC"
-            BuildableName = "workout_aicode_MacOS.app"
+            BuildableName = "SetsRepsWheels.app"
             ReferencedContainer = "container:workout_aicode.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -73,7 +73,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "15D8AEA93037BDBD009A6CBC"
-            BuildableName = "workout_aicode_MacOS.app"
+            BuildableName = "SetsRepsWheels.app"
             ReferencedContainer = "container:workout_aicode.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

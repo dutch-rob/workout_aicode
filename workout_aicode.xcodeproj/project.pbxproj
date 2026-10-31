@@ -103,7 +103,7 @@
 		153422952FAD9F5700895019 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		153422972FADA04500895019 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.4.sdk/System/Library/Frameworks/WatchConnectivity.framework; sourceTree = DEVELOPER_DIR; };
 		157B219E301E8F7100A4CF7B /* PRIVACY.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PRIVACY.md; sourceTree = "<group>"; };
-		15D8AEAA3037BDBD009A6CBC /* workout_aicode_MacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = workout_aicode_MacOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		15D8AEAA3037BDBD009A6CBC /* SetsRepsWheels.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SetsRepsWheels.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD49352F594E7100D778CD /* workout_aicode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = workout_aicode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD49442F594E7600D778CD /* workout_aicodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		15DD494E2F594E7600D778CD /* workout_aicodeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = workout_aicodeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -267,7 +267,7 @@
 				153422622FAD953800895019 /* workout_aicode Watch App-.app */,
 				153422712FAD953D00895019 /* workout_aicode Watch AppTests.xctest */,
 				1534227B2FAD953D00895019 /* workout_aicode Watch AppUITests.xctest */,
-				15D8AEAA3037BDBD009A6CBC /* workout_aicode_MacOS.app */,
+				15D8AEAA3037BDBD009A6CBC /* SetsRepsWheels.app */,
 				5E7A00083100BEEF00C0FFEE /* workout_aicode_MacOSTests.xctest */,
 			);
 			name = Products;
@@ -384,7 +384,7 @@
 			packageProductDependencies = (
 			);
 			productName = workout_aicode_MacOS;
-			productReference = 15D8AEAA3037BDBD009A6CBC /* workout_aicode_MacOS.app */;
+			productReference = 15D8AEAA3037BDBD009A6CBC /* SetsRepsWheels.app */;
 			productType = "com.apple.product-type.application";
 		};
 		15DD49342F594E7100D778CD /* workout_aicode */ = {
@@ -942,7 +942,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = workout_aicode_MacOS;
+				PRODUCT_NAME = SetsRepsWheels;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -989,7 +990,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode";
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = workout_aicode_MacOS;
+				PRODUCT_NAME = SetsRepsWheels;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -1145,6 +1147,9 @@
 				INFOPLIST_FILE = "workout-aicode-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = SetsRepsWheels;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "When you turn on “Schedule the next workout” in Settings, SetsRepsWheels offers to put your next workout in a calendar you choose, as an ordinary timed event. It needs full access rather than add-only so that it can find the events it added itself and move or remove them when you reschedule — otherwise every change would leave the old event behind. It only ever looks for its own events, never reads anything else in your calendars, and never sends anything anywhere.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SetsRepsWheels reads your heart rate, and your resting heart rate and date of birth, while a workout or an aerobic countdown is running on your Apple Watch, so it can show your current heart rate and which zone you are in. If you ask it to, it also reads your body weight, which is needed to work out what you lifted on a machine that takes weight off you, such as an assisted chin-up. Those readings stay on your devices, are never sent anywhere, and are never included in the anonymous data you can choose to share with the developer. Nothing else in Apple Health is read.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "When you turn on “Save workouts to Apple Health” in Settings, SetsRepsWheels saves each workout you finish as a Traditional Strength Training session, recording only its start time, end time and duration. Nothing else is shared, and no data is sent anywhere outside your devices.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
@@ -1186,6 +1191,9 @@
 				INFOPLIST_FILE = "workout-aicode-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = SetsRepsWheels;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "When you turn on “Schedule the next workout” in Settings, SetsRepsWheels offers to put your next workout in a calendar you choose, as an ordinary timed event. It needs full access rather than add-only so that it can find the events it added itself and move or remove them when you reschedule — otherwise every change would leave the old event behind. It only ever looks for its own events, never reads anything else in your calendars, and never sends anything anywhere.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "SetsRepsWheels reads your heart rate, and your resting heart rate and date of birth, while a workout or an aerobic countdown is running on your Apple Watch, so it can show your current heart rate and which zone you are in. If you ask it to, it also reads your body weight, which is needed to work out what you lifted on a machine that takes weight off you, such as an assisted chin-up. Those readings stay on your devices, are never sent anywhere, and are never included in the anonymous data you can choose to share with the developer. Nothing else in Apple Health is read.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "When you turn on “Save workouts to Apple Health” in Settings, SetsRepsWheels saves each workout you finish as a Traditional Strength Training session, recording only its start time, end time and duration. Nothing else is shared, and no data is sent anywhere outside your devices.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
@@ -1315,7 +1323,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/workout_aicode_MacOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/workout_aicode_MacOS";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SetsRepsWheels.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SetsRepsWheels";
 			};
 			name = Debug;
 		};
@@ -1338,7 +1346,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/workout_aicode_MacOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/workout_aicode_MacOS";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/SetsRepsWheels.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/SetsRepsWheels";
 			};
 			name = Release;
 		};
