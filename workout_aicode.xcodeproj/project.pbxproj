@@ -941,7 +941,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode-MacOS";
+				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
@@ -988,7 +988,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.7;
-				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode-MacOS";
+				PRODUCT_BUNDLE_IDENTIFIER = "robotex.workout-aicode";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
