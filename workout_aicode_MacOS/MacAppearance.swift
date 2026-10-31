@@ -197,6 +197,29 @@ extension View {
 /// says the window exists AND has been resized, where the id file only ever
 /// said the app had got as far as writing a file.
 enum ScreenshotMode {
+    /// `-SRWAppearance dark` or `-SRWAppearance light`, nil to follow the Mac.
+    ///
+    /// The app has no appearance setting of its own — it takes the one the Mac
+    /// is set to, which is right for an app and wrong for a screenshot run.
+    /// The set on the store was shot on a dark Mac; a later run on a light one
+    /// produced light pictures that could not sit beside them, and nothing in
+    /// the script said which it would be. So the run says, rather than the
+    /// morning deciding.
+    ///
+    /// An unrecognised value is nil rather than a guess: a typo should leave
+    /// the app alone, not silently shoot the wrong set.
+    static func appearanceName(in args: [String] = CommandLine.arguments)
+        -> NSAppearance.Name? {
+        guard let i = args.firstIndex(of: "-SRWAppearance"), i + 1 < args.count else {
+            return nil
+        }
+        switch args[i + 1].lowercased() {
+        case "dark":  return .darkAqua
+        case "light": return .aqua
+        default:      return nil
+        }
+    }
+
     /// `-SRWShot <width>x<height>`
     static var size: CGSize? {
         let args = CommandLine.arguments
@@ -234,6 +257,12 @@ enum ScreenshotMode {
     /// for `view.window`, which never arrived on a seeded store. AppKit knows
     /// what windows the app has however SwiftUI arrived at them.
     static func beginIfAsked() {
+        if let name = appearanceName() {
+            // Asked for on the next pass, not here: this runs from App.init,
+            // where NSApp may not exist yet, and an appearance set on nothing
+            // is an appearance nobody sees.
+            DispatchQueue.main.async { NSApp?.appearance = NSAppearance(named: name) }
+        }
         guard let size else { return }
         var elapsed = 0.0
         var settled = 0

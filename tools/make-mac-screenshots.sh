@@ -44,10 +44,10 @@
 #
 # Usage:  tools/make-mac-screenshots.sh
 #         SCREENS="logs workouts" tools/make-mac-screenshots.sh
+#         APPEARANCE=light tools/make-mac-screenshots.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-BUNDLE="robotex.workout-aicode-MacOS"
 OUT="${OUT:-screenshots/mac}"
 # SIZE picks one of the four the Mac App Store accepts: 1280x800, 1440x900,
 # 2560x1600, 2880x1800. The big two need a display tall enough to hold the
@@ -57,6 +57,10 @@ SIZE="${SIZE:-1440x900}"
 WIDTH="${SIZE%%x*}"
 HEIGHT="${SIZE##*x}"
 SCREENS="${SCREENS:-workouts exercises logs graphs progress importExport settings info}"
+# Dark or light. The app itself has no appearance setting — it follows the Mac
+# it runs on — so without saying, a run shoots whatever the machine happens to
+# be set to, and a set half dark and half light is no set at all.
+APPEARANCE="${APPEARANCE:-dark}"
 
 mkdir -p "$OUT"
 # Asks the window server which window belongs to the app. Compiled fresh each
@@ -71,10 +75,6 @@ if ! swiftc -O tools/srw-window-id.swift -o "$HELPER" 2>"$WORK/swiftc.log"; then
   exit 1
 fi
 
-# Throwaway stores from earlier runs. Each launch makes its own and cannot
-# tidy up after itself once it has exited.
-rm -f "$HOME/Library/Containers/$BUNDLE/Data/tmp"/srw-shots-*.sqlite* 2>/dev/null
-
 APP=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 4 -name "SetsRepsWheels.app" \
       -path "*Debug*" 2>/dev/null | head -1)
 if [ -z "$APP" ]; then
@@ -82,6 +82,24 @@ if [ -z "$APP" ]; then
   exit 1
 fi
 echo "Using $APP"
+
+# Asked of the built app rather than written down here. Both are build
+# settings, and a copy in this script is a copy that goes stale: the day the
+# Mac target took the iPhone's bundle identifier, the quit between screens
+# stopped matching anything. It fails silently — osascript has nothing to say
+# about an app id that is not running — so instances piled up instead of
+# being replaced, and a run of eight screens produced two pictures.
+BUNDLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist" 2>/dev/null)
+PROCESS=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP/Contents/Info.plist" 2>/dev/null)
+if [ -z "$BUNDLE" ] || [ -z "$PROCESS" ]; then
+  echo "Could not read the identifier and executable name out of $APP" >&2
+  exit 1
+fi
+
+# Throwaway stores from earlier runs. Each launch makes its own and cannot
+# tidy up after itself once it has exited.
+rm -f "$HOME/Library/Containers/$BUNDLE/Data/tmp"/srw-shots-*.sqlite* 2>/dev/null
+
 
 # WHICH app needs the permission. macOS grants these to the application
 # responsible for the process, which for a shell is whatever opened it — and
@@ -151,14 +169,14 @@ shoot() {
   # -SRWDemo gives the app a throwaway store of its own with sample data, so a
   # capture never contains real training and never shows an empty app.
   open -n "$APP" --args -SRWDemo 1 -SRWShot "${WIDTH}x${HEIGHT}" \
-       -SRWScreen "$screen" "$@"
+       -SRWAppearance "$APPEARANCE" -SRWScreen "$screen" "$@"
 
   # Wait for a window the size we asked for. That is a better ready signal
   # than the app saying so: it means the window exists AND has been resized,
   # where the old id file only ever meant the app got as far as writing one.
   local pid="" wid="" gw="" gh="" waited=0
   while [ $waited -lt 40 ]; do
-    [ -n "$pid" ] || pid=$(pgrep -n SetsRepsWheels 2>/dev/null)
+    [ -n "$pid" ] || pid=$(pgrep -n "$PROCESS" 2>/dev/null)
     if [ -n "$pid" ]; then
       wid="" gw="" gh=""
       read -r wid gw gh < <("$HELPER" "$pid" 2>/dev/null) || true

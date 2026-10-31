@@ -83,3 +83,45 @@ struct MacTextSizeTests {
         #expect(MacTextSize.current == .default)
     }
 }
+
+// MARK: - The appearance a screenshot run is shot in
+//
+// Reported from a real run: eight dark captures were already on the store,
+// the script was run again and produced two light ones. The appearance was
+// never the script's to choose — the app followed the Mac, and the Mac had
+// been switched since. Nothing in either of them said so.
+
+@Suite
+struct ScreenshotAppearanceTests {
+
+    @Test func theRunSaysWhichAppearanceToShootIn() {
+        #expect(ScreenshotMode.appearanceName(in: ["app", "-SRWAppearance", "dark"]) == .darkAqua)
+        #expect(ScreenshotMode.appearanceName(in: ["app", "-SRWAppearance", "light"]) == .aqua)
+    }
+
+    /// Without the flag the app is left alone, which is what every ordinary
+    /// launch wants.
+    @Test func withoutTheFlagTheAppFollowsTheMac() {
+        #expect(ScreenshotMode.appearanceName(in: ["app"]) == nil)
+        #expect(ScreenshotMode.appearanceName(in: ["app", "-SRWShot", "1440x900"]) == nil)
+    }
+
+    /// A typo must not quietly shoot the other set.
+    @Test func anUnknownAppearanceIsNotAGuess() {
+        #expect(ScreenshotMode.appearanceName(in: ["app", "-SRWAppearance", "midnight"]) == nil)
+        #expect(ScreenshotMode.appearanceName(in: ["app", "-SRWAppearance", ""]) == nil)
+    }
+
+    /// The flag last, with nothing after it. Every -SRW flag has to be given a
+    /// value — NSUserDefaults reads the launch arguments as pairs, so a bare
+    /// one swallows whatever follows — and reading past the end would crash.
+    @Test func theFlagWithNothingAfterItIsIgnored() {
+        #expect(ScreenshotMode.appearanceName(in: ["app", "-SRWAppearance"]) == nil)
+    }
+
+    /// Case is the shell's business, not something to be strict about.
+    @Test func theValueIsNotCaseSensitive() {
+        #expect(ScreenshotMode.appearanceName(in: ["app", "-SRWAppearance", "Dark"]) == .darkAqua)
+        #expect(ScreenshotMode.appearanceName(in: ["app", "-SRWAppearance", "LIGHT"]) == .aqua)
+    }
+}
