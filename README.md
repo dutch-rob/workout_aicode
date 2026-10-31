@@ -6,6 +6,10 @@ There is a Mac app in here as well (`workout_aicode_MacOS`), in the Mac App Stor
 
 Source: https://github.com/dutch-rob/workout_aicode
 
+Working on the code rather than using the app? [ARCHITECTURE.md](ARCHITECTURE.md)
+is the map: the targets, the shared folder, the data and its migrations, the
+phone ⇄ Watch contract, and why the project is called `workout_aicode` inside.
+
 ---
 
 <!-- INFO_SCREEN_START -->
