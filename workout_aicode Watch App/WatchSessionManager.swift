@@ -465,7 +465,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
     // Live messages only — the phone never queues these, so nothing arrives
     // late enough to schedule a notification for a rest that is already over.
 
-    private func handleRestTimer(_ msg: [String: Any]) -> Bool {
+    // Reached from the delegate above, so it runs wherever that does.
+    // It only reads the dictionary and hands the work to the main actor.
+    private nonisolated func handleRestTimer(_ msg: [String: Any]) -> Bool {
         switch msg["type"] as? String {
         case "restTimer":
             guard let ends = msg["endsAt"] as? Double else { return true }
@@ -501,7 +503,7 @@ final class WatchSessionManager: NSObject, ObservableObject {
     // a workout that arrives ten minutes late would start one for a session
     // already over.
 
-    private func handleAerobic(_ msg: [String: Any]) -> Bool {
+    private nonisolated func handleAerobic(_ msg: [String: Any]) -> Bool {
         switch msg["type"] as? String {
         case "aerobicStart":
             let activity = msg["activity"] as? String
@@ -573,19 +575,32 @@ final class WatchSessionManager: NSObject, ObservableObject {
         session.sendMessage(msg, replyHandler: nil, errorHandler: nil)
     }
 
-    private func decodeSnapshot(_ any: Any?) -> SessionSnapshot? {
+    // A JSON decode and nothing else.
+    private nonisolated func decodeSnapshot(_ any: Any?) -> SessionSnapshot? {
         (any as? Data).flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
     }
 }
 
 // MARK: - WCSessionDelegate (watchOS)
-extension WatchSessionManager: WCSessionDelegate {
+// Not on the main actor, and marked so.
+//
+// WatchConnectivity calls every one of these on a queue of its own, and the
+// project's default puts anything unmarked on the main actor — which under
+// Swift 6 is checked at the moment of the call, not assumed. The app trapped
+// on launch in `dispatch_assert_queue` the first time the Watch session
+// activated: a real crossing that Swift 5 let through in silence.
+//
+// The bodies were already written for it. Each one reads what it needs off
+// the WCSession synchronously and hands the rest to the main queue, which is
+// why marking the extension changes nothing about what runs where. It only
+// says out loud where these arrive.
+nonisolated extension WatchSessionManager: WCSessionDelegate {
 
     func session(_ session: WCSession,
                  activationDidCompleteWith state: WCSessionActivationState, error: Error?) {
-        let context = session.receivedApplicationContext
+        let context = SendableAcrossQueues(session.receivedApplicationContext)
         DispatchQueue.main.async {
-            self.ingest(context: context)
+            self.ingest(context: context.value)
             self.requestSync()
             // The cold-launch half of the Paused check — see checkForDriver.
             self.checkForDriver()
@@ -597,12 +612,14 @@ extension WatchSessionManager: WCSessionDelegate {
     }
 
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
-        DispatchQueue.main.async { self.ingest(context: applicationContext) }
+        let context = SendableAcrossQueues(applicationContext)
+        DispatchQueue.main.async { self.ingest(context: context.value) }
     }
 
     // Messages WITH a reply handler.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any],
                  replyHandler: @escaping ([String: Any]) -> Void) {
+        let answer = SendableAcrossQueues(replyHandler)
         switch message["type"] as? String {
         case "queryDriver":
             DispatchQueue.main.async {
@@ -615,7 +632,7 @@ extension WatchSessionManager: WCSessionDelegate {
                 ]
                 if self.role == .driving, let snap = self.liveSnapshot,
                    let d = try? JSONEncoder().encode(self.outgoing(snap)) { reply["snapshot"] = d }
-                replyHandler(reply)
+                answer.value(reply)
             }
         case "takeOver":
             DispatchQueue.main.async {
@@ -625,7 +642,7 @@ extension WatchSessionManager: WCSessionDelegate {
                 // half-workout in Fitness would be worse than no hand-over.
                 // The phone is told, and shows that rather than offering.
                 if self.role == .driving, self.workoutMode == .appleWorkout {
-                    replyHandler(["refused": true, "appleWorkout": true])
+                    answer.value(["refused": true, "appleWorkout": true])
                     return
                 }
                 // Stamped before the rest is let go, so it travels as it was.
@@ -637,10 +654,10 @@ extension WatchSessionManager: WCSessionDelegate {
                 WatchRestTimer.shared.cancel()
                 var reply: [String: Any] = [:]
                 if let snap, let d = try? JSONEncoder().encode(snap) { reply["snapshot"] = d }
-                replyHandler(reply)
+                answer.value(reply)
             }
         default:
-            replyHandler([:])
+            answer.value([:])
         }
     }
 

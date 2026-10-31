@@ -15,7 +15,7 @@ import SwiftUI
 // back in a different order on the other device would look like the drag had
 // not taken.
 
-enum WorkoutOrder {
+nonisolated enum WorkoutOrder {
 
     /// The list as a drag leaves it.
     ///

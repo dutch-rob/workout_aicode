@@ -16,7 +16,7 @@ import Foundation
 // time of day this workout began, rounded up to a quarter hour. Somebody who
 // trains at 13:32 does not want 13:32 in their calendar.
 
-enum WorkoutScheduleKey {
+nonisolated enum WorkoutScheduleKey {
     /// Whether to offer at all, at the end of a workout.
     static let enabled = "scheduleNextWorkout"
     /// How many days from this workout the next one goes.
@@ -28,7 +28,7 @@ enum WorkoutScheduleKey {
     static let calendar = "scheduleCalendarId"
 }
 
-enum WorkoutSchedule {
+nonisolated enum WorkoutSchedule {
 
     static let defaultDaysAhead = 2
     static let defaultCount = 1

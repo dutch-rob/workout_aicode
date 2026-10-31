@@ -16,7 +16,7 @@ import Foundation
 // differently on two devices would be two different workouts in one iCloud
 // store.
 
-enum WorkoutComposition {
+nonisolated enum WorkoutComposition {
 
     /// A copy of `workout` under a new name, at the end of the list.
     static func copy(of workout: WorkoutDef, named name: String,

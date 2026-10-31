@@ -8,7 +8,9 @@ import Foundation
 //
 // Raw values are stored and exported, so they must never change. Display
 // labels can.
-enum MuscleGroup: String, Codable, CaseIterable, Identifiable, Hashable {
+// Plain values, read from the models as well as from the screens — see the
+// note on WeightUnit for why that means off the main actor.
+nonisolated enum MuscleGroup: String, Codable, CaseIterable, Identifiable, Hashable {
     case chest
     case back
     case traps

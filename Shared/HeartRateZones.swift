@@ -34,7 +34,7 @@ import Foundation
 
 /// Where a set of zone boundaries came from, so the interface can be honest
 /// about it rather than implying more precision than it has.
-enum ZoneSource: String {
+nonisolated enum ZoneSource: String {
     /// Worked out here from resting and maximum heart rate.
     case estimated
     /// Read from HealthKit — the same zones the Workout app uses. Needs
@@ -57,7 +57,9 @@ enum ZoneSource: String {
     }
 }
 
-struct HeartRateZones: Equatable {
+// Boundaries and the arithmetic over them. Worked out wherever a heart rate
+// arrives, which is not necessarily the main actor.
+nonisolated struct HeartRateZones: Equatable {
     /// The four thresholds between the five zones, in beats per minute: the top
     /// of zone 1, of zone 2, of zone 3 and of zone 4.
     ///
@@ -192,7 +194,7 @@ struct HeartRateZones: Equatable {
 /// what makes the totals independent of how often the Watch happens to sample —
 /// counting readings instead would make a dense stretch look longer than a
 /// sparse one of the same duration.
-struct ZoneTally {
+nonisolated struct ZoneTally {
     let zones: HeartRateZones
     /// Seconds in each of the five zones, lowest first. There is nowhere else
     /// for time to go: every heart rate is in a zone, and a slow one is in

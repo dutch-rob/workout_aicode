@@ -27,7 +27,9 @@ enum MovementType: String, Codable, CaseIterable, Identifiable {
 /// reaching into the rest timer for a default — which quietly tied Models.swift
 /// to UIKit and kept the whole model layer off any platform without it. The
 /// timer reads this now.
-public let defaultRestSeconds = 90
+// A number, used as a default in the models' own initialisers, which are not
+// on the main actor.
+nonisolated public let defaultRestSeconds = 90
 
 /// What sort of thing an exercise is. Not a muscle group, despite appearing
 /// next to them in the picker as "AE": a muscle group says which part of you a
@@ -1024,7 +1026,9 @@ enum WorkoutMigrationPlan: SchemaMigrationPlan {
     )
 }
 
-struct ExportEnvelope: Codable {
+// The export file's own shape, and the two older ones still read back.
+// Decoded wherever a file is opened, which is not the main actor.
+nonisolated struct ExportEnvelope: Codable {
     let exportVersion: String
     let appIdentifier: String
     let appVersion: String
@@ -1087,20 +1091,20 @@ struct ExportEnvelope: Codable {
 // The original export format wrapped each log in an entries array. We only
 // keep these types to read old export files; they are NEVER written.
 
-struct LegacyExerciseLogEntry: Codable {
+nonisolated struct LegacyExerciseLogEntry: Codable {
     let exerciseId: UUID
     let weights: [Int]
     let reps: [Int]
 }
 
-struct LegacyWorkoutLog: Codable {
+nonisolated struct LegacyWorkoutLog: Codable {
     let id: UUID
     let date: Date
     let workoutId: UUID
     let entries: [LegacyExerciseLogEntry]
 }
 
-struct LegacyExportEnvelope: Codable {
+nonisolated struct LegacyExportEnvelope: Codable {
     let exportVersion: String
     let appIdentifier: String
     let appVersion: String

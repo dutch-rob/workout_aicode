@@ -19,7 +19,9 @@ import CoreGraphics
 // crawled down the screen long after the rest was over. A number derived from
 // two dates cannot pile up, and cannot outlive being cancelled.
 
-enum RestBar {
+// Arithmetic on two dates, called from the Watch's timer as well as the
+// phone's and from neither one's main actor in particular.
+nonisolated enum RestBar {
 
     /// 1 as the rest starts, 0 when it is over, and never outside that.
     ///

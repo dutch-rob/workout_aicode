@@ -20,7 +20,8 @@ import Foundation
 // The same hour decides both, and that is deliberate: a session the app is
 // willing to resume is exactly a session it has not yet declared finished.
 
-enum OpenWorkoutPolicy {
+// A limit and the arithmetic over it, read on the Watch as well as here.
+nonisolated enum OpenWorkoutPolicy {
 
     /// How long a workout may sit with nothing logged before it counts as over.
     ///

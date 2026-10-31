@@ -637,18 +637,20 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         let store = HKHealthStore()
         let configuration = WatchAerobicActivity.configuration(for: activityRaw)
         let workoutType = HKObjectType.workoutType()
-        let launch = {
-            store.startWatchApp(with: configuration) { _, _ in
-                // Nothing to report: a Watch that cannot be launched simply
-                // means no heart rate, and the countdown here is unaffected.
+        // Awaited rather than nested in a completion handler, which is not
+        // only easier to read: the handler runs on a queue of HealthKit's
+        // choosing, so the launch it called had to be carried across to the
+        // main queue inside a closure, and a closure holding a health store
+        // is not something Swift will let cross a thread.
+        //
+        // The answer is not examined at either step. A Watch that cannot be
+        // launched, for want of permission or for any other reason, simply
+        // means no heart rate, and the countdown on this device is unaffected.
+        Task { @MainActor in
+            if store.authorizationStatus(for: workoutType) == .notDetermined {
+                try? await store.requestAuthorization(toShare: [workoutType], read: [])
             }
-        }
-        if store.authorizationStatus(for: workoutType) == .notDetermined {
-            store.requestAuthorization(toShare: [workoutType], read: []) { _, _ in
-                DispatchQueue.main.async(execute: launch)
-            }
-        } else {
-            launch()
+            store.startWatchApp(with: configuration) { _, _ in }
         }
     }
 
@@ -686,13 +688,26 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         noteActivity(at: date)
     }
 
-    private func decodeSnapshot(_ any: Any?) -> SessionSnapshot? {
+    // A JSON decode and nothing else.
+    private nonisolated func decodeSnapshot(_ any: Any?) -> SessionSnapshot? {
         (any as? Data).flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
     }
 }
 
 // MARK: - WCSessionDelegate (iOS)
-extension PhoneSessionManager: WCSessionDelegate {
+// Not on the main actor, and marked so.
+//
+// WatchConnectivity calls every one of these on a queue of its own, and the
+// project's default puts anything unmarked on the main actor — which under
+// Swift 6 is checked at the moment of the call, not assumed. The app trapped
+// on launch in `dispatch_assert_queue` the first time the Watch session
+// activated: a real crossing that Swift 5 let through in silence.
+//
+// The bodies were already written for it. Each one reads what it needs off
+// the WCSession synchronously and hands the rest to the main queue, which is
+// why marking the extension changes nothing about what runs where. It only
+// says out loud where these arrive.
+nonisolated extension PhoneSessionManager: WCSessionDelegate {
 
     func session(_ session: WCSession,
                  activationDidCompleteWith state: WCSessionActivationState, error: Error?) {
@@ -745,6 +760,7 @@ extension PhoneSessionManager: WCSessionDelegate {
     // Messages WITH a reply handler.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any],
                  replyHandler: @escaping ([String: Any]) -> Void) {
+        let answer = SendableAcrossQueues(replyHandler)
         switch message["type"] as? String {
         case "requestSync":
             let watchOS = message["watchOS"] as? String
@@ -755,14 +771,14 @@ extension PhoneSessionManager: WCSessionDelegate {
                 if let watchOS { WatchSystemVersion.record(watchOS) }
                 self.watchOSMajor = WatchSystemVersion.major
                 self.pushDefinitions()
-                replyHandler(["payload": self.store?.watchSyncPayloadData() ?? Data()])
+                answer.value(["payload": self.store?.watchSyncPayloadData() ?? Data()])
             }
         case "queryDriver":
             DispatchQueue.main.async {
                 let offer = self.sessionToOffer
                 var reply: [String: Any] = ["isDriving": offer != nil]
                 if let offer, let d = try? JSONEncoder().encode(offer) { reply["snapshot"] = d }
-                replyHandler(reply)
+                answer.value(reply)
             }
         case "takeOver":
             DispatchQueue.main.async {
@@ -779,11 +795,12 @@ extension PhoneSessionManager: WCSessionDelegate {
                 self.forgetUnfinishedSession()
                 var reply: [String: Any] = [:]
                 if let snap, let d = try? JSONEncoder().encode(snap) { reply["snapshot"] = d }
-                replyHandler(reply)
+                answer.value(reply)
             }
         default:
-            DispatchQueue.main.async { self.handleIncomingLog(message) }
-            replyHandler([:])
+            let incoming = SendableAcrossQueues(message)
+            DispatchQueue.main.async { self.handleIncomingLog(incoming.value) }
+            answer.value([:])
         }
     }
 
@@ -867,7 +884,8 @@ extension PhoneSessionManager: WCSessionDelegate {
                     workoutId: id, starts: starts, duration: duration)
             }
         default:
-            DispatchQueue.main.async { self.handleIncomingLog(message) }
+            let incoming = SendableAcrossQueues(message)
+            DispatchQueue.main.async { self.handleIncomingLog(incoming.value) }
         }
     }
 

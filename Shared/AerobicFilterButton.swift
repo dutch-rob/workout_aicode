@@ -5,7 +5,9 @@ import SwiftUI
 /// A heart rather than another capsule on purpose: every other button beside
 /// the body names a muscle, and this one does not — it is a different kind of
 /// thing, and looking different is the quickest way to say so.
-struct HeartShape: Shape {
+// `Shape.path(in:)` is not on the main actor, and neither is drawing: a shape
+// that is would be a shape SwiftUI cannot call where it needs to.
+nonisolated struct HeartShape: Shape {
     func path(in rect: CGRect) -> Path {
         let w = rect.width, h = rect.height
         var path = Path()

@@ -266,53 +266,58 @@ enum ScreenshotMode {
         guard let size else { return }
         var elapsed = 0.0
         var settled = 0
-        Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { timer in
-            elapsed += 0.25
-            // The real window: titled, visible, and the biggest of them.
-            // Taking the first visible window with a content view picked a
-            // 500×500 offscreen shell SwiftUI keeps beside the main one, so
-            // the shell was resized and the window that was actually
-            // photographed kept whatever size it remembered.
-            let candidates = NSApp.windows.filter {
-                $0.isVisible && $0.contentView != nil && $0.styleMask.contains(.titled)
-            }
-            guard let window = candidates.max(by: {
-                $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height
-            }) else {
-                if elapsed > 30 { timer.invalidate() }
-                return
-            }
-
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-
-            // Close the loop on the window server's idea of the size rather
-            // than setting the frame once and hoping. Two things made a single
-            // resize wrong: the shadow margin above, and SwiftUI restoring the
-            // frame it remembers shortly after the window first appears.
-            let measured = serverSize(of: window) ?? window.frame.size
-            let offBy = CGSize(width: size.width - measured.width,
-                               height: size.height - measured.height)
-            if abs(offBy.width) < 0.5 && abs(offBy.height) < 0.5 {
-                settled += 1
-                // Whatever SwiftUI focused on opening draws a blue ring, and
-                // a focused number field draws its value selected. Neither
-                // belongs in a picture of the app sitting still.
-                window.makeFirstResponder(nil)
-            } else {
-                settled = 0
-                var frame = window.frame
-                frame.size.width += offBy.width
-                frame.size.height += offBy.height
-                if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
-                    frame.origin.x = visible.midX - frame.width / 2
-                    frame.origin.y = visible.midY - frame.height / 2
+        // A main-actor loop rather than a Timer. Every line below is AppKit
+        // work that has to be on the main actor, and `Timer`'s block is
+        // @Sendable, so it may not hold the two counters the loop runs on —
+        // Swift 6 rejects it outright. The bound on `elapsed` is what it
+        // always was: give up after thirty seconds rather than spin forever.
+        Task { @MainActor in
+            while elapsed <= 30 {
+                try? await Task.sleep(for: .milliseconds(250))
+                elapsed += 0.25
+                // The real window: titled, visible, and the biggest of them.
+                // Taking the first visible window with a content view picked a
+                // 500×500 offscreen shell SwiftUI keeps beside the main one, so
+                // the shell was resized and the window that was actually
+                // photographed kept whatever size it remembered.
+                let candidates = NSApp.windows.filter {
+                    $0.isVisible && $0.contentView != nil && $0.styleMask.contains(.titled)
                 }
-                window.setFrame(frame, display: true)
+                guard let window = candidates.max(by: {
+                    $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height
+                }) else { continue }
+
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+
+                // Close the loop on the window server's idea of the size rather
+                // than setting the frame once and hoping. Two things made a single
+                // resize wrong: the shadow margin above, and SwiftUI restoring the
+                // frame it remembers shortly after the window first appears.
+                let measured = serverSize(of: window) ?? window.frame.size
+                let offBy = CGSize(width: size.width - measured.width,
+                                   height: size.height - measured.height)
+                if abs(offBy.width) < 0.5 && abs(offBy.height) < 0.5 {
+                    settled += 1
+                    // Whatever SwiftUI focused on opening draws a blue ring, and
+                    // a focused number field draws its value selected. Neither
+                    // belongs in a picture of the app sitting still.
+                    window.makeFirstResponder(nil)
+                } else {
+                    settled = 0
+                    var frame = window.frame
+                    frame.size.width += offBy.width
+                    frame.size.height += offBy.height
+                    if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+                        frame.origin.x = visible.midX - frame.width / 2
+                        frame.origin.y = visible.midY - frame.height / 2
+                    }
+                    window.setFrame(frame, display: true)
+                }
+                // Stop only once the size has HELD for a second, so a late
+                // restore gets corrected rather than winning.
+                if settled >= 4 { break }
             }
-            // Stop only once the size has HELD for a second, so a late
-            // restore gets corrected rather than winning.
-            if settled >= 4 || elapsed > 30 { timer.invalidate() }
         }
     }
 }

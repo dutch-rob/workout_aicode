@@ -21,8 +21,18 @@ final class HealthWorkoutLogger {
     /// only prompts the first time.
     func requestAuthorization(_ completion: ((Bool) -> Void)? = nil) {
         guard isAvailable else { completion?(false); return }
-        store.requestAuthorization(toShare: [HKObjectType.workoutType()], read: []) { ok, _ in
-            DispatchQueue.main.async { completion?(ok) }
+        // Awaited rather than nested: HealthKit answers on a queue of its
+        // own, so the caller's completion had to be carried back to the main
+        // queue from inside its handler, and a closure the caller handed in is
+        // not something Swift will let cross a thread.
+        //
+        // `ok` meant that the ASK went through, not that permission was given
+        // — HealthKit never says that for a type only being written — so a
+        // throw is the same false it always was.
+        Task { @MainActor in
+            let asked = (try? await store.requestAuthorization(
+                toShare: [HKObjectType.workoutType()], read: [])) != nil
+            completion?(asked)
         }
     }
 

@@ -90,7 +90,7 @@ struct WatchZoneRowBackground: View {
 
 /// Points up, from the bottom edge of the row — the aerobic band's marker,
 /// which points up at the band from below.
-private struct ZoneMarker: Shape {
+private nonisolated struct ZoneMarker: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.midX, y: rect.minY))

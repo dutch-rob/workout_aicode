@@ -30,7 +30,12 @@ import Foundation
 // with `WeightUnit.current.display(grams:)` and write one back with
 // `WeightUnit.current.grams(from:)`.
 
-enum WeightUnit: String, CaseIterable, Identifiable {
+// Arithmetic on a number, and the unit a number is in. The project puts
+// everything on the main actor unless it says otherwise, and this must say
+// otherwise: the SwiftData models convert weights from their own methods,
+// which are not on the main actor, and the conversion has nothing to be on
+// an actor FOR — it reads a constant and multiplies.
+nonisolated enum WeightUnit: String, CaseIterable, Identifiable {
     case kilograms
     case pounds
 
@@ -91,7 +96,8 @@ enum WeightUnit: String, CaseIterable, Identifiable {
 
 // MARK: - Writing a weight down
 
-enum WeightText {
+// Formatting, in the same position as WeightUnit above it.
+nonisolated enum WeightText {
 
     /// 130, 130¼, 130½, 130¾.
     ///

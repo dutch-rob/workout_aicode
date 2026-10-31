@@ -18,7 +18,10 @@ import Foundation
 /// How an estimated one-rep max is derived from a set of `reps` at `weight`.
 /// The user picks one in settings; it changes every number in this file, so a
 /// value is always carried explicitly rather than read from defaults down here.
-enum OneRMFormula: String, Codable, CaseIterable, Identifiable {
+// Arithmetic, not interface. Marked nonisolated because the project puts
+// everything on the main actor by default, and these are worked out from
+// wherever the numbers are — including the tests, which are not on it.
+nonisolated enum OneRMFormula: String, Codable, CaseIterable, Identifiable {
     case epley
     case brzycki
     case lombardi
@@ -70,7 +73,7 @@ enum OneRMFormula: String, Codable, CaseIterable, Identifiable {
 // MARK: - One set, one session
 
 /// A single logged set and what it implies about strength.
-struct SetStat: Hashable {
+nonisolated struct SetStat: Hashable {
     let weight: Int
     let reps: Int
     /// Estimated 1RM for this set alone; nil when the set is uninformative.
@@ -82,7 +85,7 @@ struct SetStat: Hashable {
 
 /// One occurrence of one exercise inside one workout: all its sets, plus the
 /// derived strength metric for that day.
-struct ExerciseSession: Identifiable, Hashable {
+nonisolated struct ExerciseSession: Identifiable, Hashable {
     let id: UUID
     let date: Date
     let sets: [SetStat]
@@ -128,7 +131,7 @@ struct ExerciseSession: Identifiable, Hashable {
 
 /// Ordinary least squares of `y` on time, with time measured in days from the
 /// first point so the slope reads as "units per day" rather than "per second".
-struct LinearFit: Hashable {
+nonisolated struct LinearFit: Hashable {
     let slopePerDay: Double
     let intercept: Double
     /// Time origin the intercept is relative to.
@@ -159,7 +162,7 @@ struct LinearFit: Hashable {
 // MARK: - Per-exercise statistics
 
 /// Everything the graphs and the progress list need for one exercise.
-struct ExerciseStats: Identifiable {
+nonisolated struct ExerciseStats: Identifiable {
     let id: UUID                 // exercise id
     let name: String
     /// Sessions used for the statistics: the most recent `window`, oldest first.
@@ -184,7 +187,7 @@ struct ExerciseStats: Identifiable {
 
 // MARK: - Engine
 
-enum StatsEngine {
+nonisolated enum StatsEngine {
 
     /// Default user options.
     static let defaultWindow = 16          // sessions used for the regression

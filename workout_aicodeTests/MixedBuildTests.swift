@@ -276,7 +276,10 @@ struct MixedBuildTests {
             try context.save()
             store.reloadAll()
 
-            func sentToTheWatch() throws -> SyncLastEntry {
+            // Said explicitly. A local function does not pick up the
+            // target's default isolation the way a method does, and the
+            // store it reads is on the main actor.
+            @MainActor func sentToTheWatch() throws -> SyncLastEntry {
                 let data = try #require(store.watchSyncPayloadData())
                 let payload = try JSONDecoder().decode(SyncPayload.self, from: data)
                 return try #require(payload.lastEntries[

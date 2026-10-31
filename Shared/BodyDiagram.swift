@@ -170,7 +170,7 @@ struct FigureGeometry {
 }
 
 /// A prepared unit-space path, scaled into whatever rectangle it is given.
-struct ScaledPath: SwiftUI.Shape {
+nonisolated struct ScaledPath: SwiftUI.Shape {
     let unitPath: Path
 
     func path(in rect: CGRect) -> Path {

@@ -18,7 +18,27 @@ import Foundation
 /// Values this file needs that live in phone-only types. Repeated as literals
 /// because this file must compile unchanged in the Watch target, which has no
 /// access to `RestTimerDefaults`.
-enum SyncDefaults {
+// The wire types themselves. Encoded and decoded on whichever side and
+// whichever thread a message arrives on, so none of them belongs to the
+// main actor the rest of the project defaults to.
+/// A WatchConnectivity value carried from its delivery queue to the main actor.
+///
+/// WatchConnectivity hands over `[String: Any]` dictionaries and bare reply
+/// closures, and Swift cannot see inside either: a dictionary of `Any` could
+/// hold anything, so moving one between isolations is refused. What is
+/// actually in them is the framework's own contract — property-list values,
+/// and a handler it is happy to have called from any thread.
+///
+/// So this says it once, where the compiler can use it, rather than each
+/// delegate method saying it in its own way. It is `@unchecked` because the
+/// guarantee comes from WatchConnectivity rather than from the type: do not
+/// reach for it for anything else.
+nonisolated struct SendableAcrossQueues<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
+}
+
+nonisolated enum SyncDefaults {
     /// Keep in step with `RestTimerDefaults.seconds`.
     static let restSeconds = 90
     /// Keep in step with `ExerciseKind`'s raw values.
@@ -27,7 +47,7 @@ enum SyncDefaults {
 }
 
 /// One exercise definition, flattened to primitive types (UUIDs as strings).
-struct SyncExercise: Codable, Identifiable, Hashable {
+nonisolated struct SyncExercise: Codable, Identifiable, Hashable {
     var id: String
     var name: String
     var numberOfSeries: Int
@@ -133,7 +153,7 @@ struct SyncExercise: Codable, Identifiable, Hashable {
 // Watch's `weights` as though they were grams logs 130 lb as 130 g, which is
 // a real set recorded at a four-hundredth of its weight.
 
-extension SyncExercise {
+nonisolated extension SyncExercise {
 
     /// Whether the range in grams is one that can actually be used.
     ///
@@ -211,7 +231,7 @@ extension SyncExercise {
 }
 
 /// One workout definition. `exerciseOrder` holds exercise ids (as strings).
-struct SyncWorkout: Codable, Identifiable, Hashable {
+nonisolated struct SyncWorkout: Codable, Identifiable, Hashable {
     var id: String
     var name: String
     var exerciseOrder: [String]
@@ -219,7 +239,7 @@ struct SyncWorkout: Codable, Identifiable, Hashable {
 
 /// The most recent logged weights/reps for a (workout, exercise) pair, used to
 /// pre-fill the Watch picker wheels the same way the phone pre-fills them.
-struct SyncLastEntry: Codable, Hashable {
+nonisolated struct SyncLastEntry: Codable, Hashable {
     /// Last time's weights as the plain unit-less numbers. Still written, and
     /// still meaning exactly what they always did, because a Watch on an older
     /// build reads nothing else — see "Two numbers for every weight" above.
@@ -264,7 +284,7 @@ struct SyncLastEntry: Codable, Hashable {
 /// A live snapshot of an in-progress workout, transferred between devices on
 /// handover so the taking-over device continues exactly where the other left
 /// off (same exercise, same wheel values, same logged sets).
-struct SessionSnapshot: Codable, Equatable {
+nonisolated struct SessionSnapshot: Codable, Equatable {
     var workoutId: String
     var currentIndex: Int
     /// The wheels as the unit-less numbers an older build understands, with
@@ -384,7 +404,7 @@ struct SessionSnapshot: Codable, Equatable {
 /// The setting lives on the phone. `current` is the phone's reading of it; the
 /// Watch is told through `SyncPayload` and keeps its own copy, exactly as it
 /// does for the rest timer.
-enum WatchWorkoutMode: String, Codable, CaseIterable, Identifiable {
+nonisolated enum WatchWorkoutMode: String, Codable, CaseIterable, Identifiable {
     case handover
     case appleWorkout
 
@@ -416,7 +436,7 @@ enum WatchWorkoutMode: String, Codable, CaseIterable, Identifiable {
 /// that has not been opened since. The settings screen then offers the manual
 /// boundaries, on the grounds that a setting nobody needs is a smaller harm
 /// than one the user cannot reach.
-enum WatchSystemVersion {
+nonisolated enum WatchSystemVersion {
 
     static let key = "watchOSMajorVersion"
 
@@ -449,7 +469,9 @@ enum WatchSystemVersion {
 /// All of them are sent with the definitions, like the rest-timer switch, and
 /// all of them have a default that an older Watch build — or one that has not
 /// heard from the phone yet — falls back to.
-enum WatchPreferences {
+// Defaults and the clamps that keep a value inside what the dial allows:
+// numbers, read on either device and from either actor.
+nonisolated enum WatchPreferences {
 
     /// How strongly the heart rate band behind the exercise name is drawn:
     /// 0.1 is barely there, 1 is the colour at full strength. Chosen on the
@@ -538,7 +560,7 @@ enum WatchPreferences {
     }
 }
 
-struct SyncPayload: Codable {
+nonisolated struct SyncPayload: Codable {
     var workouts: [SyncWorkout]
     var exercises: [SyncExercise]
     /// Keyed by "\(workoutId)|\(exerciseId)".

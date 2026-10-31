@@ -30,7 +30,9 @@ import Foundation
 // Ids are taken to appear at most once in an order, which is what both build:
 // a workout is a set of exercises, not a list that can repeat.
 
-enum ExerciseOrderChange {
+// Index arithmetic over a list that changed underneath. No UI in it, and
+// called from the sync code as well as from the screens.
+nonisolated enum ExerciseOrderChange {
 
     /// `old`, re-indexed onto `newOrder`.
     ///
