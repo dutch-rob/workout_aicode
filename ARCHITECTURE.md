@@ -166,6 +166,37 @@ handlers WatchConnectivity deals in. Swift cannot see inside an `Any`; the
 guarantee comes from the framework's contract that these are property-list
 values. Don't reach for that box for anything else.
 
+### The second doorway
+
+The delegate is not the only way WatchConnectivity calls back into this app.
+**Every `replyHandler` and `errorHandler` handed to `sendMessage` is called on
+that same queue**, and marking the delegate changed nothing about those: a
+closure written without an annotation picks up the target's main-actor
+default, so each one was a main-actor closure being run off the main actor.
+
+Marking the delegate alone therefore moved the crash rather than fixing it.
+The Watch app still trapped the moment it launched — activation calls
+`requestSync`, the phone answers, and the answer arrives on WatchConnectivity's
+`NSOperationQueue`. The crash report named the closure outright, and at the
+faulting address sat `bl _swift_task_isCurrentExecutor` followed by the branch
+that fails.
+
+So every one of those handlers is written `{ @Sendable ... }`, which makes it
+nonisolated, with the hop to the main queue inside it. Seven of them, in both
+apps. If you add a `sendMessage` with a handler, write `@Sendable` on it.
+
+Worth knowing how to check this without a device: disassemble the closure and
+look for `_swift_task_isCurrentExecutor`. A handler that still has one is a
+handler that will trap.
+
+```bash
+otool -arch arm64_32 -tV "…/workout_aicode Watch App-.debug.dylib" \
+  | grep -A40 'requestSync.*cfU_:' | grep isCurrentExecutor
+```
+
+The *inner* `DispatchQueue.main.async` blocks keep their check, and should:
+they really do run on the main queue, so it passes.
+
 ## Screens
 
 One file per screen, in each app's folder. On the phone:

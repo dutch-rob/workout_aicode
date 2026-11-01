@@ -505,7 +505,12 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         guard session.activationState == .activated, session.isReachable else {
             completion(remoteSnapshot); return
         }
-        session.sendMessage(["type": "takeOver"], replyHandler: { reply in
+        // @Sendable so these are nonisolated: WatchConnectivity calls a reply
+        // handler on its own queue, the same as it calls the delegate, and the
+        // project's default would otherwise put them on the main actor. The
+        // Watch trapped on exactly this, in its own requestSync.
+        let finish = SendableAcrossQueues(completion)
+        session.sendMessage(["type": "takeOver"], replyHandler: { @Sendable reply in
             let snap = (reply["snapshot"] as? Data)
                 .flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
             // The Watch can say no: an Apple workout stays where it is.
@@ -513,13 +518,13 @@ final class PhoneSessionManager: NSObject, ObservableObject {
                 DispatchQueue.main.async {
                     self.remoteAppleWorkout = true
                     self.role = .paused
-                    completion(nil)
+                    finish.value(nil)
                 }
                 return
             }
-            DispatchQueue.main.async { completion(snap ?? self.remoteSnapshot) }
-        }, errorHandler: { _ in
-            DispatchQueue.main.async { completion(self.remoteSnapshot) }
+            DispatchQueue.main.async { finish.value(snap ?? self.remoteSnapshot) }
+        }, errorHandler: { @Sendable _ in
+            DispatchQueue.main.async { finish.value(self.remoteSnapshot) }
         })
     }
 
@@ -528,17 +533,18 @@ final class PhoneSessionManager: NSObject, ObservableObject {
         guard session.activationState == .activated, session.isReachable else {
             completion(false, nil); return
         }
-        session.sendMessage(["type": "queryDriver"], replyHandler: { reply in
+        let finish = SendableAcrossQueues(completion)
+        session.sendMessage(["type": "queryDriver"], replyHandler: { @Sendable reply in
             let driving = reply["isDriving"] as? Bool ?? false
             let apple = reply["appleWorkout"] as? Bool ?? false
             let snap = (reply["snapshot"] as? Data)
                 .flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
             DispatchQueue.main.async {
                 self.remoteAppleWorkout = driving && apple
-                completion(driving, snap)
+                finish.value(driving, snap)
             }
-        }, errorHandler: { _ in
-            DispatchQueue.main.async { completion(false, nil) }
+        }, errorHandler: { @Sendable _ in
+            DispatchQueue.main.async { finish.value(false, nil) }
         })
     }
 

@@ -196,8 +196,15 @@ final class WatchSessionManager: NSObject, ObservableObject {
         // See `WatchSystemVersion`.
         session.sendMessage(["type": "requestSync",
                              "watchOS": WKInterfaceDevice.current().systemVersion],
-                            replyHandler: { [weak self] reply in
-            DispatchQueue.main.async { self?.ingest(context: reply) }
+                            replyHandler: { @Sendable [weak self] reply in
+            // Said @Sendable so it is nonisolated. WatchConnectivity calls a
+            // reply handler on its own NSOperationQueue, exactly as it calls
+            // the delegate, and the project's default would otherwise put this
+            // closure on the main actor — which Swift 6 checks at the call.
+            // This is the one that trapped on launch: activation asks the
+            // phone to sync, the phone answers, and the answer arrived here.
+            let answer = SendableAcrossQueues(reply)
+            DispatchQueue.main.async { self?.ingest(context: answer.value) }
         }, errorHandler: nil)
     }
 
@@ -226,8 +233,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
         let session = WCSession.default
         guard session.activationState == .activated else { return }
         if session.isReachable {
-            session.sendMessage(info, replyHandler: nil, errorHandler: { _ in
-                session.transferUserInfo(info)
+            let outgoing = SendableAcrossQueues(info)
+            session.sendMessage(info, replyHandler: nil, errorHandler: { @Sendable _ in
+                WCSession.default.transferUserInfo(outgoing.value)
             })
         } else {
             session.transferUserInfo(info)
@@ -307,8 +315,9 @@ final class WatchSessionManager: NSObject, ObservableObject {
                                            startedAt: startedAt, endedAt: endedAt)
         }
         if session.isReachable {
-            session.sendMessage(msg, replyHandler: nil, errorHandler: { _ in
-                session.transferUserInfo(msg)
+            let outgoing = SendableAcrossQueues(msg)
+            session.sendMessage(msg, replyHandler: nil, errorHandler: { @Sendable _ in
+                WCSession.default.transferUserInfo(outgoing.value)
             })
         } else {
             session.transferUserInfo(msg)
@@ -404,12 +413,13 @@ final class WatchSessionManager: NSObject, ObservableObject {
         guard session.activationState == .activated, session.isReachable else {
             completion(remoteSnapshot); return
         }
-        session.sendMessage(["type": "takeOver"], replyHandler: { reply in
+        let finish = SendableAcrossQueues(completion)
+        session.sendMessage(["type": "takeOver"], replyHandler: { @Sendable reply in
             let snap = (reply["snapshot"] as? Data)
                 .flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
-            DispatchQueue.main.async { completion(snap ?? self.remoteSnapshot) }
-        }, errorHandler: { _ in
-            DispatchQueue.main.async { completion(self.remoteSnapshot) }
+            DispatchQueue.main.async { finish.value(snap ?? self.remoteSnapshot) }
+        }, errorHandler: { @Sendable _ in
+            DispatchQueue.main.async { finish.value(self.remoteSnapshot) }
         })
     }
 
@@ -421,16 +431,17 @@ final class WatchSessionManager: NSObject, ObservableObject {
         guard session.activationState == .activated, session.isReachable else {
             completion(false, nil); return
         }
-        session.sendMessage(["type": "queryDriver"], replyHandler: { reply in
+        let finish = SendableAcrossQueues(completion)
+        session.sendMessage(["type": "queryDriver"], replyHandler: { @Sendable reply in
             let driving = reply["isDriving"] as? Bool ?? false
             let snap = (reply["snapshot"] as? Data)
                 .flatMap { try? JSONDecoder().decode(SessionSnapshot.self, from: $0) }
             DispatchQueue.main.async {
                 if !driving { self.remoteSnapshot = nil }
-                completion(driving, snap)
+                finish.value(driving, snap)
             }
-        }, errorHandler: { _ in
-            DispatchQueue.main.async { completion(false, nil) }
+        }, errorHandler: { @Sendable _ in
+            DispatchQueue.main.async { finish.value(false, nil) }
         })
     }
 
