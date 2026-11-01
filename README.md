@@ -250,11 +250,16 @@ The **logs/stats** button opens four tabs.
 
 Exports are sent wherever you choose. Editing an exported JSON file and importing it back is currently the only way to correct a mistake in your log; I intend to make that easier.
 
-After importing a JSON file you can:
-   - validate — check that the file has the right format and chronology
-   - check counts — compare how many items are in the file and in the app
-   - replace data — replace what is in the app with the imported data
-   - merge data — add only the items that are not in the app yet
+Picking a file to import does not change anything by itself. The file is read
+and described first — what it holds, when it was written and which app wrote
+it, and how its counts compare with what you have — and only then are the two
+things that write offered:
+   - merge into what I have — add only what is missing, never overwriting a set you already have
+   - replace everything — throw away what is in the app and put the file in its place
+
+A file that cannot be read says why, and neither button is offered. Either way
+a copy of what you have now is kept first, which is what **undo import** puts
+back.
 
 ## How the strength numbers work
 Everything on the graphs and progress tabs comes from one idea: from a set of several repetitions you can estimate what you could have lifted just once. That estimate is your **one-rep max**, and tracking it lets a heavy set of 5 and a lighter set of 12 be compared on the same scale.

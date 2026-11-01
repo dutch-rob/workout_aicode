@@ -47,6 +47,14 @@ enum LogTransfer {
         }
     }
 
+    /// "1 workout", "3 workouts". Counts are read out all over both apps and
+    /// English will not let a number stand next to a bare noun — "Added 1
+    /// workouts" was on the screen until somebody imported a file with one
+    /// thing in it.
+    static func counted(_ n: Int, _ noun: String) -> String {
+        "\(n) \(noun)\(n == 1 ? "" : "s")"
+    }
+
     // MARK: Reading
 
     /// Decodes a file into the current shape, whatever version wrote it.
@@ -95,8 +103,8 @@ enum LogTransfer {
               said.exercises == data.exercises.count,
               said.logs == data.logs.count else {
             throw Failure.countsDisagree(
-                said: "\(said.workouts) workouts, \(said.exercises) exercises, \(said.logs) logs",
-                found: "\(data.workouts.count), \(data.exercises.count), \(data.logs.count)")
+                said: "\(counted(said.workouts, "workout")), \(counted(said.exercises, "exercise")) and \(counted(said.logs, "logged exercise"))",
+                found: "\(data.workouts.count), \(data.exercises.count) and \(data.logs.count)")
         }
     }
 
@@ -114,6 +122,13 @@ enum LogTransfer {
         /// from before weights had one, and its numbers mean whatever the
         /// person who exported it meant.
         let hasWeightsInGrams: Bool
+
+        /// When the file was written, as a date rather than the string on the
+        /// wire. Nil when that string cannot be read, and nil means say
+        /// nothing: the phone used to put `Date.description(with: .current)`
+        /// straight into an alert, which is a format for a debugger, and a
+        /// stamp shown raw is worse than one left out.
+        var written: Date? { ISO8601DateFormatter().date(from: exportedAt) }
     }
 
     static func preview(_ envelope: ExportEnvelope) -> Preview {

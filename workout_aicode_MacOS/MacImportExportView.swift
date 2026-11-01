@@ -64,7 +64,7 @@ struct MacImportExportView: View {
             Button("Replace everything", role: .destructive) { apply(replacing: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your \(logs.count) logged exercises, \(workouts.count) workouts and \(exercises.count) exercises are deleted and the file's take their place. A copy of what you have now is kept so this can be undone.")
+            Text("Your \(LogTransfer.counted(logs.count, "logged exercise")), \(LogTransfer.counted(workouts.count, "workout")) and \(LogTransfer.counted(exercises.count, "exercise")) are deleted and the file's take their place. A copy of what you have now is kept so this can be undone.")
         }
     }
 
@@ -244,15 +244,17 @@ struct MacImportExportView: View {
 
     private func describe(_ s: LogTransfer.MergeSummary) -> String {
         var parts: [String] = []
-        if s.insertedLogs > 0 { parts.append("\(s.insertedLogs) logged exercises") }
-        if s.insertedWorkouts > 0 { parts.append("\(s.insertedWorkouts) workouts") }
-        if s.insertedExercises > 0 { parts.append("\(s.insertedExercises) exercises") }
+        if s.insertedLogs > 0 { parts.append(LogTransfer.counted(s.insertedLogs, "logged exercise")) }
+        if s.insertedWorkouts > 0 { parts.append(LogTransfer.counted(s.insertedWorkouts, "workout")) }
+        if s.insertedExercises > 0 { parts.append(LogTransfer.counted(s.insertedExercises, "exercise")) }
         var text = parts.isEmpty ? "Nothing new — everything in that file was already here."
                                  : "Added " + parts.joined(separator: ", ") + "."
         let renamed = s.renamedWorkouts + s.renamedExercises
         if renamed > 0 { text += " Renamed \(renamed)." }
         if s.conflicts > 0 {
-            text += " \(s.conflicts) rows differed from what you already had; yours were kept."
+            text += s.conflicts == 1
+                ? " 1 row differed from what you already had; yours was kept."
+                : " \(s.conflicts) rows differed from what you already had; yours were kept."
         }
         return text
     }

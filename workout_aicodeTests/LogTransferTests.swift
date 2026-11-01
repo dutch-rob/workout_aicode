@@ -190,6 +190,91 @@ struct LogTransferTests {
         #expect((try context.fetch(FetchDescriptor<ExerciseDef>())).count == 1)
     }
 
+    // MARK: Describing a file before importing it
+
+    // The review sheet is built out of `preview`, so what it can be handed is
+    // what `preview` can be given. The crash these cover was in the phone's
+    // own copy of validation, which walked `0..<(logs.count - 1)` to check the
+    // order of the logs: with no logs that is `0..<(-1)`, which traps. Export
+    // from a fresh install with workouts set up and nothing logged yet, tap
+    // Validate, and the app died. The order was never part of the format —
+    // nothing that reads a file depends on it — so the shared rules do not
+    // check it, and these make sure nothing reintroduces the walk.
+
+    @MainActor @Test func aFileWithNoLogsIsValidAndCanBeDescribed() throws {
+        let empty = envelope(workouts: [WorkoutDef(name: "PF A")],
+                             exercises: [ExerciseDef(name: "Bench")])
+        try LogTransfer.validate(empty)
+
+        let preview = LogTransfer.preview(empty)
+        #expect(preview.logs == 0)
+        #expect(preview.workouts == 1)
+        #expect(preview.oldest == nil)
+        #expect(preview.newest == nil)
+        #expect(preview.hasWeightsInGrams == false)
+    }
+
+    @MainActor @Test func anEntirelyEmptyFileIsValidAndCanBeDescribed() throws {
+        let nothing = envelope()
+        try LogTransfer.validate(nothing)
+        #expect(LogTransfer.preview(nothing).logs == 0)
+    }
+
+    @MainActor @Test func aFileWithOneLogCanBeDescribed() throws {
+        let exercise = ExerciseDef(name: "Bench")
+        let workout = WorkoutDef(name: "PF A")
+        let log = WorkoutLog(workoutId: workout.id, exerciseId: exercise.id,
+                             weights: [100], reps: [10])
+        let preview = LogTransfer.preview(
+            envelope(workouts: [workout], exercises: [exercise], logs: [log]))
+        #expect(preview.logs == 1)
+        #expect(preview.oldest == log.date)
+        #expect(preview.newest == log.date)
+    }
+
+    @MainActor @Test func logsInAnyOrderAreStillAGoodFile() throws {
+        let exercise = ExerciseDef(name: "Bench")
+        let workout = WorkoutDef(name: "PF A")
+        let old = WorkoutLog(date: Date(timeIntervalSince1970: 1_000_000),
+                             workoutId: workout.id, exerciseId: exercise.id,
+                             weights: [100], reps: [10])
+        let recent = WorkoutLog(date: Date(timeIntervalSince1970: 2_000_000),
+                                workoutId: workout.id, exerciseId: exercise.id,
+                                weights: [100], reps: [10])
+
+        // Oldest first, which is the order the phone's old check refused.
+        let file = envelope(workouts: [workout], exercises: [exercise],
+                            logs: [old, recent])
+        try LogTransfer.validate(file)
+        let preview = LogTransfer.preview(file)
+        #expect(preview.oldest == old.date)
+        #expect(preview.newest == recent.date)
+    }
+
+    @MainActor @Test func theDateAFileWasWrittenIsReadFromItsStamp() {
+        let preview = LogTransfer.preview(envelope())
+        // The helper writes 2026-10-25T12:00:00Z.
+        #expect(preview.written == Date(timeIntervalSince1970: 1_792_929_600))
+    }
+
+    @MainActor @Test func anUnreadableStampIsNoDateRatherThanAWrongOne() {
+        let odd = ExportEnvelope(
+            exportVersion: LogTransfer.currentVersion,
+            appIdentifier: "robotex.workout-aicode", appVersion: "1.7", build: "12",
+            exportedAt: "last Tuesday",
+            device: .init(model: "iPhone", system: "iOS", version: "26.0"),
+            locale: "en_US", timeZone: "America/Los_Angeles",
+            counts: .init(workouts: 0, exercises: 0, logs: 0),
+            data: .init(workouts: [], exercises: [], logs: []))
+        #expect(LogTransfer.preview(odd).written == nil)
+    }
+
+    @MainActor @Test func oneOfSomethingIsNotCalledOneSomethings() {
+        #expect(LogTransfer.counted(1, "workout") == "1 workout")
+        #expect(LogTransfer.counted(0, "workout") == "0 workouts")
+        #expect(LogTransfer.counted(2, "logged exercise") == "2 logged exercises")
+    }
+
     // MARK: The spreadsheet
 
     @MainActor @Test func theSpreadsheetSaysWhichUnitItIsIn() throws {

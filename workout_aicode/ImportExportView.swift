@@ -1,5 +1,12 @@
 // Import and export: writing the whole store out as JSON or TSV, and reading
 // one back in — either over the top of what is there, or merged into it.
+//
+// What a file may say, and what replacing and merging mean, are not here:
+// they are `LogTransfer`'s, shared with the Mac. This screen used to carry its
+// own copies of all four — validate, count, replace, merge — and they had
+// drifted from the shared ones, which is how `validateImport` came to crash on
+// a file with no logs. What is left here is what a *phone* does with a file:
+// which buttons it offers, how it reviews one, and what it says afterwards.
 
 import SwiftUI
 import SwiftData
@@ -21,14 +28,23 @@ struct ImportExportView: View {
     @State private var exportURL: URL?
 
     @State private var showImportPicker = false
-    @State private var pendingImportURL: URL?
-    @State private var showImportActions = false
+    /// The file that was picked, already read. Nil until one is.
+    @State private var reviewing: ReviewedFile?
 
-    // New states for alerts and undo backup
     @State private var showResultAlert: Bool = false
     @State private var resultTitle: String = ""
     @State private var resultMessage: String = ""
-    @State private var lastBackupURL: URL? = nil
+
+    /// What the store held just before the last import, to undo it with. In
+    /// memory and not on disk: it only has to outlive the import, and a file
+    /// in the temporary directory can be swept while the app is away.
+    @State private var undo: Data?
+
+    /// What the last import did, and what went wrong with the last one that
+    /// did not. Said on the screen it happened on rather than in an alert over
+    /// the top of it, which also keeps it out of the way of the sheet closing.
+    @State private var outcome: String?
+    @State private var problem: String?
 
     var body: some View {
         VStack {
@@ -63,76 +79,59 @@ struct ImportExportView: View {
                 .buttonStyle(.bordered)
 
                 Button {
-                    if let backupURL = lastBackupURL {
-                        replaceData(with: backupURL)
-                        lastBackupURL = nil
-                    }
+                    undoLast()
                 } label: {
                     Text("undo\nimport")
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .disabled(lastBackupURL == nil)
+                .disabled(undo == nil)
             }
             .padding(.horizontal)
 
             List {
+                if let outcome {
+                    Section {
+                        Label(outcome, systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    .font(.footnote)
+                }
+                if let problem {
+                    Section {
+                        Label(problem, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                    .font(.footnote)
+                }
+
                 Section {
                     Text("**export TSV** writes a tab-separated table of every logged set, for a spreadsheet.")
                     Text("**export JSON** writes everything — workouts, exercises and logs — in the app's own format, which is what **import JSON** reads back.")
-                    Text("Importing offers to validate the file, count what is in it, replace everything, or merge it with what you have. **undo import** restores the automatic backup taken just before the last replace or merge.")
+                    Text("**import JSON** reads the file and describes it — what it holds, when it was written, how it compares with what you have — before offering to merge or replace. Nothing changes until you choose there. **undo import** puts back the copy taken just before the last one.")
                 } header: {
                     Text("What these do")
                 }
                 .font(.footnote)
+            }
+            // Away from the export sheet below on purpose: one `.sheet` per
+            // view, so the two cannot get in each other's way.
+            .sheet(item: $reviewing) { file in
+                ImportReviewSheet(
+                    file: file,
+                    here: ExportEnvelope.Counts(workouts: workouts.count,
+                                                exercises: exercises.count,
+                                                logs: logs.count),
+                    onMerge: { apply(file, replacing: false) },
+                    onReplace: { apply(file, replacing: true) })
             }
         }
         .sheet(item: $exportURL, onDismiss: { cleanupExport() }) { url in
             ShareSheet(activityItems: [url])
         }
         .fileImporter(isPresented: $showImportPicker, allowedContentTypes: [.json], allowsMultipleSelection: false) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
-                pendingImportURL = url
-                showImportActions = true
-            case .failure(let error):
-                resultTitle = "File Error"
-                resultMessage = "Failed to pick file: \(error.localizedDescription)"
-                showResultAlert = true
-            }
-        }
-        .confirmationDialog("Import JSON", isPresented: $showImportActions, titleVisibility: .visible) {
-            Button("Validate") {
-                if let url = pendingImportURL {
-                    validateImport(at: url)
-                }
-            }
-            Button("Check Counts") {
-                if let url = pendingImportURL {
-                    checkCounts(at: url)
-                }
-            }
-            Button("Replace Data", role: .destructive) {
-                if let url = pendingImportURL {
-                    // Backup before replace
-                    if let backup = backupCurrentData() {
-                        lastBackupURL = backup
-                    }
-                    replaceData(with: url)
-                }
-            }
-            Button("Merge Data") {
-                if let url = pendingImportURL {
-                    // Backup before merge
-                    if let backup = backupCurrentData() {
-                        lastBackupURL = backup
-                    }
-                    mergeData(with: url)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
+            read(result)
         }
         .alert(resultTitle, isPresented: $showResultAlert) {
             Button("OK", role: .cancel) { }
@@ -190,294 +189,117 @@ struct ImportExportView: View {
         }
     }
 
-    private func backupCurrentData() -> URL? {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
-        do {
-            let jsonData = try encoder.encode(buildExportEnvelope())
-            let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("workout-backup.json")
-            try jsonData.write(to: fileURL, options: .atomic)
-            return fileURL
-        } catch {
-            resultTitle = "Backup Failed"
-            resultMessage = "Failed to backup current data: \(error.localizedDescription)"
-            showResultAlert = true
-            return nil
-        }
+    /// The copy taken before an import, so it can be undone.
+    private func backupCurrentData() -> Data? {
+        try? LogTransfer.encoded(buildExportEnvelope())
     }
 
-    /// Returns an envelope in the *current* (logJSON.2) flat shape regardless
-    /// of whether the source file is logJSON.1 or logJSON.2. Old single-row,
-    /// multi-entry logs get expanded into one flat WorkoutLog per entry.
-    /// One reader for both apps — see `LogTransfer.load`, which is where the
-    /// older formats and what they turn into are described.
+    // MARK: In
+
+    /// Reads a file of any version into the current shape — see
+    /// `LogTransfer.load`, which is where the older formats and what they turn
+    /// into are described.
     private func loadEnvelope(from url: URL) throws -> ExportEnvelope {
+        // A file the user picked is reachable inside the sandbox only while it
+        // is being accessed.
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         return try LogTransfer.load(try Data(contentsOf: url))
     }
 
-    private func validateImport(at url: URL) {
+    /// Reads the picked file and puts the review sheet up.
+    ///
+    /// A file that cannot be decoded at all gets an alert, because there is
+    /// nothing to review. One that decodes but fails `validate` gets the sheet
+    /// anyway, with the reason at the top and merge and replace taken away:
+    /// seeing what the file claims to hold is how somebody works out which
+    /// file they picked by mistake.
+    private func read(_ result: Result<[URL], Error>) {
+        outcome = nil
+        problem = nil
         do {
+            guard let url = try result.get().first else { return }
             let envelope = try loadEnvelope(from: url)
-            guard envelope.exportVersion.starts(with: "logJSON.") else {
-                resultTitle = "Validation Failed"
-                resultMessage = "Invalid export version: \(envelope.exportVersion)"
-                showResultAlert = true
-                return
+            var refusal: String?
+            do {
+                try LogTransfer.validate(envelope)
+            } catch {
+                refusal = error.localizedDescription
             }
-            // Check required fields presence (non-empty strings)
-            guard !envelope.appIdentifier.isEmpty, !envelope.appVersion.isEmpty, !envelope.build.isEmpty else {
-                resultTitle = "Validation Failed"
-                resultMessage = "Missing app metadata in export"
-                showResultAlert = true
-                return
-            }
-            // Check counts consistent with data arrays
-            guard envelope.counts.workouts == envelope.data.workouts.count,
-                  envelope.counts.exercises == envelope.data.exercises.count,
-                  envelope.counts.logs == envelope.data.logs.count else {
-                resultTitle = "Validation Failed"
-                resultMessage = "Counts mismatch with data arrays"
-                showResultAlert = true
-                return
-            }
-            // Check logs are reverse chronological order (each date >= next)
-            let logs = envelope.data.logs
-            for i in 0..<(logs.count - 1) {
-                let current = logs[i].date
-                let next = logs[i+1].date
-                if current < next {
-                    resultTitle = "Validation Failed"
-                    resultMessage = "Logs are not in reverse chronological order"
-                    showResultAlert = true
-                    return
-                }
-            }
-            resultTitle = "Validation Successful"
-            resultMessage = "The import file is valid and ready to use."
-            showResultAlert = true
+            reviewing = ReviewedFile(name: url.lastPathComponent,
+                                     envelope: envelope,
+                                     preview: LogTransfer.preview(envelope),
+                                     problem: refusal)
         } catch {
-            resultTitle = "Validation Failed"
-            resultMessage = "Failed to validate import: \(error.localizedDescription)"
+            resultTitle = "Cannot read that file"
+            resultMessage = error.localizedDescription
             showResultAlert = true
         }
     }
 
-    private func checkCounts(at url: URL) {
-        do {
-            let envelope = try loadEnvelope(from: url)
-            let importedCounts = envelope.counts
-            let currentCounts = ExportEnvelope.Counts(
-                workouts: workouts.count,
-                exercises: exercises.count,
-                logs: logs.count
-            )
-            let importedLogs = envelope.data.logs
-            let oldestDate = importedLogs.min(by: { $0.date < $1.date })?.date
-            let newestDate = importedLogs.max(by: { $0.date < $1.date })?.date
-            
-            let workoutDiff = importedCounts.workouts - currentCounts.workouts
-            let exerciseDiff = importedCounts.exercises - currentCounts.exercises
-            let logDiff = importedCounts.logs - currentCounts.logs
-            
-            var message = """
-            Imported counts:
-            - Workouts: \(importedCounts.workouts) (\(workoutDiff >= 0 ? "+" : "")\(workoutDiff) compared to current)
-            - Exercises: \(importedCounts.exercises) (\(exerciseDiff >= 0 ? "+" : "")\(exerciseDiff))
-            - Logs: \(importedCounts.logs) (\(logDiff >= 0 ? "+" : "")\(logDiff))
-            """
-            message += "\nImported logs span from \(oldestDate?.description(with: .current) ?? "N/A") to \(newestDate?.description(with: .current) ?? "N/A")"
-            
-            resultTitle = "Counts Summary"
-            resultMessage = message
-            showResultAlert = true
-        } catch {
-            resultTitle = "Counts Check Failed"
-            resultMessage = "Failed to check counts: \(error.localizedDescription)"
-            showResultAlert = true
+    private func apply(_ file: ReviewedFile, replacing: Bool) {
+        problem = nil
+        outcome = nil
+        // The copy comes first, and nothing is touched if it cannot be made:
+        // the logs are the one thing in this app nobody can reconstruct.
+        guard let backup = backupCurrentData() else {
+            problem = "Your current data could not be copied, so there would be no way back. Nothing was changed."
+            return
         }
-    }
-
-    private func replaceData(with url: URL) {
         do {
-            let envelope = try loadEnvelope(from: url)
-            guard envelope.exportVersion.starts(with: "logJSON.") else {
-                resultTitle = "Import Failed"
-                resultMessage = "Invalid export version: \(envelope.exportVersion)"
-                showResultAlert = true
-                return
+            if replacing {
+                try LogTransfer.replace(with: file.envelope, in: context)
+                outcome = "Replaced everything with \(file.name)."
+            } else {
+                outcome = describe(try LogTransfer.merge(file.envelope, into: context))
             }
-            // Clear existing data
-            let fetchLogs: FetchDescriptor<WorkoutLog> = FetchDescriptor()
-            if let existingLogs = try? context.fetch(fetchLogs) {
-                for log in existingLogs {
-                    context.delete(log)
-                }
-            }
-            let fetchWorkouts: FetchDescriptor<WorkoutDef> = FetchDescriptor()
-            if let existingWorkouts = try? context.fetch(fetchWorkouts) {
-                for workout in existingWorkouts {
-                    context.delete(workout)
-                }
-            }
-            let fetchExercises: FetchDescriptor<ExerciseDef> = FetchDescriptor()
-            if let existingExercises = try? context.fetch(fetchExercises) {
-                for exercise in existingExercises {
-                    context.delete(exercise)
-                }
-            }
-            // The results hang off logs that are about to go, so they go too.
-            // Left behind they would be orphans, and would then attach
-            // themselves to an imported log that happened to reuse the id.
-            if let existing = try? context.fetch(FetchDescriptor<AerobicResult>()) {
-                for result in existing { context.delete(result) }
-            }
-            if let existing = try? context.fetch(FetchDescriptor<AssistedResult>()) {
-                for result in existing { context.delete(result) }
-            }
-            if let existing = try? context.fetch(FetchDescriptor<LogWeights>()) {
-                for record in existing { context.delete(record) }
-            }
-            // Insert imported data
-            for exercise in envelope.data.exercises {
-                context.insert(exercise)
-            }
-            for workout in envelope.data.workouts {
-                context.insert(workout)
-            }
-            for log in envelope.data.logs {
-                context.insert(log)
-            }
-            for result in envelope.data.aerobicResults ?? [] {
-                context.insert(result)
-            }
-            for result in envelope.data.assistedResults ?? [] {
-                context.insert(result)
-            }
-            for record in envelope.data.logWeights ?? [] {
-                context.insert(record)
-            }
-            try context.save()
-            // Notify store or reload
+            undo = backup
+            reviewing = nil
+            // A pile of history can arrive at once here, and anything in it
+            // without a unit needs the answer the user has already given.
+            WeightHistory.catchUp(in: context)
             NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-            resultTitle = "Import Successful"
-            resultMessage = "Data replaced successfully."
-            showResultAlert = true
         } catch {
-            resultTitle = "Import Failed"
-            resultMessage = "Failed to replace data: \(error.localizedDescription)"
-            showResultAlert = true
+            problem = error.localizedDescription
         }
     }
 
-    private func mergeData(with url: URL) {
-        struct LogSig: Hashable {
-            let date: Date
-            let workoutId: UUID
-            let exerciseId: UUID
+    private func describe(_ summary: LogTransfer.MergeSummary) -> String {
+        var added: [String] = []
+        if summary.insertedLogs > 0 {
+            added.append(LogTransfer.counted(summary.insertedLogs, "logged exercise"))
         }
+        if summary.insertedWorkouts > 0 {
+            added.append(LogTransfer.counted(summary.insertedWorkouts, "workout"))
+        }
+        if summary.insertedExercises > 0 {
+            added.append(LogTransfer.counted(summary.insertedExercises, "exercise"))
+        }
+        var text = added.isEmpty
+            ? "Nothing new — everything in that file was already here."
+            : "Added " + added.joined(separator: ", ") + "."
+        let renamed = summary.renamedWorkouts + summary.renamedExercises
+        if renamed > 0 { text += " Renamed \(renamed)." }
+        if summary.conflicts > 0 {
+            text += summary.conflicts == 1
+                ? " 1 row differed from what you already had; yours was kept."
+                : " \(summary.conflicts) rows differed from what you already had; yours were kept."
+        }
+        return text
+    }
+
+    private func undoLast() {
+        guard let backup = undo else { return }
+        problem = nil
+        outcome = nil
         do {
-            let envelope = try loadEnvelope(from: url)
-            guard envelope.exportVersion.starts(with: "logJSON.") else {
-                resultTitle = "Merge Failed"
-                resultMessage = "Invalid export version: \(envelope.exportVersion)"
-                showResultAlert = true
-                return
-            }
-            var insertedExercises = 0
-            var insertedWorkouts = 0
-            var updatedExerciseNames = 0
-            var updatedWorkoutNames = 0
-
-            // Insert new exercises only; update names for existing
-            for importedEx in envelope.data.exercises {
-                if let existingEx = exercises.first(where: { $0.id == importedEx.id }) {
-                    if existingEx.name != importedEx.name {
-                        existingEx.name = importedEx.name
-                        updatedExerciseNames += 1
-                    }
-                } else {
-                    context.insert(importedEx)
-                    insertedExercises += 1
-                }
-            }
-            // Insert new workouts only; update names for existing
-            for importedWorkout in envelope.data.workouts {
-                if let existingWorkout = workouts.first(where: { $0.id == importedWorkout.id }) {
-                    if existingWorkout.name != importedWorkout.name {
-                        existingWorkout.name = importedWorkout.name
-                        updatedWorkoutNames += 1
-                    }
-                } else {
-                    context.insert(importedWorkout)
-                    insertedWorkouts += 1
-                }
-            }
-            // Logs: dedupe by (date, workoutId, exerciseId). Same signature with
-            // differing weights/reps is treated as a conflict; existing wins.
-            let existingByKey: [LogSig: WorkoutLog] = Dictionary(
-                uniqueKeysWithValues: logs.map {
-                    (LogSig(date: $0.date, workoutId: $0.workoutId, exerciseId: $0.exerciseId), $0)
-                }
-            )
-
-            var insertedLogs = 0
-            var conflictCount = 0
-            var importedLogIds: Set<UUID> = []
-
-            for importedLog in envelope.data.logs {
-                let key = LogSig(date: importedLog.date,
-                                 workoutId: importedLog.workoutId,
-                                 exerciseId: importedLog.exerciseId)
-                if let existing = existingByKey[key] {
-                    if existing.weights != importedLog.weights || existing.reps != importedLog.reps {
-                        conflictCount += 1
-                        // TODO: present UI to resolve; for now keep existing
-                    }
-                } else {
-                    context.insert(importedLog)
-                    insertedLogs += 1
-                    importedLogIds.insert(importedLog.id)
-                }
-            }
-
-            // A result belongs to one log. Where the log was skipped as a
-            // duplicate, its result is skipped too: the log that won is the
-            // one already here, with whatever results it already had.
-            let existingAerobicIds = Set(aerobicResults.map(\.id))
-            for result in envelope.data.aerobicResults ?? []
-            where importedLogIds.contains(result.logId) && !existingAerobicIds.contains(result.id) {
-                context.insert(result)
-            }
-            let existingAssistedIds = Set(assistedResults.map(\.id))
-            for result in envelope.data.assistedResults ?? []
-            where importedLogIds.contains(result.logId) && !existingAssistedIds.contains(result.id) {
-                context.insert(result)
-            }
-            let existingWeightIds = Set(logWeights.map(\.id))
-            for record in envelope.data.logWeights ?? []
-            where importedLogIds.contains(record.logId) && !existingWeightIds.contains(record.id) {
-                context.insert(record)
-            }
-            try context.save()
+            try LogTransfer.replace(with: try LogTransfer.load(backup), in: context)
+            undo = nil
+            outcome = "Put back the way it was before the last import."
+            WeightHistory.catchUp(in: context)
             NotificationCenter.default.post(name: .modelDataDidChange, object: nil)
-            var message = "Data merged successfully.\n"
-            message += "Inserted Exercises: \(insertedExercises)\n"
-            message += "Inserted Workouts: \(insertedWorkouts)\n"
-            message += "Inserted Logs: \(insertedLogs)\n"
-            message += "Updated Exercise Names: \(updatedExerciseNames)\n"
-            message += "Updated Workout Names: \(updatedWorkoutNames)\n"
-            if conflictCount > 0 {
-                message += "Conflicts detected in \(conflictCount) log rows; existing kept."
-            }
-            resultTitle = "Merge Complete"
-            resultMessage = message
-            showResultAlert = true
         } catch {
-            resultTitle = "Merge Failed"
-            resultMessage = "Failed to merge data: \(error.localizedDescription)"
-            showResultAlert = true
+            problem = "Could not undo. \(error.localizedDescription)"
         }
     }
 

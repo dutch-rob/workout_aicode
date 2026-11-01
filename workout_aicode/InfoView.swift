@@ -201,15 +201,14 @@ struct InfoView: View {
                         }
                     }
                     Text("Exports are sent wherever you choose. Editing an exported JSON file and importing it back is currently the only way to correct a mistake in your log; I intend to make that easier.")
-                    Text("After importing a JSON file you can:")
+                    Text("Picking a file to import does not change anything by itself. The file is read and described first — what it holds, when it was written and which app wrote it, and how its counts compare with what you have — and only then are the two things that write offered:")
                     VStack(alignment: .leading, spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("    • validate — check that the file has the right format and chronology")
-                            Text("    • check counts — compare how many items are in the file and in the app")
-                            Text("    • replace data — replace what is in the app with the imported data")
-                            Text("    • merge data — add only the items that are not in the app yet")
+                            Text("    • merge into what I have — add only what is missing, never overwriting a set you already have")
+                            Text("    • replace everything — throw away what is in the app and put the file in its place")
                         }
                     }
+                    Text("A file that cannot be read says why, and neither button is offered. Either way a copy of what you have now is kept first, which is what **undo import** puts back.")
                 }
 
                 Group {
