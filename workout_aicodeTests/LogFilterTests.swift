@@ -235,3 +235,48 @@ struct ExerciseGroupingTests {
         #expect(histories[0].entries.count == 2)
     }
 }
+
+// MARK: - Narrowing the "list" menu during a workout
+
+@Suite struct ExerciseListFilterTests {
+
+    @MainActor @Test func showingAllOffersTheWholeWorkout() {
+        let shown = ExerciseListFilter.visible(count: 4, logged: [0, 1], current: 2,
+                                               showAll: true)
+        #expect(shown == [0, 1, 2, 3])
+    }
+
+    @MainActor @Test func narrowingDropsWhatIsAlreadyLogged() {
+        let shown = ExerciseListFilter.visible(count: 4, logged: [0, 1], current: 2,
+                                               showAll: false)
+        #expect(shown == [2, 3])
+    }
+
+    // Standing on an exercise you have already logged — gone back to, to add
+    // a set. It stays listed, or the list cannot say which one this is.
+    @MainActor @Test func whereYouAreStaysInTheListEvenWhenLogged() {
+        let shown = ExerciseListFilter.visible(count: 4, logged: [0, 1], current: 1,
+                                               showAll: false)
+        #expect(shown == [1, 2, 3])
+    }
+
+    // The last set of the workout: narrowing would leave nothing, and a menu
+    // with no rows reads as broken rather than as finished.
+    @MainActor @Test func aFinishedWorkoutFallsBackToTheWholeList() {
+        let shown = ExerciseListFilter.visible(count: 3, logged: [0, 1, 2], current: 0,
+                                               showAll: false)
+        #expect(shown == [0, 1, 2])
+    }
+
+    @MainActor @Test func anEmptyWorkoutOffersNothingAndDoesNotTrap() {
+        #expect(ExerciseListFilter.visible(count: 0, logged: [], current: 0,
+                                           showAll: false).isEmpty)
+        #expect(ExerciseListFilter.visible(count: 0, logged: [], current: 0,
+                                           showAll: true).isEmpty)
+    }
+
+    @MainActor @Test func theButtonNamesWhatTappingItDoes() {
+        #expect(ExerciseListFilter.toggleTitle(showAll: true) == "only what's left")
+        #expect(ExerciseListFilter.toggleTitle(showAll: false) == "show all")
+    }
+}

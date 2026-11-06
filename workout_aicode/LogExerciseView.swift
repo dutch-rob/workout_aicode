@@ -427,7 +427,10 @@ struct LogExerciseView: View {
             .controlSize(.large)
 
             Menu("list") {
-                ForEach(exerciseIds.indices, id: \.self) { idx in
+                ForEach(ExerciseListFilter.visible(count: exerciseIds.count,
+                                                   logged: loggedIndices,
+                                                   current: currentIndex,
+                                                   showAll: listShowsAll), id: \.self) { idx in
                     let exercise = exerciseAt(idx)
                     Button {
                         carriedOn = false
@@ -444,11 +447,26 @@ struct LogExerciseView: View {
                         }
                     }
                 }
+                // Last, under a divider, so it is where a list ends rather
+                // than something to read past before reaching the exercises.
+                Divider()
+                Button {
+                    listShowsAll.toggle()
+                } label: {
+                    Label(ExerciseListFilter.toggleTitle(showAll: listShowsAll),
+                          systemImage: listShowsAll
+                            ? "line.3.horizontal.decrease.circle" : "list.bullet")
+                }
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
         }
     }
+
+    /// Whether "list" offers the whole workout or only what is left. Per
+    /// device and not synced — see `ExerciseListFilter`.
+    @AppStorage(ExerciseListFilter.key) private var listShowsAll =
+        ExerciseListFilter.showsAllByDefault
 
     @State private var pickerHeight: CGFloat = 180
 

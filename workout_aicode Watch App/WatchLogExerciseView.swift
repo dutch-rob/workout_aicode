@@ -37,6 +37,10 @@ struct WatchLogExerciseView: View {
     @State private var loggedIndices: Set<Int> = []
     @State private var didPrepare = false
     @State private var showExerciseList = false
+    /// Whether "list" offers the whole workout or only what is left. Per
+    /// device and not synced — see `ExerciseListFilter`.
+    @AppStorage(ExerciseListFilter.key) private var listShowsAll =
+        ExerciseListFilter.showsAllByDefault
     @State private var startedAt = Date()
     @State private var dragOffsetX: CGFloat = 0
     @State private var isHorizontalDrag: Bool? = nil
@@ -216,7 +220,7 @@ struct WatchLogExerciseView: View {
             // They are over the wheels instead — see WatchRestOverlay.
             Spacer(minLength: 0)
         }
-        .frame(width: toggleWidth, alignment: .leading)
+        .frame(width: clockSafeWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background { WatchZoneRowBackground() }
     }
@@ -469,8 +473,28 @@ struct WatchLogExerciseView: View {
     }
 
     /// Toggle width — left-aligned and capped so it clears the clock top-right.
+    ///
+    /// Narrower than `clockSafeWidth` on purpose: this is a mini bordered
+    /// button with a one-word label, and stretching it across two thirds of
+    /// the watch face to meet a limit it never reaches just makes it look odd.
     private var toggleWidth: CGFloat {
         WKInterfaceDevice.current().screenBounds.width * 0.58
+    }
+
+    /// How wide anything sharing the clock's row may be before it runs under
+    /// the time, which watchOS draws top-right and no app can move.
+    ///
+    /// Measured rather than guessed, off a 44 mm screenshot (368 pt wide): a
+    /// 24-hour "08:41" starts at x=261, which is 0.709 of the width. 0.68
+    /// leaves about 11 pt of clear air at that size and holds at the others,
+    /// since the time and the screen scale together. A 12-hour locale drops a
+    /// digit and only gains room.
+    ///
+    /// The exercise name wants every point of this: it is the one thing on
+    /// screen that says which exercise is being logged, and at the old 0.58
+    /// it was truncating with 48 pt of empty space still to its right.
+    private var clockSafeWidth: CGFloat {
+        WKInterfaceDevice.current().screenBounds.width * 0.68
     }
 
     // MARK: - Handover helpers
@@ -690,13 +714,23 @@ struct WatchLogExerciseView: View {
                 .frame(maxWidth: .infinity)
         }
         .confirmationDialog("Exercises", isPresented: $showExerciseList, titleVisibility: .visible) {
-            ForEach(workout.exerciseOrder.indices, id: \.self) { idx in
+            ForEach(ExerciseListFilter.visible(count: workout.exerciseOrder.count,
+                                               logged: loggedIndices,
+                                               current: currentIndex,
+                                               showAll: listShowsAll), id: \.self) { idx in
                 // The tick is part of the title here: a watchOS confirmation
                 // dialog takes plain buttons, with nowhere to hang an icon.
                 // Same meaning as the phone's checkmark, and the row stays
                 // tappable — a logged exercise can still be gone back to.
                 let name = exerciseAt(idx)?.name ?? ""
                 Button(loggedIndices.contains(idx) ? "✓ \(name)" : name) { setIndex(idx) }
+            }
+            // Last, so the exercises are what the thumb lands on first. A
+            // confirmation dialog closes on any button, so this one closes it
+            // too — the list reopens showing the other half, which on a wrist
+            // is two taps rather than a settings screen mid-workout.
+            Button(ExerciseListFilter.toggleTitle(showAll: listShowsAll)) {
+                listShowsAll.toggle()
             }
         }
     }
