@@ -320,6 +320,18 @@ The settings screen has:
    - **Share anonymous data with the developer** — off by default, see below.
    - **Delete all my data** — removes everything this app has stored, and takes back anything you shared anonymously. With iCloud sharing on, it also removes it from your other devices.
 
+### Settings on the Mac
+Most of these settings travel with your workouts and exercises, so the Mac app's Settings can set them too — including the ones that are used on your iPhone and Watch, which the Mac does not have. Change a setting on either and the other follows; what the Watch needs reaches it the next time your iPhone sees the change.
+
+Five settings stay with the device you set them on, because each is a fact about that device rather than about your training:
+
+   - **Save workouts to Apple Health** and **Body weight from Health**, which depend on a Health permission each device grants separately.
+   - **Which calendar** the next workout goes in, because a calendar's identifier means nothing on another device.
+   - **Share anonymous data with the developer**, because each device sends its own.
+   - **Share data among your iPhones/iPads**, which is the switch that makes the rest of this possible and so cannot travel through it.
+
+The Mac also has **Text size**, which no other device needs, and does not have **Delete all my data**.
+
 ## Your data and privacy
 Your workouts, exercises and logs are stored on your device. There is no account and no tracking: nothing about you is collected automatically, and nothing is sold or shared with anyone else, ever.
 

@@ -243,7 +243,7 @@ final class AppSetup: ObservableObject {
 
         do {
             let c = try ModelContainer(
-                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self, WorkoutGroupDef.self,
+                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self, WorkoutGroupDef.self, AppSettings.self,
                 migrationPlan: WorkoutMigrationPlan.self,
                 configurations: config
             )
@@ -262,7 +262,7 @@ final class AppSetup: ObservableObject {
         // plan, not less.
         do {
             let c = try ModelContainer(
-                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self, WorkoutGroupDef.self,
+                for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self, WorkoutGroupDef.self, AppSettings.self,
                 configurations: config
             )
             print("[ModelContainer] opened without the migration plan (sync=\(syncEnabled))")
@@ -279,7 +279,7 @@ final class AppSetup: ObservableObject {
         // No migration plan — SwiftData creates a brand-new store.
         let config = ModelConfiguration(url: localStoreURL, cloudKitDatabase: .none)
         // swiftlint:disable:next force_try
-        let c = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self, WorkoutGroupDef.self,
+        let c = try! ModelContainer(for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self, WorkoutGroupDef.self, AppSettings.self,
                                     configurations: config)
         return (c, AppStore(context: c.mainContext))
     }
@@ -477,6 +477,14 @@ struct workout_aicodeApp: App {
                         // Give the Watch connectivity layer the current store so
                         // it can push definitions and insert logs from the Watch.
                         PhoneSessionManager.shared.attach(store: setup.store)
+                        // And start the settings mirror against the same store
+                        // — again on a store swap, because turning iCloud on or
+                        // off hands out a different one. See SettingsMirror.
+                        // Settings that arrive from another device have to
+                        // be pushed on to the Watch, which only ever hears
+                        // from this phone.
+                        SettingsMirror.shared.didAdopt = { setup.store.reloadAll() }
+                        SettingsMirror.shared.start(setup.container.mainContext)
                     }
             }
             }

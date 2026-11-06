@@ -90,6 +90,40 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   there for good. `MovementType` is the clearest example: nothing reads it,
   every exercise is `.none`, and it stays because removing it would break
   existing stores and older export files.
+* `Shared/SyncedSettings.swift` and `AppSettings` are the **settings that
+  travel**. Preferences used to be `UserDefaults` on each device, which is why
+  the Mac could show a setting and never change anything — nothing syncs
+  UserDefaults. The ones that are about TRAINING rather than about a device now
+  live in the store and reach every device the way workouts do.
+
+  It is a MIRROR, not a rewrite. `UserDefaults` is still what the app reads,
+  everywhere it always did: thirty-odd `@AppStorage` bindings,
+  `WorkoutSchedule.isEnabled`, `WatchPreferences.zoneTint` and the payload the
+  Watch is sent all read it from a static context, and routing those through a
+  `ModelContext` there is none would have been a large change for nothing.
+  `SettingsMirror` runs the step at launch, on any UserDefaults change, and on
+  coming back to the front. No view knows any of this exists.
+
+  Three rules worth knowing. **Duplicates are possible** — CloudKit has no
+  uniqueness, so two devices can each make the first record; newest
+  `updatedAt` wins and `resolve` deletes the rest. **The iPhone's answers
+  win once**: a Mac or iPad that opens first seeds the record provisionally,
+  and the first phone overwrites it, after which `seededBy` says "iPhone" and
+  normal last-writer-wins applies. And **`revision`, not `updatedAt`, decides
+  what to adopt** — a `Date` put through Core Data comes back a ten-millionth
+  of a second later than it went in, because Core Data counts from 2001 and
+  this counts from 1970, so every run looked newer than the last and nothing
+  a device changed was ever published.
+
+  What does NOT travel is listed on `AppSettings`: Health sharing and the
+  body-weight source (a per-device HealthKit authorisation), the calendar id
+  (an `EKCalendar` identifier means nothing elsewhere), the developer-sharing
+  consent (each device uploads on its own), the iCloud switch itself, and the
+  Mac's text size.
+
+  The phone sets `SettingsMirror.didAdopt` to `reloadAll`, and must: the Watch
+  only ever hears from the phone, so a wheel count set on the Mac would reach
+  the phone and stop there.
 * `Shared/WorkoutGrouping.swift` holds the rules for **workout groups**: a
   set of workouts that mean the same session, for somebody who trains the same
   muscles two ways at two gyms. When grouping is on it is the GROUP that gets

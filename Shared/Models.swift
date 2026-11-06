@@ -369,6 +369,111 @@ final class WorkoutGroupDef: Identifiable, Hashable, Codable {
     }
 }
 
+// MARK: - The settings that travel
+//
+// Preferences used to be `UserDefaults` on each device, which meant the Mac
+// could show them and never change anything: nothing syncs UserDefaults. The
+// Mac is a helper for the phone and the Watch — it does not log a workout —
+// so settings it cannot actually set are settings in the wrong place.
+//
+// So the ones that are ABOUT TRAINING rather than about a device live here, in
+// the store, and reach every device the way workouts and exercises do.
+//
+// What is deliberately NOT here, and stays per-device:
+//
+//   • Apple Health sharing and where body weight comes from. Both hang off a
+//     HealthKit authorisation that each device grants separately, so a synced
+//     "on" would be an iPad claiming a permission it has not got.
+//   • Which calendar events go in. That is an `EKCalendar` identifier, and an
+//     identifier from one device means nothing on another.
+//   • Sharing data with the developers. Each device uploads on its own, so
+//     the consent is each device's to give.
+//   • The iCloud switch itself, which cannot sensibly travel through iCloud.
+//   • The Mac's text size, which no other device has.
+//
+// UserDefaults is still what the app READS, everywhere it always did; this is
+// the copy of record and `SyncedSettings` keeps the two in step. That is why
+// adding a setting here changed no view code and no `WatchPreferences` reader.
+//
+// CloudKit rules apply: every field has a default, nothing is unique, and
+// there are no relationships. Duplicates ARE possible — two devices can both
+// create the first one before either has seen the other's — so nothing may
+// assume there is only one. `SyncedSettings.resolve` is the single place that
+// deals with that.
+@Model
+final class AppSettings {
+    var id: UUID = UUID()
+
+    /// Counts up by one every time any device writes this record.
+    ///
+    /// This, and not `updatedAt`, is how a device knows whether what it is
+    /// looking at is newer than what it last took — because comparing the
+    /// dates does not survive the round trip through the store. Core Data
+    /// keeps a Date as seconds since 2001 and this app marks what it adopted
+    /// as seconds since 1970; adding the 978,307,200 between them costs the
+    /// low bits, so a date read back can come out a ten-millionth of a second
+    /// LATER than the one written. Every run then looked newer than the last,
+    /// every device adopted for ever, and nothing anybody changed was ever
+    /// published. A test caught it; an integer cannot do it.
+    var revision: Int = 0
+
+    /// When these values were last written, for picking between duplicates —
+    /// where a ten-millionth of a second does not matter — and for saying so
+    /// on screen. Never for deciding what to adopt. See `revision`.
+    var updatedAt: Date = Date.distantPast
+
+    /// Which kind of device filled this in first: "iPhone", "iPad" or "Mac".
+    ///
+    /// The phone's answers are the ones worth keeping — it is where these were
+    /// set and where the training happens — but a Mac may well open first and
+    /// has to put something. So a Mac or iPad seeds provisionally and a phone
+    /// that arrives later overwrites it once, after which this says "iPhone"
+    /// and nobody overwrites anything again.
+    var seededBy: String = ""
+
+    // Weights and body
+    var weightUnitRaw: String = ""
+    /// A Double because that is how `BodyWeight` reads it, and because a
+    /// weight in pounds is not always a whole number.
+    var bodyWeightManual: Double = 0
+
+    // Logging
+    var prefillAcrossWorkouts: Bool = false
+    var restTimerEnabled: Bool = false
+    var restDefaultSeconds: Int = 0
+
+    // What a new exercise starts with
+    ///
+    /// The three weights are Doubles: a gym that goes up in halves could not
+    /// be described with whole numbers — see `ExerciseDefaults`.
+    var newExerciseSets: Int = 0
+    var newExerciseLowest: Double = 0
+    var newExerciseHighest: Double = 0
+    var newExerciseIncrement: Double = 0
+
+    // Statistics and graphs
+    var statsFormulaRaw: String = ""
+    var statsWindow: Int = 0
+    var statsSmoothing: Int = 0
+
+    // Scheduling
+    var scheduleEnabled: Bool = false
+    var scheduleDaysAhead: Int = 0
+    var scheduleCount: Int = 0
+    var scheduleByGroup: Bool = false
+
+    // The Watch, as set from the phone
+    var watchWorkoutModeRaw: String = ""
+    var watchZoneTint: Double = 0
+    var watchRestTaps: Int = 0
+    var watchWheelRows: Int = 0
+    var watchZoneBoundaries: String = ""
+
+    init(id: UUID = UUID()) {
+        self.id = id
+    }
+}
+
 @Model
 final class WorkoutDef: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
@@ -974,16 +1079,34 @@ enum WorkoutLogSchemaV10: VersionedSchema {
     }
 }
 
+/// Settings that travel: one new entity, `AppSettings`. Nothing that already
+/// existed is touched, so this is additive like every stage before it.
+enum WorkoutLogSchemaV11: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(11, 0, 0) }
+    static var models: [any PersistentModel.Type] {
+        [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self,
+         AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self,
+         WorkoutGroupDef.self, AppSettings.self]
+    }
+}
+
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self,
          WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self, WorkoutLogSchemaV5.self,
          WorkoutLogSchemaV6.self, WorkoutLogSchemaV7.self, WorkoutLogSchemaV8.self,
-         WorkoutLogSchemaV9.self, WorkoutLogSchemaV10.self]
+         WorkoutLogSchemaV9.self, WorkoutLogSchemaV10.self, WorkoutLogSchemaV11.self]
     }
     static var stages: [MigrationStage] {
-        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7, v7toV8, v8toV9, v9toV10]
+        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7, v7toV8, v8toV9, v9toV10,
+         v10toV11]
     }
+
+    /// One new entity, nothing existing touched — see WorkoutLogSchemaV11.
+    static let v10toV11 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV10.self,
+        toVersion:   WorkoutLogSchemaV11.self
+    )
 
     /// One new entity and one new optional column — see WorkoutLogSchemaV10.
     static let v9toV10 = MigrationStage.lightweight(

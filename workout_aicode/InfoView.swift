@@ -267,6 +267,18 @@ struct InfoView: View {
                             Text("    • **Delete all my data** — removes everything this app has stored, and takes back anything you shared anonymously. With iCloud sharing on, it also removes it from your other devices.")
                         }
                     }
+                    Text("Settings on the Mac").font(.subheadline).bold().id("settings-on-the-mac")
+                    Text("Most of these settings travel with your workouts and exercises, so the Mac app's Settings can set them too — including the ones that are used on your iPhone and Watch, which the Mac does not have. Change a setting on either and the other follows; what the Watch needs reaches it the next time your iPhone sees the change.")
+                    Text("Five settings stay with the device you set them on, because each is a fact about that device rather than about your training:")
+                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("    • **Save workouts to Apple Health** and **Body weight from Health**, which depend on a Health permission each device grants separately.")
+                            Text("    • **Which calendar** the next workout goes in, because a calendar's identifier means nothing on another device.")
+                            Text("    • **Share anonymous data with the developer**, because each device sends its own.")
+                            Text("    • **Share data among your iPhones/iPads**, which is the switch that makes the rest of this possible and so cannot travel through it.")
+                        }
+                    }
+                    Text("The Mac also has **Text size**, which no other device needs, and does not have **Delete all my data**.")
                 }
 
                 Group {

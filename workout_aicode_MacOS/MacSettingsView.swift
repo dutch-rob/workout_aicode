@@ -12,10 +12,10 @@ struct MacSettingsView: View {
     @State private var syncOn = MacAppSetup.syncEnabled
     @State private var askingToEnd = false
 
-    // The same keys the iPhone writes, so the fields read familiarly — but not
-    // the same storage. UserDefaults is per-device, and nothing syncs it, so
-    // what is set here applies to exercises made here. Said plainly below
-    // rather than left for someone to discover.
+    // The same keys the iPhone writes, and now the same answers: these are
+    // mirrored into the store and reach every device. See SyncedSettings —
+    // UserDefaults is still what is read, it is simply no longer the only
+    // thing that knows.
     @AppStorage(ExerciseDefaultsKey.sets) private var sets = ExerciseDefaults.sets
     @AppStorage(ExerciseDefaultsKey.lowest) private var lowest = ExerciseDefaults.lowest
     @AppStorage(ExerciseDefaultsKey.highest) private var highest = ExerciseDefaults.highest
@@ -104,13 +104,14 @@ struct MacSettingsView: View {
             } header: {
                 Text("Numbers for a new exercise")
             } footer: {
-                Text("Where a new exercise starts. Every exercise can still be changed on its own afterwards, and changing these leaves existing exercises alone.\n\nThe wheels on the iPhone show weights from the lowest to the highest in steps of the increment — match the increment to your gym, often 5, or 2 for dumbbells.\n\nThis is this Mac's answer. Your iPhone asked the same question when you first used it and keeps its own; the two do not travel through iCloud, because only your workouts and exercises do.")
+                Text("Where a new exercise starts. Every exercise can still be changed on its own afterwards, and changing these leaves existing exercises alone.\n\nThe wheels on the iPhone show weights from the lowest to the highest in steps of the increment — match the increment to your gym, often 5, or 2 for dumbbells.\n\nThese travel: your iPhone uses the same answers, and changing them on either reaches the other.")
             }
 
-            // Scheduling, as far as a Mac can take part in it: the groups
-            // are store data and cross to the phone, the switch and the days
-            // ahead are the phone's own per-device preferences and cannot.
-            // Said in the section's footer rather than left to be discovered.
+            // The settings that belong to the iPhone and the Watch but can
+            // be set from here, now that they travel in the store. See
+            // SyncedSettings for which do not, and why.
+            MacSharedSettings()
+
             MacWorkoutGroups()
 
             Section {

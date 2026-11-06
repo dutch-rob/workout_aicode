@@ -62,7 +62,7 @@ final class MacAppSetup: ObservableObject {
         let models: [any PersistentModel.Type] = [
             WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
             AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self,
-            WorkoutGroupDef.self
+            WorkoutGroupDef.self, AppSettings.self
         ]
         // A screenshot run gets a throwaway store of its own and never
         // touches the real one — see MacDemoData. It goes through the same

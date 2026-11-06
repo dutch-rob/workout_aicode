@@ -21,6 +21,9 @@ struct workout_aicode_MacOSApp: App {
                 .modelContainer(setup.container)
                 .macTextScaled(size)
                 .remembersItsFrameUnlessCapturing()
+                // The settings that travel: read what another device wrote,
+                // and publish what is changed here. See SettingsMirror.
+                .task { SettingsMirror.shared.start(setup.container.mainContext) }
         }
         .defaultSize(width: 1000, height: 680)
         .commands {

@@ -177,14 +177,15 @@ struct MacWorkoutDetail: View {
     @Query(sort: [SortDescriptor(\WorkoutGroupDef.sortIndex)])
     private var groups: [WorkoutGroupDef]
 
-    /// Whether to ask which group this workout is in.
+    /// Whether to ask which group this workout is in: the switch itself,
+    /// which now travels in the store like the groups do.
     ///
-    /// Taken from the data, not from the "schedule by group" switch: that
-    /// switch is a `UserDefaults` value on the phone, and `UserDefaults` does
-    /// not cross devices, so a Mac reading it would always see "off" however
-    /// the phone was set. Groups themselves DO cross, in the store — so their
-    /// existence is the question worth asking, and it gives the same answer.
-    private var byGroup: Bool { !groups.isEmpty }
+    /// It used to be read from the data — "are there any groups?" — because
+    /// the switch was a UserDefaults value and UserDefaults does not cross
+    /// devices, so a Mac reading it always saw "off". `SyncedSettings`
+    /// mirrors it now, so the Mac can read the real answer and agree with the
+    /// iPhone about when a workout needs a group.
+    @AppStorage(WorkoutGrouping.enabledKey) private var byGroup = false
 
     @State private var sieve = MacExerciseSieve()
     /// Folded shut to begin with: the exercise list is what this pane is for,

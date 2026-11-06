@@ -9,12 +9,11 @@ import SwiftData
 //
 // Two things are deliberately different here.
 //
-// There is no switch. On the iPhone, grouping is a per-device preference in
-// UserDefaults, which nothing syncs — so a switch here could never reach the
-// phone that does the scheduling, and would be a control that appears to do
-// something and does not. The groups themselves are in the store and DO cross,
-// so what this screen is for is making them; the phone offers the switch once
-// they arrive. `MacWorkoutDetail` reads grouping the same data-driven way.
+// The switch is a switch, not a sheet. On the iPhone it opens
+// `WorkoutGroupSetupView`, because the groups have to be made somewhere and
+// there is nowhere else; here the groups are on the same screen, right under
+// it, so there is nothing to open. It refuses in the same way and for the same
+// reason — see `WorkoutGrouping.canEnable`.
 //
 // And deleting a group asks first. The iPhone deletes on a swipe, which nobody
 // does by accident; here it is a button next to a row.
@@ -31,6 +30,7 @@ struct MacWorkoutGroups: View {
     @State private var renaming: WorkoutGroupDef?
     @State private var renameTo = ""
     @State private var deleting: WorkoutGroupDef?
+    @AppStorage(WorkoutGrouping.enabledKey) private var byGroup = false
 
     private var namedWorkouts: [WorkoutDef] { WorkoutGroupEditing.groupable(workouts) }
     private var unassigned: Int { WorkoutGroupEditing.unassigned(among: workouts) }
@@ -65,10 +65,18 @@ struct MacWorkoutGroups: View {
                     Button("Add", action: addGroup)
                         .disabled(!WorkoutGrouping.nameIsFree(newName, among: groups.map(\.name)))
                 }
+                Toggle("Schedule the group, not the workout", isOn: Binding(
+                    get: { byGroup },
+                    // It only takes once every workout is in a group: a
+                    // half-assigned state would have the calendar name some
+                    // workouts by their group and some by themselves, with
+                    // nothing on screen saying which.
+                    set: { wanted in byGroup = wanted && canEnable }))
+                    .disabled(!byGroup && !canEnable)
             } header: {
                 Text("Workout groups")
             } footer: {
-                Text("A group is one session done more than one way — the same muscles at a different gym, say. Scheduling puts the group in your calendar, and you pick which of its workouts to do on the day.\n\nGroups travel through iCloud, so a group made here is the one your iPhone schedules by. The switch that turns scheduling by group on is on the iPhone, with the calendar: this app has no calendar of its own.")
+                Text("A group is one session done more than one way — the same muscles at a different gym, say. Scheduling puts the group in your calendar, and you pick which of its workouts to do on the day.\n\nGroups and this switch travel through iCloud, so what is set here is what your iPhone schedules by — it is the iPhone that writes the calendar, because watchOS and this app cannot.")
             }
 
             if !groups.isEmpty {
@@ -94,6 +102,12 @@ struct MacWorkoutGroups: View {
                 }
             }
         }
+        // Deleting the last group, or freeing a workout, undoes what the
+        // switch was turned on for. Switched off here rather than left on and
+        // meaningless — the iPhone's edit sheet does the same on its way out.
+        .onChange(of: canEnable) { _, stillValid in
+            if byGroup && !stillValid { byGroup = false }
+        }
         .alert("Rename group", isPresented: Binding(get: { renaming != nil },
                                                     set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $renameTo)
@@ -117,6 +131,10 @@ struct MacWorkoutGroups: View {
                                   : "The \(count) workouts in it go back to having no group.")
             } ?? "")
         }
+    }
+
+    private var canEnable: Bool {
+        WorkoutGrouping.canEnable(groupCount: groups.count, unassignedWorkouts: unassigned)
     }
 
     private var renameIsAllowed: Bool {
