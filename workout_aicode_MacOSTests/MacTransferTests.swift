@@ -18,6 +18,7 @@ struct MacTransferTests {
         let container = try ModelContainer(
             for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
             AerobicResult.self, AssistedResult.self, LogWeights.self, DraftSession.self,
+            WorkoutGroupDef.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         return ModelContext(container)
     }
@@ -145,6 +146,7 @@ struct MacWorkoutOrderTests {
         let container = try ModelContainer(
             for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self,
             AerobicResult.self, AssistedResult.self, LogWeights.self, DraftSession.self,
+            WorkoutGroupDef.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let context = ModelContext(container)
 

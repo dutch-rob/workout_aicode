@@ -52,6 +52,8 @@ After finishing a set, tap **log, next** to record the exercise and move to the 
 
 If a machine is busy you can skip ahead: swipe left for the next exercise you have not logged yet, and right for the previous one. Swiping leaves the current exercise without logging it, so you can come back to it later. **list** opens the whole workout and jumps straight to any exercise in it; the ones you have already logged carry a tick, and you can still go back to them — to add a set, or to look at what you did.
 
+At the bottom of that list is a switch between the whole workout and **only what's left**. Part way through a long workout most of the list is behind you, and narrowing it puts what you still have to do under your thumb. Whichever exercise you are on stays listed either way, so the list can always tell you where you are, and a workout with everything logged shows the whole list again rather than nothing. The choice is remembered, and each device keeps its own.
+
 ## Aerobic exercises
 Not everything in a gym has weights on it. An exercise can be **aerobic** instead of strength: pick it from the heart-shaped **AE** button beside the body picture in the exercise library, where every indoor workout the Apple Workout app offers is waiting ready-made — indoor walk, run and cycle, elliptical, rower, stair stepper, and the rest. Take one, or make your own and choose its activity on the *edit exercise* screen.
 
@@ -115,6 +117,15 @@ You can put in just the next one or the next few at a spacing you choose, and yo
 
 Nothing is ever added without you asking, and the app only ever touches events it added itself: each one carries a mark of its own, and anything else in your calendars is left alone and never read. Delete one in the Calendar app and it stays deleted. iOS asks for full access to Calendars rather than add-only, and that is the reason — finding the app's own events again is what makes moving them possible instead of leaving a trail of duplicates behind.
 
+### Workout groups
+Some sessions are done more than one way. If you train at two gyms the machines differ, so you keep two versions of the same workout — and scheduling whichever one you happened to do last puts the wrong gym in your calendar.
+
+Switch on **Schedule by group** and you can put those workouts in a group. The calendar then gets the group's name, and which of its workouts you actually do is decided on the day, at the door.
+
+Turning it on is a short job rather than a switch: you name your groups and say which group each workout is in, and it only takes effect once every workout has one. That is deliberate — half-assigned, your calendar would name some workouts by their group and some by themselves, with nothing to tell you which you were about to get. After that, a new workout asks for its group, and you can change it any time on the workout's own screen or on the Mac.
+
+A workout belongs to one group at most. Switching grouping off again changes nothing else: your groups are remembered, and the calendar goes back to naming the workout.
+
 ## If the app closes mid-workout
 iPhones close apps that have been in a pocket for a while — that is iOS reclaiming memory, and no app can prevent it. Opening SetsRepsWheels again within the hour takes you straight back to the workout you were in, on the exercise you were on, with everything you had already logged and every number you had dialled into the wheels. A badge says **Carried on from earlier** so you can tell it apart from a fresh start.
 
@@ -129,7 +140,7 @@ Because the screen is small, the Watch shows **one** row of wheels at a time. Th
 
 If the rest timer is on, it runs here too — see [The rest timer](#the-rest-timer).
 
-The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise, with a ✓ against the ones already logged. Swiping left and right moves between exercises without logging, exactly as on the phone.
+The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise, with a ✓ against the ones already logged. The last entry in that list switches it between the whole workout and only what's left, the same as on the phone — handy on a small screen, where the exercises still to do can otherwise be off the bottom. Swiping left and right moves between exercises without logging, exactly as on the phone.
 
 ### One row of wheels or two
 Settings › *Wheels on the Watch*.

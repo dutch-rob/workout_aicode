@@ -331,28 +331,80 @@ final class ExerciseDef: Identifiable, Hashable, Codable {
     }
 }
 
+/// A set of workouts that mean the same session.
+///
+/// Somebody who trains at two gyms has two "push" workouts, because the
+/// machines differ — and scheduling the one they happened to do last puts the
+/// wrong gym in the calendar. The group is what gets scheduled; which of its
+/// workouts gets done is decided on the day, at the door.
+///
+/// A workout belongs to at most one group. Groups only matter when the user
+/// has switched grouping on — see `WorkoutGrouping` — and `groupId` is nil for
+/// every workout until then, which is also what it stays as for anybody who
+/// never turns it on.
+@Model
+final class WorkoutGroupDef: Identifiable, Hashable, Codable {
+    var id: UUID = UUID()
+    var name: String = ""
+    var sortIndex: Int = 0
+
+    init(id: UUID = UUID(), name: String, sortIndex: Int = 0) {
+        self.id = id
+        self.name = name
+        self.sortIndex = sortIndex
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, sortIndex }
+    convenience init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id: try c.decode(UUID.self, forKey: .id),
+                  name: try c.decode(String.self, forKey: .name),
+                  sortIndex: try c.decodeIfPresent(Int.self, forKey: .sortIndex) ?? 0)
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(sortIndex, forKey: .sortIndex)
+    }
+}
+
 @Model
 final class WorkoutDef: Identifiable, Hashable, Codable {
     var id: UUID = UUID()
     var name: String = ""
     var exerciseOrder: [UUID] = []
     var sortIndex: Int = 0
+    /// Which `WorkoutGroupDef` this belongs to, or nil for ungrouped.
+    ///
+    /// An id rather than a SwiftData relationship: the Watch reads workouts
+    /// out of a flat Codable payload that has no object graph in it, and the
+    /// export file has carried plain ids since the beginning. Optional because
+    /// it has to be — a field added to a CloudKit schema cannot be required,
+    /// and every workout that existed before grouping has no group.
+    var groupId: UUID? = nil
 
-    init(id: UUID = UUID(), name: String, exerciseOrder: [UUID] = [], sortIndex: Int = 0) {
+    init(id: UUID = UUID(), name: String, exerciseOrder: [UUID] = [], sortIndex: Int = 0,
+         groupId: UUID? = nil) {
         self.id = id
         self.name = name
         self.exerciseOrder = exerciseOrder
         self.sortIndex = sortIndex
+        self.groupId = groupId
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, exerciseOrder, sortIndex }
+    enum CodingKeys: String, CodingKey { case id, name, exerciseOrder, sortIndex, groupId }
     convenience init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let id = try c.decode(UUID.self, forKey: .id)
         let name = try c.decode(String.self, forKey: .name)
         let exerciseOrder = try c.decode([UUID].self, forKey: .exerciseOrder)
         let sortIndex = try c.decode(Int.self, forKey: .sortIndex)
-        self.init(id: id, name: name, exerciseOrder: exerciseOrder, sortIndex: sortIndex)
+        // Absent in every file written before logJSON.5, which is not a
+        // damaged file — it is a file from before groups existed.
+        let groupId = try c.decodeIfPresent(UUID.self, forKey: .groupId)
+        self.init(id: id, name: name, exerciseOrder: exerciseOrder, sortIndex: sortIndex,
+                  groupId: groupId)
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -360,6 +412,7 @@ final class WorkoutDef: Identifiable, Hashable, Codable {
         try c.encode(name, forKey: .name)
         try c.encode(exerciseOrder, forKey: .exerciseOrder)
         try c.encode(sortIndex, forKey: .sortIndex)
+        try c.encodeIfPresent(groupId, forKey: .groupId)
     }
 }
 
@@ -907,16 +960,36 @@ enum WorkoutLogSchemaV9: VersionedSchema {
     }
 }
 
+// V10 adds workout groups: one new entity, WorkoutGroupDef, and one optional
+// column on WorkoutDef pointing at it. Additive, exactly like V7's new entity
+// — nothing already stored is touched, and a workout that has no group has
+// nil there, which is what every workout has until somebody switches grouping
+// on. Nothing is removed, because nothing in a CloudKit schema ever is.
+enum WorkoutLogSchemaV10: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(10, 0, 0) }
+    static var models: [any PersistentModel.Type] {
+        [ExerciseDef.self, WorkoutDef.self, WorkoutLogSchemaV2.WorkoutLog.self,
+         AerobicResult.self, DraftSession.self, AssistedResult.self, LogWeights.self,
+         WorkoutGroupDef.self]
+    }
+}
+
 enum WorkoutMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [WorkoutLogSchemaV1.self, WorkoutLogSchemaV2.self,
          WorkoutLogSchemaV3.self, WorkoutLogSchemaV4.self, WorkoutLogSchemaV5.self,
          WorkoutLogSchemaV6.self, WorkoutLogSchemaV7.self, WorkoutLogSchemaV8.self,
-         WorkoutLogSchemaV9.self]
+         WorkoutLogSchemaV9.self, WorkoutLogSchemaV10.self]
     }
     static var stages: [MigrationStage] {
-        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7, v7toV8, v8toV9]
+        [v1toV2, v2toV3, v3toV4, v4toV5, v5toV6, v6toV7, v7toV8, v8toV9, v9toV10]
     }
+
+    /// One new entity and one new optional column — see WorkoutLogSchemaV10.
+    static let v9toV10 = MigrationStage.lightweight(
+        fromVersion: WorkoutLogSchemaV9.self,
+        toVersion:   WorkoutLogSchemaV10.self
+    )
 
     /// Additive only — see WorkoutLogSchemaV9.
     static let v8toV9 = MigrationStage.lightweight(
@@ -1072,17 +1145,27 @@ nonisolated struct ExportEnvelope: Codable {
         /// carry bare numbers in `WorkoutLog.weights`, whose meaning only the
         /// person who exported it knows.
         let logWeights: [LogWeights]?
+        /// The workout groups, for a file written with grouping switched on.
+        ///
+        /// Optional like the rest: a file from before logJSON.5 has none, and
+        /// so does a file from anybody who never turned grouping on. Without
+        /// them an imported workout would keep a `groupId` pointing at a group
+        /// that is not in the file — see `LogTransfer.replace`, which is where
+        /// that is dealt with.
+        let workoutGroups: [WorkoutGroupDef]?
 
         init(workouts: [WorkoutDef], exercises: [ExerciseDef], logs: [WorkoutLog],
              aerobicResults: [AerobicResult]? = nil,
              assistedResults: [AssistedResult]? = nil,
-             logWeights: [LogWeights]? = nil) {
+             logWeights: [LogWeights]? = nil,
+             workoutGroups: [WorkoutGroupDef]? = nil) {
             self.workouts = workouts
             self.exercises = exercises
             self.logs = logs
             self.aerobicResults = aerobicResults
             self.assistedResults = assistedResults
             self.logWeights = logWeights
+            self.workoutGroups = workoutGroups
         }
     }
 }

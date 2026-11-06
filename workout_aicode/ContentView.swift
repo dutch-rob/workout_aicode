@@ -49,6 +49,7 @@ struct ContentView: View {
     @ObservedObject private var survey = SurveyScheduler.shared
     @Query(sort: [SortDescriptor(\WorkoutLog.date)]) private var allLogs: [WorkoutLog]
     @Query private var allLogWeights: [LogWeights]
+    @Query private var workoutGroups: [WorkoutGroupDef]
     @AppStorage(SharingKey.consent) private var shareWithDevelopers = false
     @AppStorage(StatsSettingsKey.formula) private var formulaRaw = OneRMFormula.epley.rawValue
 
@@ -63,6 +64,19 @@ struct ContentView: View {
 
     /// Converts anything still without a unit, and asks the question when
     /// there is something to convert and no answer yet.
+    /// What a finished workout puts in the calendar: its GROUP when grouping
+    /// is switched on, and the workout itself otherwise. The rule is
+    /// `WorkoutGrouping`'s, shared with everything else that has to agree
+    /// about what an event is called.
+    private func scheduled(_ workout: WorkoutDef) -> (name: String, id: UUID) {
+        let grouped = WorkoutGrouping.isEnabled
+        let group = workout.groupId.flatMap { id in workoutGroups.first { $0.id == id } }
+        return (WorkoutGrouping.scheduledName(workoutName: workout.name,
+                                              groupName: group?.name, grouped: grouped),
+                WorkoutGrouping.scheduledId(workoutId: workout.id,
+                                            groupId: group?.id, grouped: grouped))
+    }
+
     private func refreshWeightUnitState() {
         guard !isDemoRun else { return }
         WeightHistory.catchUp(in: modelContext)
@@ -283,8 +297,9 @@ struct ContentView: View {
         // on top of the log screen is in the way of that.
         .sheet(item: $scheduleOffer) { finished in
             if let workout = workouts.first(where: { $0.id == finished.workoutId }) {
-                ScheduleNextWorkoutSheet(workoutName: workout.name,
-                                         workoutId: workout.id,
+                let entry = scheduled(workout)
+                ScheduleNextWorkoutSheet(workoutName: entry.name,
+                                         workoutId: entry.id,
                                          finished: finished) {
                     scheduleOffer = nil
                 }
@@ -299,10 +314,11 @@ struct ContentView: View {
             handoff.scheduleRequestedFromWatch = nil
             guard let workout = workouts.first(where: { $0.id == request.workoutId })
             else { return }
+            let entry = scheduled(workout)
             Task {
                 guard await WorkoutCalendar.shared.requestAccess() else { return }
-                WorkoutCalendar.shared.schedule(workout: workout.name,
-                                                id: workout.id,
+                WorkoutCalendar.shared.schedule(workout: entry.name,
+                                                id: entry.id,
                                                 starts: request.starts,
                                                 duration: request.duration)
             }

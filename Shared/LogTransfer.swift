@@ -26,7 +26,7 @@ enum LogTransfer {
 
     /// What this app writes today. Every version only ADDED optional arrays,
     /// so an older file decodes into the current shape with those missing.
-    static let currentVersion = "logJSON.4"
+    static let currentVersion = "logJSON.5"
 
     enum Failure: LocalizedError {
         case notAnExport(String)
@@ -170,10 +170,17 @@ enum LogTransfer {
         for r in (try? context.fetch(FetchDescriptor<AerobicResult>())) ?? [] { context.delete(r) }
         for r in (try? context.fetch(FetchDescriptor<AssistedResult>())) ?? [] { context.delete(r) }
         for r in (try? context.fetch(FetchDescriptor<LogWeights>())) ?? [] { context.delete(r) }
+        for g in (try? context.fetch(FetchDescriptor<WorkoutGroupDef>())) ?? [] { context.delete(g) }
 
+        for group in envelope.data.workoutGroups ?? [] { context.insert(group) }
         for exercise in envelope.data.exercises { context.insert(exercise) }
         for workout in envelope.data.workouts { context.insert(workout) }
         for log in envelope.data.logs { context.insert(log) }
+        // A workout can arrive pointing at a group the file does not carry —
+        // an older export of a grouped store, or one hand-edited. Left alone
+        // it would be in a group that does not exist, which reads as grouped
+        // everywhere and resolves to nothing when the calendar asks.
+        dropGroupsThatDidNotArrive(in: context)
         for r in envelope.data.aerobicResults ?? [] { context.insert(r) }
         for r in envelope.data.assistedResults ?? [] { context.insert(r) }
         for r in envelope.data.logWeights ?? [] { context.insert(r) }
@@ -208,12 +215,23 @@ enum LogTransfer {
                 summary.insertedExercises += 1
             }
         }
+        let groups = (try? context.fetch(FetchDescriptor<WorkoutGroupDef>())) ?? []
+        for imported in envelope.data.workoutGroups ?? [] {
+            if let existing = groups.first(where: { $0.id == imported.id }) {
+                if existing.name != imported.name { existing.name = imported.name }
+            } else {
+                context.insert(imported)
+            }
+        }
         for imported in envelope.data.workouts {
             if let existing = workouts.first(where: { $0.id == imported.id }) {
                 if existing.name != imported.name {
                     existing.name = imported.name
                     summary.renamedWorkouts += 1
                 }
+                // A workout already here keeps the group it already had: the
+                // rule for a merge is that what is here wins, and a group is
+                // no different from a set.
             } else {
                 context.insert(imported)
                 summary.insertedWorkouts += 1
@@ -263,8 +281,23 @@ enum LogTransfer {
             context.insert(r)
         }
 
+        dropGroupsThatDidNotArrive(in: context)
         try context.save()
         return summary
+    }
+
+    /// Clears `groupId` on any workout pointing at a group that is not in the
+    /// store. Cheaper to say here, once, than to make every reader of a group
+    /// handle a dangling id — and "no group" is a state the app already knows
+    /// how to show, since it is what every workout starts as.
+    @MainActor
+    private static func dropGroupsThatDidNotArrive(in context: ModelContext) {
+        let known = Set(((try? context.fetch(FetchDescriptor<WorkoutGroupDef>())) ?? []).map(\.id))
+        for workout in (try? context.fetch(FetchDescriptor<WorkoutDef>())) ?? [] {
+            if let group = workout.groupId, !known.contains(group) {
+                workout.groupId = nil
+            }
+        }
     }
 
     // MARK: Writing it out
@@ -282,6 +315,7 @@ enum LogTransfer {
                          aerobicResults: [AerobicResult] = [],
                          assistedResults: [AssistedResult] = [],
                          logWeights: [LogWeights] = [],
+                         workoutGroups: [WorkoutGroupDef] = [],
                          device: ExportEnvelope.DeviceInfo) -> ExportEnvelope {
         let bundle = Bundle.main
         return ExportEnvelope(
@@ -300,7 +334,8 @@ enum LogTransfer {
                                          logs: logs,
                                          aerobicResults: aerobicResults,
                                          assistedResults: assistedResults,
-                                         logWeights: logWeights))
+                                         logWeights: logWeights,
+                                         workoutGroups: workoutGroups))
     }
 
     /// Pretty-printed, because a file a person may open in a text editor to

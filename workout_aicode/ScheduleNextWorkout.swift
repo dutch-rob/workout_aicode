@@ -120,8 +120,12 @@ struct ScheduleSettings: View {
     @AppStorage(WorkoutScheduleKey.count) private var count = WorkoutSchedule.defaultCount
     @AppStorage(WorkoutScheduleKey.calendar) private var calendarId = ""
 
+    @AppStorage(WorkoutGrouping.enabledKey) private var byGroup = false
+
     @State private var calendars: [EKCalendar] = []
     @State private var accessRefused = false
+    @State private var settingUpGroups = false
+    @State private var editingGroups = false
 
     var body: some View {
         Form {
@@ -158,6 +162,28 @@ struct ScheduleSettings: View {
                          : "The next \(count), every \(daysAhead) \(daysAhead == 1 ? "day" : "days"). Scheduling again later moves the ones that have changed and leaves the rest exactly as they are, so an event you have edited by hand keeps your edit.")
                 }
 
+                Section {
+                    // Not bound straight to `byGroup`: switching it on is a
+                    // job to finish, not a state to be in — see
+                    // WorkoutGrouping.canEnable. The switch opens the sheet
+                    // and only moves if the sheet says every workout is in a
+                    // group. Switching it OFF is immediate; nothing is lost,
+                    // and the groups are still there if it goes back on.
+                    Toggle(isOn: Binding(get: { byGroup },
+                                         set: { wanted in
+                        if wanted { settingUpGroups = true } else { byGroup = false }
+                    })) {
+                        Label("Schedule by group", systemImage: "square.stack.3d.up")
+                    }
+                    if byGroup {
+                        Button("Edit groups") { editingGroups = true }
+                    }
+                } footer: {
+                    Text(byGroup
+                         ? "Your calendar gets the GROUP's name, because which of its workouts you do is decided at the gym door."
+                         : "For a session you do more than one way — the same muscles at a different gym. Put those workouts in a group and the calendar names the group instead of whichever one you happened to do last.")
+                }
+
                 if !calendars.isEmpty {
                     Section {
                         Picker("Calendar", selection: $calendarId) {
@@ -174,6 +200,16 @@ struct ScheduleSettings: View {
         }
         .navigationTitle("scheduling")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $settingUpGroups) {
+            WorkoutGroupSetupView(isSettingUp: true) { enabled in byGroup = enabled }
+        }
+        .sheet(isPresented: $editingGroups) {
+            // Editing can leave a workout without a group — a group deleted,
+            // say. Grouping goes off rather than limping: the calendar would
+            // otherwise name some workouts by their group and some by
+            // themselves, with nothing on screen saying which.
+            WorkoutGroupSetupView(isSettingUp: false) { stillValid in byGroup = stillValid }
+        }
         .task {
             if WorkoutCalendar.shared.hasAccess {
                 calendars = WorkoutCalendar.shared.writableCalendars

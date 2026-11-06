@@ -24,6 +24,7 @@ struct ImportExportView: View {
     @Query private var aerobicResults: [AerobicResult]
     @Query private var assistedResults: [AssistedResult]
     @Query private var logWeights: [LogWeights]
+    @Query private var workoutGroups: [WorkoutGroupDef]
 
     @State private var exportURL: URL?
 
@@ -170,7 +171,7 @@ struct ImportExportView: View {
         LogTransfer.envelope(
             workouts: workouts, exercises: exercises, logs: logs,
             aerobicResults: aerobicResults, assistedResults: assistedResults,
-            logWeights: logWeights,
+            logWeights: logWeights, workoutGroups: workoutGroups,
             device: ExportEnvelope.DeviceInfo(model: UIDevice.current.model,
                                               system: UIDevice.current.systemName,
                                               version: UIDevice.current.systemVersion))

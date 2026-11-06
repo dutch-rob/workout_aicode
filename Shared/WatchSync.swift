@@ -235,6 +235,14 @@ nonisolated struct SyncWorkout: Codable, Identifiable, Hashable {
     var id: String
     var name: String
     var exerciseOrder: [String]
+    /// The group this workout is in, already resolved to its NAME.
+    ///
+    /// The Watch only ever shows this — it cannot edit groups — so sending the
+    /// name saves sending the group list and the ids to join it with. Nil when
+    /// grouping is off, when the workout has no group, and in every payload
+    /// written by a phone from before groups existed; all three mean the same
+    /// thing here, which is "call it by the workout's own name".
+    var groupName: String? = nil
 }
 
 /// The most recent logged weights/reps for a (workout, exercise) pair, used to

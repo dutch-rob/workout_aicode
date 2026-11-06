@@ -68,6 +68,7 @@ enum DemoMode {
         let container = try! ModelContainer(
             for: WorkoutDef.self, ExerciseDef.self, WorkoutLog.self, AerobicResult.self,
                  DraftSession.self, AssistedResult.self, LogWeights.self,
+                 WorkoutGroupDef.self,
             configurations: config
         )
         settleWeightUnit()

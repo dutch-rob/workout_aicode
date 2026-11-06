@@ -21,6 +21,7 @@ struct MacImportExportView: View {
     @Query private var aerobicResults: [AerobicResult]
     @Query private var assistedResults: [AssistedResult]
     @Query private var logWeights: [LogWeights]
+    @Query private var workoutGroups: [WorkoutGroupDef]
 
     @State private var chosen: ChosenFile?
     @State private var problem: String?
@@ -88,7 +89,7 @@ struct MacImportExportView: View {
         LogTransfer.envelope(
             workouts: workouts, exercises: exercises, logs: logs,
             aerobicResults: aerobicResults, assistedResults: assistedResults,
-            logWeights: logWeights,
+            logWeights: logWeights, workoutGroups: workoutGroups,
             device: ExportEnvelope.DeviceInfo(
                 model: "Mac", system: "macOS",
                 version: ProcessInfo.processInfo.operatingSystemVersionString))

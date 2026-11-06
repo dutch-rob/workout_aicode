@@ -174,6 +174,18 @@ struct MacWorkoutDetail: View {
     @Bindable var workout: WorkoutDef
     let allExercises: [ExerciseDef]
 
+    @Query(sort: [SortDescriptor(\WorkoutGroupDef.sortIndex)])
+    private var groups: [WorkoutGroupDef]
+
+    /// Whether to ask which group this workout is in.
+    ///
+    /// Taken from the data, not from the "schedule by group" switch: that
+    /// switch is a `UserDefaults` value on the phone, and `UserDefaults` does
+    /// not cross devices, so a Mac reading it would always see "off" however
+    /// the phone was set. Groups themselves DO cross, in the store — so their
+    /// existence is the question worth asking, and it gives the same answer.
+    private var byGroup: Bool { !groups.isEmpty }
+
     @State private var sieve = MacExerciseSieve()
     /// Folded shut to begin with: the exercise list is what this pane is for,
     /// and the body is the way in when a name will not come to mind.
@@ -215,7 +227,30 @@ struct MacWorkoutDetail: View {
             TextField("Workout name", text: $workout.name)
                 .textFieldStyle(.roundedBorder)
                 .macFont(.title3)
-                .padding()
+                .padding([.top, .horizontal])
+
+            // Only when grouping is on. Off, this is a row about a concept the
+            // user has not met, on the screen they use most.
+            if byGroup {
+                HStack(spacing: 8) {
+                    Picker("Group", selection: $workout.groupId) {
+                        Text("Choose one").tag(nil as UUID?)
+                        ForEach(groups) { group in
+                            Text(group.name).tag(group.id as UUID?)
+                        }
+                    }
+                    .frame(maxWidth: 320)
+                    if workout.groupId == nil {
+                        Label("Scheduling needs a group", systemImage: "exclamationmark.triangle.fill")
+                            .macFont(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top, 6)
+            }
+            Spacer().frame(height: 12)
 
             HSplitView {
                 chosen

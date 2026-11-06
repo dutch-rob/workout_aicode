@@ -282,6 +282,13 @@ final class AppStore: ObservableObject {
         // Drop references to exercises that no longer exist, so the Watch never
         // shows a blank "phantom" exercise.
         let existingExerciseIDs = Set(exercises.map(\.id))
+        // Group names, resolved here so the Watch does not have to join ids:
+        // it only shows the name, at the end of a workout. Empty, and so every
+        // name nil, whenever grouping is switched off.
+        let groupNameById: [UUID: String] = WorkoutGrouping.isEnabled
+            ? Dictionary(((try? context.fetch(FetchDescriptor<WorkoutGroupDef>())) ?? [])
+                            .map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
+            : [:]
         let syncWorkouts = workouts
             .filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map { workout in
@@ -289,7 +296,8 @@ final class AppStore: ObservableObject {
                             name: workout.name,
                             exerciseOrder: workout.exerciseOrder
                                 .filter { existingExerciseIDs.contains($0) }
-                                .map(\.uuidString))
+                                .map(\.uuidString),
+                            groupName: workout.groupId.flatMap { groupNameById[$0] })
             }
 
         let syncExercises = exercises.map {

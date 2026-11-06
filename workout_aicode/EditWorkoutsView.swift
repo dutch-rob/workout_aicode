@@ -169,8 +169,16 @@ struct EditWorkoutView: View {
     @State private var original: (name: String, order: [UUID], isNew: Bool)? = nil
     @State private var showLibrary = false
 
+    @AppStorage(WorkoutGrouping.enabledKey) private var byGroup = false
+    @Query(sort: [SortDescriptor(\WorkoutGroupDef.sortIndex)])
+    private var groups: [WorkoutGroupDef]
+
     private var isWorkoutValid: Bool {
-        !workout.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard !workout.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return false }
+        // With grouping on a workout must say which group it is in, or the
+        // calendar would have nothing to call it — see WorkoutGrouping.
+        return !byGroup || workout.groupId != nil
     }
 
     var body: some View {
@@ -181,6 +189,21 @@ struct EditWorkoutView: View {
                     Text("You already have a workout called “\(clash)”. Two workouts with one name are impossible to tell apart in your logs.")
                         .font(.footnote)
                         .foregroundStyle(.red)
+                }
+            }
+
+            if byGroup {
+                Section {
+                    Picker("Group", selection: $workout.groupId) {
+                        Text("Choose one").tag(nil as UUID?)
+                        ForEach(groups) { group in
+                            Text(group.name).tag(group.id as UUID?)
+                        }
+                    }
+                } footer: {
+                    Text(workout.groupId == nil
+                         ? "Scheduling puts this workout's GROUP in your calendar, so it needs one before it can be saved."
+                         : "Scheduling puts this group in your calendar, not this workout — you choose which of its workouts to do on the day.")
                 }
             }
 

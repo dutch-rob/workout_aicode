@@ -1,9 +1,5 @@
 import Foundation
 
-// A BYTE-IDENTICAL COPY of this file lives in the Watch target, which does not
-// compile Shared/. Edit the two together: the Watch proposes the next workout
-// and the phone writes it, and the two must propose the same thing.
-//
 // MARK: - When the next workout goes in the calendar
 //
 // The arithmetic only. Nothing here touches EventKit, so what the app decides
