@@ -284,7 +284,15 @@ final class WatchSessionManager: NSObject, ObservableObject {
     /// Except in Apple-workout mode, where the Watch has been recording a real
     /// HKWorkout all along and finishes it here. Asking the phone to write one
     /// too would put the same workout in Health twice.
-    func finishWorkout(startedAt: Date, endedAt: Date, workoutId: String = "") {
+    ///
+    /// `loggedAnything` is why the offer to schedule the next workout is made
+    /// or withheld: a screen opened and quit again without a single set logged
+    /// is not a workout, and being offered a next session for one is noise.
+    /// The phone has always worked this way (`finishWorkoutHere` asks the same
+    /// of its open workout) and the Watch did not; reported as the two devices
+    /// disagreeing, which they were.
+    func finishWorkout(startedAt: Date, endedAt: Date, workoutId: String = "",
+                       loggedAnything: Bool) {
         // In Apple-workout mode the Watch has been recording the HKWorkout all
         // along and ends it here, so the phone must not write a second one.
         // It is still TOLD, which it previously was not: the phone has to
@@ -309,9 +317,15 @@ final class WatchSessionManager: NSObject, ObservableObject {
             "workoutId": workoutId,
             "recordedOnWatch": recordedHere
         ]
-        if scheduleEnabled, !workoutId.isEmpty {
+        if scheduleEnabled, !workoutId.isEmpty, loggedAnything {
+            // The GROUP's name when the workout is in one, because the group
+            // is what gets scheduled — the phone files the event under the
+            // group too (see ContentView.scheduled). The wrist asking after
+            // the workout while the calendar said the group was the two of
+            // them telling the user different things about one event.
+            let def = workout(id: workoutId)
             justFinished = FinishedWorkout(workoutId: workoutId,
-                                           name: workout(id: workoutId)?.name ?? "",
+                                           name: def?.scheduledName ?? "",
                                            startedAt: startedAt, endedAt: endedAt)
         }
         if session.isReachable {

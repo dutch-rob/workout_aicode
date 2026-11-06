@@ -243,6 +243,21 @@ nonisolated struct SyncWorkout: Codable, Identifiable, Hashable {
     /// written by a phone from before groups existed; all three mean the same
     /// thing here, which is "call it by the workout's own name".
     var groupName: String? = nil
+
+    /// What to call this workout when the subject is SCHEDULING it — the
+    /// group's name when it is in one, its own otherwise.
+    ///
+    /// Here rather than in the view because the Watch and the phone have to
+    /// agree: the phone files the calendar event under the group (see
+    /// `ContentView.scheduled`), so a wrist that asks "next Biceps?" about an
+    /// event that will say "Pull" is the app contradicting itself.
+    ///
+    /// A nil `groupName` already means "call it by its own name" for all three
+    /// of its reasons, so there is nothing else to ask.
+    var scheduledName: String {
+        WorkoutGrouping.scheduledName(workoutName: name, groupName: groupName,
+                                      grouped: groupName != nil)
+    }
 }
 
 /// The most recent logged weights/reps for a (workout, exercise) pair, used to

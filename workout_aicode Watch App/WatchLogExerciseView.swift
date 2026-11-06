@@ -701,8 +701,12 @@ struct WatchLogExerciseView: View {
                 let endedAt = Date()
                 onEndSession()
                 session.leaveSession()
+                // Nothing logged means nothing happened: no offer to schedule
+                // the next one. The same rule as the phone, which was already
+                // silent here while the wrist asked anyway.
                 session.finishWorkout(startedAt: startedAt, endedAt: endedAt,
-                                  workoutId: workout.id)
+                                  workoutId: workout.id,
+                                  loggedAnything: !loggedIndices.isEmpty)
             }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
@@ -770,7 +774,8 @@ struct WatchLogExerciseView: View {
             onEndSession()
             session.leaveSession()
             session.finishWorkout(startedAt: startedAt, endedAt: endedAt,
-                                  workoutId: workout.id)
+                                  workoutId: workout.id,
+                                  loggedAnything: true)
             return
         }
         // Read before moving on — goToNextUnlogged changes what currentIndex
