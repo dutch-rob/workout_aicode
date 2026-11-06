@@ -32,11 +32,11 @@ struct WorkoutGroupSetupView: View {
     @State private var renameTo = ""
 
     private var namedWorkouts: [WorkoutDef] {
-        workouts.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        WorkoutGroupEditing.groupable(workouts)
     }
 
     private var unassigned: Int {
-        namedWorkouts.filter { $0.groupId == nil }.count
+        WorkoutGroupEditing.unassigned(among: workouts)
     }
 
     private var canFinish: Bool {
@@ -140,43 +140,31 @@ struct WorkoutGroupSetupView: View {
     }
 
     private func countIn(_ group: WorkoutGroupDef) -> Int {
-        namedWorkouts.filter { $0.groupId == group.id }.count
+        WorkoutGroupEditing.count(in: group, among: workouts)
     }
 
+    // The mutations are shared with the Mac's settings section — see
+    // WorkoutGroupEditing, which also holds the comments about why each one
+    // refuses what it refuses.
     private func binding(for workout: WorkoutDef) -> Binding<UUID?> {
         Binding(get: { workout.groupId },
-                set: { workout.groupId = $0; StoreSave.save(context, doing: "grouping a workout") })
+                set: { WorkoutGroupEditing.assign(workout, to: $0, in: context) })
     }
 
     private func addGroup() {
-        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard WorkoutGrouping.nameIsFree(name, among: groups.map(\.name)) else { return }
-        context.insert(WorkoutGroupDef(name: name, sortIndex: groups.count))
-        newName = ""
-        StoreSave.save(context, doing: "adding a workout group")
+        if WorkoutGroupEditing.add(named: newName, among: groups, in: context) {
+            newName = ""
+        }
     }
 
     private func commitRename() {
-        guard let group = renaming, renameIsAllowed else { return }
-        group.name = renameTo.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let group = renaming else { return }
+        WorkoutGroupEditing.rename(group, to: renameTo, among: groups, in: context)
         renaming = nil
-        StoreSave.save(context, doing: "renaming a workout group")
     }
 
     private func deleteGroups(_ offsets: IndexSet) {
-        for group in offsets.map({ groups[$0] }) {
-            // The workouts in it go back to having none rather than keeping an
-            // id that points at nothing — see LogTransfer, which has to undo
-            // exactly this when an import brings a dangling id in.
-            for workout in workouts where workout.groupId == group.id {
-                workout.groupId = nil
-            }
-            context.delete(group)
-        }
-        for (index, group) in groups.filter({ !offsets.map { groups[$0] }.contains($0) })
-            .enumerated() where group.sortIndex != index {
-            group.sortIndex = index
-        }
-        StoreSave.save(context, doing: "deleting a workout group")
+        WorkoutGroupEditing.delete(offsets.map { groups[$0] }, among: groups,
+                                   workouts: workouts, in: context)
     }
 }

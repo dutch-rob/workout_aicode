@@ -111,7 +111,7 @@ How long the rest is belongs to the exercise, because a heavy compound needs lon
 ## Scheduling the next one
 Off unless you switch it on, in Settings under **Schedule the next workout**.
 
-With it on, finishing a workout offers to put the next one in your calendar. The moment is deliberate: you have just trained, so you know when you are coming back. It proposes the time this workout began, rounded up to the quarter hour, a chosen number of days from now — and you can change the day and time before adding anything. The event is as long as the workout you have just done, rounded up the same way, because whatever you usually take is what you just took.
+With it on, finishing a workout offers to put the next one in your calendar. The moment is deliberate: you have just trained, so you know when you are coming back. Opening a workout and leaving it again without logging anything is not a workout, so nothing is offered — on the phone or on the Watch. It proposes the time this workout began, rounded up to the quarter hour, a chosen number of days from now — and you can change the day and time before adding anything. The event is as long as the workout you have just done, rounded up the same way, because whatever you usually take is what you just took.
 
 You can put in just the next one or the next few at a spacing you choose, and you can say which calendar they go in. Scheduling again later moves what has changed and leaves the rest exactly where it is, so an event you have edited by hand — a different time, an alarm, somebody invited — keeps your edit.
 
@@ -123,6 +123,8 @@ Some sessions are done more than one way. If you train at two gyms the machines 
 Switch on **Schedule by group** and you can put those workouts in a group. The calendar then gets the group's name, and which of its workouts you actually do is decided on the day, at the door.
 
 Turning it on is a short job rather than a switch: you name your groups and say which group each workout is in, and it only takes effect once every workout has one. That is deliberate — half-assigned, your calendar would name some workouts by their group and some by themselves, with nothing to tell you which you were about to get. After that, a new workout asks for its group, and you can change it any time on the workout's own screen or on the Mac.
+
+The Mac app's Settings has the same **Workout groups** section — naming them, and saying which group each workout is in — because groups travel through iCloud. It has no switch, for the plain reason that the Mac has no calendar in this app: the switch belongs with the scheduling, on the iPhone. When the Watch asks at the end of a workout whether to schedule the next one, it asks by the group's name too.
 
 A workout belongs to one group at most. Switching grouping off again changes nothing else: your groups are remembered, and the calendar goes back to naming the workout.
 

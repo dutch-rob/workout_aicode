@@ -105,7 +105,17 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   The Mac asks a different question. "Schedule by group" is a `UserDefaults`
   value and `UserDefaults` does not cross devices, so a Mac reading it would
   always see "off"; the Mac decides from whether any group exists, which does
-  cross, in the store.
+  cross, in the store. For the same reason the Mac's group section
+  (`MacWorkoutGroups`) has no switch at all: making a group IS the act there,
+  and the phone — which owns the calendar — offers the switch once the groups
+  arrive. The mutations both screens run are `Shared/WorkoutGroupEditing.swift`,
+  so the iPhone sheet and the Mac section cannot drift apart.
+
+  What the WATCH is told is the group's NAME, resolved by the phone before the
+  payload goes out (`SyncWorkout.groupName`), because the Watch cannot edit
+  groups and would otherwise need the group list and the ids to join it with.
+  `SyncWorkout.scheduledName` is what the end-of-workout offer uses, so the
+  wrist and the calendar name the same thing.
 * `Shared/LogTransfer.swift` is the whole JSON/TSV transfer format and the
   only place that knows what a file may say, what replacing means and what
   merging means. Both apps import through it. They did not always: the phone

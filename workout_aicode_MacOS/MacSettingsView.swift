@@ -107,6 +107,12 @@ struct MacSettingsView: View {
                 Text("Where a new exercise starts. Every exercise can still be changed on its own afterwards, and changing these leaves existing exercises alone.\n\nThe wheels on the iPhone show weights from the lowest to the highest in steps of the increment — match the increment to your gym, often 5, or 2 for dumbbells.\n\nThis is this Mac's answer. Your iPhone asked the same question when you first used it and keeps its own; the two do not travel through iCloud, because only your workouts and exercises do.")
             }
 
+            // Scheduling, as far as a Mac can take part in it: the groups
+            // are store data and cross to the phone, the switch and the days
+            // ahead are the phone's own per-device preferences and cannot.
+            // Said in the section's footer rather than left to be discovered.
+            MacWorkoutGroups()
+
             Section {
                 MacStatsOptions()
             } header: {
