@@ -10,8 +10,9 @@ import EventKit
 // picker is there because a proposal that cannot be argued with is a demand.
 
 struct ScheduleNextWorkoutSheet: View {
-    let workoutName: String
-    let workoutId: UUID
+    /// What is being scheduled, and which events it may touch — the group when
+    /// grouping is on, the workout itself otherwise. See `ScheduleTarget`.
+    let target: ScheduleTarget
     let finished: PhoneSessionManager.FinishedWorkout
     var onClose: () -> Void
 
@@ -58,7 +59,7 @@ struct ScheduleNextWorkoutSheet: View {
                     }
                 } else {
                     Section {
-                        DatePicker("Next \(workoutName)", selection: $start,
+                        DatePicker("Next \(target.name)", selection: $start,
                                    in: Date()...,
                                    displayedComponents: [.date, .hourAndMinute])
                     } footer: {
@@ -107,8 +108,7 @@ struct ScheduleNextWorkoutSheet: View {
             refused = true
             return
         }
-        done = calendar.schedule(workout: workoutName, id: workoutId,
-                                 starts: starts, duration: duration)
+        done = calendar.schedule(target, starts: starts, duration: duration)
     }
 }
 

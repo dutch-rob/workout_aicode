@@ -41,8 +41,12 @@ import SwiftData
         let workout = UUID(), group = UUID()
         #expect(WorkoutGrouping.scheduledName(workoutName: "PF A — Gym 1",
                                               groupName: "Push", grouped: true) == "Push")
-        #expect(WorkoutGrouping.scheduledId(workoutId: workout, groupId: group,
-                                            grouped: true) == group)
+        let target = ScheduleTarget.of(workoutId: workout, workoutName: "PF A — Gym 1",
+                                       groupId: group, groupName: "Push",
+                                       groupMembers: [workout], grouped: true)
+        #expect(target.name == "Push")
+        #expect(target.groupId == group)
+        #expect(target.workoutId == workout)
     }
 
     @MainActor @Test func withGroupingOffTheWorkoutIsScheduledAsItself() {
@@ -50,8 +54,12 @@ import SwiftData
         #expect(WorkoutGrouping.scheduledName(workoutName: "PF A — Gym 1",
                                               groupName: "Push", grouped: false)
                 == "PF A — Gym 1")
-        #expect(WorkoutGrouping.scheduledId(workoutId: workout, groupId: group,
-                                            grouped: false) == workout)
+        let target = ScheduleTarget.of(workoutId: workout, workoutName: "PF A — Gym 1",
+                                       groupId: group, groupName: "Push",
+                                       groupMembers: [workout], grouped: false)
+        #expect(target.name == "PF A — Gym 1")
+        #expect(target.groupId == nil)
+        #expect(target.memberIds == [workout])
     }
 
     // A group can go missing — deleted on another device while this one was
@@ -62,8 +70,11 @@ import SwiftData
                                               grouped: true) == "PF A")
         #expect(WorkoutGrouping.scheduledName(workoutName: "PF A", groupName: "",
                                               grouped: true) == "PF A")
-        #expect(WorkoutGrouping.scheduledId(workoutId: workout, groupId: nil,
-                                            grouped: true) == workout)
+        let target = ScheduleTarget.of(workoutId: workout, workoutName: "PF A",
+                                       groupId: nil, groupName: nil,
+                                       groupMembers: [], grouped: true)
+        #expect(target.groupId == nil)
+        #expect(target.memberIds == [workout])
     }
 
     // MARK: Naming

@@ -67,13 +67,10 @@ nonisolated enum WorkoutGrouping {
         return groupName
     }
 
-    /// The id the calendar entry is filed under — the group's when the group
-    /// is what was scheduled, so that looking up "what is this event for"
-    /// gives the same answer as the name does.
-    static func scheduledId(workoutId: UUID, groupId: UUID?, grouped: Bool) -> UUID {
-        guard grouped, let groupId else { return workoutId }
-        return groupId
-    }
+    /// The ids the calendar entry is filed under are `ScheduleTarget`'s, in
+    /// CalendarIdentity.swift: an event carries BOTH its workout's id and its
+    /// group's, so that switching grouping off does not orphan what was
+    /// written while it was on.
 
     // MARK: Naming
 

@@ -16,11 +16,12 @@ import EventKit
 // it wrote itself, in a window it chose.
 //
 // THE APP'S OWN EVENTS ARE MARKED, and the mark travels with the event rather
-// than being remembered here. `event.url` holds setsrepswheels://workout/<id>,
-// which syncs with the event through iCloud, so a second device recognises an
-// event this one created — and an event the user made by hand, or one from
-// another app, is never touched. Keeping a list of identifiers locally would
-// have been the other way, and the second device would not have had it.
+// than being remembered here. `event.url` holds the workout's id and, when
+// grouping is on, its group's — see `WorkoutEventTag` — and it syncs with the
+// event through iCloud, so a second device recognises an event this one
+// created, while an event the user made by hand, or one from another app, is
+// never touched. Keeping a list of identifiers locally would have been the
+// other way, and the second device would not have had it.
 
 @MainActor
 final class WorkoutCalendar {
@@ -35,8 +36,9 @@ final class WorkoutCalendar {
     /// with the screen unresponsive until it finished.
     private lazy var store = EKEventStore()
 
-    /// The URL scheme that marks an event as this app's.
-    nonisolated static let scheme = "setsrepswheels"
+    /// The URL scheme that marks an event as this app's. Defined with the
+    /// ids it carries, in CalendarIdentity.swift.
+    nonisolated static var scheme: String { WorkoutEventTag.scheme }
 
     private init() {}
 
@@ -79,23 +81,21 @@ final class WorkoutCalendar {
 
     // MARK: Reading back what this app wrote
 
-    private func isOurs(_ event: EKEvent, workoutId: UUID) -> Bool {
-        guard let url = event.url, url.scheme == Self.scheme else { return false }
-        return url.lastPathComponent == workoutId.uuidString
-    }
-
-    /// This app's own future events for one workout, soonest first.
+    /// This app's own future events that one reschedule is entitled to deal
+    /// with, soonest first. Which those are is `ScheduleTarget.claims`, and is
+    /// tested there.
     ///
-    /// One workout's, not all of them: somebody alternating a heavy day and a
-    /// light one has both in the calendar, and finishing the heavy one has no
-    /// business removing the light one.
-    func upcoming(workoutId: UUID, within days: Int = 400,
+    /// Every calendar is searched, not just the one being written to: an event
+    /// may have been written on another device, to a calendar this one does
+    /// not write to, and leaving it alone would mean rescheduling added a
+    /// second copy beside it.
+    func upcoming(for target: ScheduleTarget, within days: Int = 400,
                   from now: Date = Date()) -> [EKEvent] {
         guard hasAccess else { return [] }
         let end = now.addingTimeInterval(Double(days) * 86_400)
         let predicate = store.predicateForEvents(withStart: now, end: end, calendars: nil)
         return store.events(matching: predicate)
-            .filter { isOurs($0, workoutId: workoutId) }
+            .filter { target.claims(eventAt: $0.url) }
             .sorted { $0.startDate < $1.startDate }
     }
 
@@ -107,14 +107,18 @@ final class WorkoutCalendar {
     /// An event already sitting at a wanted time is LEFT EXACTLY AS IT IS —
     /// not removed and re-made. Its duration may have been edited by hand
     /// since, it may have an alarm on it, somebody may have been invited; a
-    /// date that is not changing should not quietly lose any of that.
+    /// date that is not changing should not quietly lose any of that. That
+    /// includes a title typed over by hand, which is why the title is only
+    /// written when the event's ids are being changed anyway.
     @discardableResult
-    func schedule(workout name: String, id workoutId: UUID,
+    func schedule(_ target: ScheduleTarget,
                   starts: [Date], duration: TimeInterval,
                   now: Date = Date()) -> Int {
         guard hasAccess, let calendar = chosenCalendar else { return 0 }
 
-        let existing = upcoming(workoutId: workoutId, from: now)
+        let title = target.name.isEmpty ? "Workout" : target.name
+        let url = target.tag.url
+        let existing = upcoming(for: target, from: now)
         var wanted = starts.filter { $0 > now }
         var written = 0
 
@@ -122,7 +126,18 @@ final class WorkoutCalendar {
             if let match = wanted.firstIndex(where: {
                 Self.sameMinute($0, event.startDate)
             }) {
-                wanted.remove(at: match)      // already there; leave it be
+                wanted.remove(at: match)      // already there; leave the time be
+                // Unless its ids are not the ones this reschedule writes. An
+                // event filed under a group, found again after grouping went
+                // off, is ADOPTED where it sits rather than removed and
+                // re-made — same reasoning as the time. Adopting it means
+                // taking the name the switch changed as well; an event whose
+                // ids already match is not touched at all.
+                if event.url != url {
+                    event.url = url
+                    event.title = title
+                    try? store.save(event, span: .thisEvent, commit: false)
+                }
             } else {
                 try? store.remove(event, span: .thisEvent, commit: false)
             }
@@ -131,10 +146,10 @@ final class WorkoutCalendar {
         for start in wanted {
             let event = EKEvent(eventStore: store)
             event.calendar = calendar
-            event.title = name.isEmpty ? "Workout" : name
+            event.title = title
             event.startDate = start
             event.endDate = start.addingTimeInterval(duration)
-            event.url = URL(string: "\(Self.scheme)://workout/\(workoutId.uuidString)")
+            event.url = url
             event.notes = "Added by SetsRepsWheels. Delete it here and the app will not put it back."
             try? store.save(event, span: .thisEvent, commit: false)
             written += 1
@@ -148,9 +163,9 @@ final class WorkoutCalendar {
 
     /// Takes out every future event this app made for a workout — for the
     /// switch in settings being turned off, and for a workout being deleted.
-    func removeUpcoming(workoutId: UUID, now: Date = Date()) {
+    func removeUpcoming(for target: ScheduleTarget, now: Date = Date()) {
         guard hasAccess else { return }
-        for event in upcoming(workoutId: workoutId, from: now) {
+        for event in upcoming(for: target, from: now) {
             try? store.remove(event, span: .thisEvent, commit: false)
         }
         try? store.commit()

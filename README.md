@@ -117,6 +117,8 @@ You can put in just the next one or the next few at a spacing you choose, and yo
 
 Nothing is ever added without you asking, and the app only ever touches events it added itself: each one carries a mark of its own, and anything else in your calendars is left alone and never read. Delete one in the Calendar app and it stays deleted. iOS asks for full access to Calendars rather than add-only, and that is the reason — finding the app's own events again is what makes moving them possible instead of leaving a trail of duplicates behind.
 
+The mark travels with the event, so an iPhone that gets a workout added by another of your devices recognises it and moves that one rather than adding a second. It can only do that for a calendar it can actually see, though: an event written to a calendar that is not on this phone is one this phone cannot find, and rescheduling will add its own beside it. One iPhone and one iCloud account is the ordinary case, and there is nothing to notice.
+
 ### Workout groups
 Some sessions are done more than one way. If you train at two gyms the machines differ, so you keep two versions of the same workout — and scheduling whichever one you happened to do last puts the wrong gym in your calendar.
 
@@ -124,9 +126,9 @@ Switch on **Schedule by group** and you can put those workouts in a group. The c
 
 Turning it on is a short job rather than a switch: you name your groups and say which group each workout is in, and it only takes effect once every workout has one. That is deliberate — half-assigned, your calendar would name some workouts by their group and some by themselves, with nothing to tell you which you were about to get. After that, a new workout asks for its group, and you can change it any time on the workout's own screen or on the Mac.
 
-The Mac app's Settings has the same **Workout groups** section — naming them, and saying which group each workout is in — because groups travel through iCloud. It has no switch, for the plain reason that the Mac has no calendar in this app: the switch belongs with the scheduling, on the iPhone. When the Watch asks at the end of a workout whether to schedule the next one, it asks by the group's name too.
+The Mac app's Settings has the same **Workout groups** section — naming them, saying which group each workout is in, and the switch itself — because all of it travels through iCloud. The Mac never writes to a calendar; it says what gets scheduled and your iPhone does the writing. When the Watch asks at the end of a workout whether to schedule the next one, it asks by the group's name too.
 
-A workout belongs to one group at most. Switching grouping off again changes nothing else: your groups are remembered, and the calendar goes back to naming the workout.
+A workout belongs to one group at most. You can switch grouping off again whenever you like, and nothing is stranded in your calendar: a workout you had already scheduled under its group is found again, renamed back to itself, and carries on being moved as usual — and switching it back on collapses the separate events of a group's workouts into one instead of adding to them. Your groups are remembered either way.
 
 ## If the app closes mid-workout
 iPhones close apps that have been in a pocket for a while — that is iOS reclaiming memory, and no app can prevent it. Opening SetsRepsWheels again within the hour takes you straight back to the workout you were in, on the exercise you were on, with everything you had already logged and every number you had dialled into the wheels. A badge says **Carried on from earlier** so you can tell it apart from a fresh start.
