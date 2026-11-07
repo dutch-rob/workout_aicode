@@ -302,8 +302,12 @@ struct ContentView: View {
         // on top of the log screen is in the way of that.
         .sheet(item: $scheduleOffer) { finished in
             if let workout = workouts.first(where: { $0.id == finished.workoutId }) {
-                ScheduleNextWorkoutSheet(target: scheduled(workout),
-                                         finished: finished) {
+                // Bound, not inlined into the call: this view's body is long
+                // enough that the type-checker gives up on it when anything
+                // in the chain is ambiguous, and a named value is one fewer
+                // thing for it to work out. Same reason as `workoutRows`.
+                let target = scheduled(workout)
+                ScheduleNextWorkoutSheet(target: target, finished: finished) {
                     scheduleOffer = nil
                 }
             }
