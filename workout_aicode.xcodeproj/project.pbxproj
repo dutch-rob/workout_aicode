@@ -229,20 +229,13 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		15D8AEB63037C258009A6CBC /* Recovered References */ = {
-			isa = PBXGroup;
-			children = (
-				221D23E429084D4197CA186D /* Shared */,
-			);
-			name = "Recovered References";
-			sourceTree = "<group>";
-		};
 		15DD492C2F594E7100D778CD = {
 			isa = PBXGroup;
 			children = (
 				151466262FA3D961001264A4 /* generate_infoview.py */,
 				151466272FA3D961001264A4 /* README.md */,
 				157B219E301E8F7100A4CF7B /* PRIVACY.md */,
+				221D23E429084D4197CA186D /* Shared */,
 				15DD49372F594E7100D778CD /* workout_aicode */,
 				15DD49472F594E7600D778CD /* workout_aicodeTests */,
 				15DD49512F594E7600D778CD /* workout_aicodeUITests */,
@@ -253,7 +246,6 @@
 				5E7A00073100BEEF00C0FFEE /* workout_aicode_MacOSTests */,
 				153422942FAD9F5600895019 /* Frameworks */,
 				15DD49362F594E7100D778CD /* Products */,
-				15D8AEB63037C258009A6CBC /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
