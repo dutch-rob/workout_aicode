@@ -46,4 +46,28 @@ nonisolated enum RestBar {
     static func label(endsAt: Date?, now: Date) -> String {
         minutesSeconds(remaining(endsAt: endsAt, now: now))
     }
+
+    // MARK: Where the bar is
+
+    /// The rectangle to draw, in a strip `height` tall, inset equally at both
+    /// ends. Nil when there is nothing to draw.
+    ///
+    /// The Watch's bar does not run the whole height of its screen: the top of
+    /// it sat under the heart rate zone band, where additive red over blue made
+    /// the first seconds of a rest a smudge in the one corner a glance has to
+    /// read. So it starts below the band and stops as far short of the bottom
+    /// as it starts short of the top — symmetrical, because a bar that reaches
+    /// one end and not the other reads as part-drained when it is full.
+    ///
+    /// Here rather than in the Canvas that draws it because a closure inside a
+    /// view modifier is the one place arithmetic cannot be checked, and the
+    /// last bar whose ends were wrong was wrong on a wrist in a gym.
+    static func bar(in height: CGFloat, inset: CGFloat,
+                    width: CGFloat, fill: CGFloat) -> CGRect? {
+        let track = height - inset * 2
+        guard track > 0, width > 0 else { return nil }
+        let drawn = track * max(0, min(1, fill))
+        guard drawn > 0 else { return nil }
+        return CGRect(x: 0, y: height - inset - drawn, width: width, height: drawn)
+    }
 }

@@ -324,8 +324,26 @@ enum WatchRestHaptics {
 /// black becomes the bar's red, and anything already white STAYS white. The
 /// row labels therefore read straight through the bar, which is why they are
 /// plain white rather than `.secondary` — see `WatchLogExerciseView.rowLabel`.
+///
+/// It does NOT run the full height of the screen, and that is the one thing
+/// about it that was reported from a real workout rather than reasoned out.
+/// Additive over the heart rate zone band makes red plus blue, which at the
+/// top corner is where the bar's first seconds are: the one place a glance
+/// has to answer "did it start?" was the one place the answer was a smudge.
+/// So the bar begins at the BOTTOM of the top row, under the band, and stops
+/// as far short of the bottom as it starts short of the top. Symmetrical
+/// because an asymmetric bar reads as part-drained when it is full.
 struct WatchRestDrain: ViewModifier {
     @ObservedObject private var timer = WatchRestTimer.shared
+
+    /// Where the log screen's first row ends, reported by the screen itself.
+    ///
+    /// Measured rather than written down: the row is one line of `.caption`
+    /// over the clock's strip, so its height is the watch's size and the
+    /// user's text size, neither of which this file can know. Nil until the
+    /// first report — and kept once it arrives, since an exercise with no
+    /// band (an aerobic one) should not make the bar jump to full height.
+    @State private var topRowBottom: CGFloat?
 
     /// How wide the bar is: the log screen's own margin plus its row-label
     /// column, so it covers the labels and stops short of the wheels.
@@ -333,6 +351,9 @@ struct WatchRestDrain: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .onPreferenceChange(WatchRestBarTop.self) { reported in
+                if let reported { topRowBottom = reported }
+            }
             .overlay(alignment: .bottom) {
                 // Measured against the screen rather than the laid-out content:
                 // the buttons sit in their own safe-area strip, and a bar that
@@ -344,18 +365,45 @@ struct WatchRestDrain: ViewModifier {
                 // applied to the bar's height too, so it slid up from nothing
                 // before it began draining. A Canvas has no animatable
                 // geometry: the closure runs, the rectangle is where it is.
-                Canvas { context, size in
-                    let height = size.height * timer.restFill
-                    guard height > 0 else { return }
-                    context.fill(
-                        Path(CGRect(x: 0, y: size.height - height,
-                                    width: Self.barWidth, height: height)),
-                        with: .color(.red))
+                Canvas { [inset = topRowBottom ?? 0] context, size in
+                    guard let rect = RestBar.bar(in: size.height, inset: inset,
+                                                 width: Self.barWidth,
+                                                 fill: timer.restFill) else { return }
+                    context.fill(Path(rect), with: .color(.red))
                 }
                 .blendMode(.plusLighter)
                 .allowsHitTesting(false)
                 .ignoresSafeArea()
             }
+    }
+}
+
+/// How far down the screen the rest's bar should begin: the bottom edge of the
+/// log screen's first row, which is also the bottom of the heart rate zone band
+/// when there is one, since the band is that row's background.
+///
+/// A preference because the two ends of it are far apart in the view tree — the
+/// row is deep inside the log screen, the bar is a modifier on the whole app —
+/// and because it travels UP, which is the direction preferences go. The value
+/// is static once laid out, so the drain is not rebuilt by this at heart-rate
+/// speed; see the warning on `WatchZoneRowBackground` about exactly that.
+nonisolated struct WatchRestBarTop: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        guard let next = nextValue() else { return }
+        value = max(value ?? next, next)
+    }
+}
+
+extension View {
+    /// Say that this row is the one the rest's bar starts under.
+    func marksRestBarTop() -> some View {
+        overlay {
+            GeometryReader { geo in
+                Color.clear.preference(key: WatchRestBarTop.self,
+                                       value: geo.frame(in: .global).maxY)
+            }
+        }
     }
 }
 

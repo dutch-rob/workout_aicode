@@ -396,7 +396,12 @@ struct WatchLogExerciseView: View {
                         // row, hence the same width cap the toggle had. The
                         // band behind it is NOT capped: it runs the full width,
                         // under the clock, where there is nothing else to show.
+                        //
+                        // This is also the row the rest's bar starts under:
+                        // over the zone band it was adding red to blue in the
+                        // one corner where a glance has to see it start.
                         topNameRow(exercise)
+                            .marksRestBarTop()
                     } else {
                         HStack(spacing: 0) {
                             Button {
@@ -415,6 +420,7 @@ struct WatchLogExerciseView: View {
                             .frame(width: toggleWidth)
                             Spacer(minLength: 0)
                         }
+                        .marksRestBarTop()
                     }
                 }
 
