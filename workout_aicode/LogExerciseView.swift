@@ -54,7 +54,7 @@ struct LogExerciseView: View {
     @State private var currentIndex: Int = 0
 
     /// How far through each exercise's sets the app believes the user is, so a
-    /// column can be tinted green. By exercise index, like `loggedIndices`.
+    /// column can be tinted. By exercise index, like `loggedIndices`.
     /// The rule is `SetProgress`'s and is tested there.
     @State private var setProgress: [Int: SetProgress] = [:]
     @State private var weights: [[Int]] = []
@@ -271,7 +271,7 @@ struct LogExerciseView: View {
 
     /// One per column rather than one across the row, which is what tells the
     /// app WHICH set was touched. The rest timer does not care — any wheel
-    /// ends a set — but the green columns do, and working the column out
+    /// ends a set — but the marked columns do, and working the column out
     /// afterwards from where the finger landed would mean measuring the row
     /// and dividing by the spacing to answer a question the view already knows
     /// the answer to.
@@ -328,14 +328,14 @@ struct LogExerciseView: View {
                                loggedIndices: Array(loggedIndices),
                                startedAt: startedAt.timeIntervalSince1970,
                                weightsGrams: weights,
-                               greenColumns: greenColumnsByExercise())
+                               doneColumns: doneColumnsByExercise())
     }
 
-    /// The green columns as one count per exercise, for the hand-over. Only
+    /// The marked columns as one count per exercise, for the hand-over. Only
     /// the counts travel: the five-second clock behind them is about a hand on
     /// a wheel on THIS device, and means nothing on the other one.
-    private func greenColumnsByExercise() -> [Int] {
-        (0..<exerciseIds.count).map { setProgress[$0]?.greenColumns ?? 0 }
+    private func doneColumnsByExercise() -> [Int] {
+        (0..<exerciseIds.count).map { setProgress[$0]?.doneColumns ?? 0 }
     }
 
     /// A snapshot's wheels in grams: as sent when the other device knew grams,
@@ -375,14 +375,14 @@ struct LogExerciseView: View {
         // Which sets the other device had marked. Entered NOW, every one of
         // them: picking a device up is arriving, and the first thing anybody
         // does with it is look the wheels over.
-        adoptGreenColumns(snap.greenColumns)
+        adoptDoneColumns(snap.doneColumns)
     }
 
-    private func adoptGreenColumns(_ counts: [Int]) {
+    private func adoptDoneColumns(_ counts: [Int]) {
         let now = Date()
         var adopted: [Int: SetProgress] = [:]
-        for (index, green) in counts.enumerated() where green > 0 {
-            adopted[index] = SetProgress(enteredAt: now, greenColumns: green)
+        for (index, done) in counts.enumerated() where done > 0 {
+            adopted[index] = SetProgress(enteredAt: now, doneColumns: done)
         }
         setProgress = adopted
     }

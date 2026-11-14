@@ -54,7 +54,7 @@ struct WatchLogExerciseView: View {
     @State private var preparedOrder: [String] = []
 
     /// How far through each exercise's sets the app believes the user is, so a
-    /// column can be tinted green. By exercise index, like `loggedIndices`,
+    /// column can be tinted. By exercise index, like `loggedIndices`,
     /// and the rule is `SetProgress`'s — the same file the phone uses, so the
     /// two devices agree about what counts as a set done.
     @State private var setProgress: [Int: SetProgress] = [:]
@@ -541,14 +541,14 @@ struct WatchLogExerciseView: View {
                                loggedIndices: Array(loggedIndices),
                                startedAt: startedAt.timeIntervalSince1970,
                                weightsGrams: weights,
-                               greenColumns: greenColumnsByExercise())
+                               doneColumns: doneColumnsByExercise())
     }
 
-    /// The green columns as one count per exercise, for the hand-over. Only
+    /// The marked columns as one count per exercise, for the hand-over. Only
     /// the counts travel: the five-second clock behind them is about a hand on
     /// a wheel on THIS device, and means nothing on the other one.
-    private func greenColumnsByExercise() -> [Int] {
-        (0..<workout.exerciseOrder.count).map { setProgress[$0]?.greenColumns ?? 0 }
+    private func doneColumnsByExercise() -> [Int] {
+        (0..<workout.exerciseOrder.count).map { setProgress[$0]?.doneColumns ?? 0 }
     }
 
     private func adopt(_ snap: SessionSnapshot) {
@@ -568,8 +568,8 @@ struct WatchLogExerciseView: View {
         // with it is look the wheels over.
         let now = Date()
         var adopted: [Int: SetProgress] = [:]
-        for (index, green) in snap.greenColumns.enumerated() where green > 0 {
-            adopted[index] = SetProgress(enteredAt: now, greenColumns: green)
+        for (index, done) in snap.doneColumns.enumerated() where done > 0 {
+            adopted[index] = SetProgress(enteredAt: now, doneColumns: done)
         }
         setProgress = adopted
     }
@@ -670,7 +670,7 @@ struct WatchLogExerciseView: View {
     /// exercises still works; a horizontal fling is that swipe, not a set.
     /// One per column rather than one across the row, which is what tells the
     /// app WHICH set was touched. The rest timer does not care — any wheel
-    /// ends a set — but the green columns do.
+    /// ends a set — but the marked columns do.
     private func wheelTouchGesture(column: Int) -> some Gesture {
         // GLOBAL, not local: a page swipe drags this view sideways under the
         // finger, so in the view's own space the fling measures as nearly

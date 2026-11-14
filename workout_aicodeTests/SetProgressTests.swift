@@ -27,7 +27,7 @@ import Foundation
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(1))
         progress.settle(at: after(30))
-        #expect(progress.greenColumns == 0)
+        #expect(progress.doneColumns == 0)
     }
 
     /// "A number of gestures at entering the exercise with each pause between
@@ -40,30 +40,30 @@ import Foundation
             progress.touched(0, at: after(second))
         }
         progress.settle(at: after(90))
-        #expect(progress.greenColumns == 0)
+        #expect(progress.doneColumns == 0)
     }
 
     /// "Changing the weights of more than one column when entering the
     /// exercise does not yet lead to making a column green" — which is the
     /// same rule again, and the case it was written for.
-    @Test func settingEveryColumnsWeightAtOnceGreensNothing() {
+    @Test func settingEveryColumnsWeightAtOnceMarksNothing() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(2))
         progress.touched(1, at: after(5))
         progress.touched(2, at: after(8))
         progress.settle(at: after(40))
-        #expect(progress.greenColumns == 0)
+        #expect(progress.doneColumns == 0)
     }
 
     // MARK: Doing the sets
 
     /// "Changing the weight and/or reps or just clicking a wheel of the first
     /// column more than 5 seconds after entering the exercise."
-    @Test func theFirstColumnGoesGreenOnceTheWheelsHaveBeenLeftAlone() {
+    @Test func theFirstColumnIsMarkedOnceTheWheelsHaveBeenLeftAlone() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(20))
         progress.settle(at: after(25))
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
         #expect(progress.isDone(0))
         #expect(!progress.isDone(1))
     }
@@ -79,12 +79,12 @@ import Foundation
         // The set itself.
         progress.touched(0, at: after(45))
         progress.settle(at: after(50))
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
     }
 
     /// "Column A just right of column B that got colored green last, more
     /// than 5 seconds after coloring column B."
-    @Test func theColumnsGoGreenOneAfterAnotherAsTheSetsAreDone() {
+    @Test func theColumnsAreMarkedOneAfterAnotherAsTheSetsAreDone() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(20))
         progress.settle(at: after(25))
@@ -92,44 +92,44 @@ import Foundation
         progress.settle(at: after(95))
         progress.touched(2, at: after(160))
         progress.settle(at: after(165))
-        #expect(progress.greenColumns == 3)
+        #expect(progress.doneColumns == 3)
     }
 
     // MARK: Only the next one along
 
     /// A touch on a column further right than the next one does nothing —
-    /// a green third set above an unmarked second would be a claim the app
+    /// a marked third set above an unmarked second would be a claim the app
     /// has no way to make. It does not use the burst up either: the set that
     /// IS next still counts when it is done.
     @Test func reachingPastTheNextColumnDoesNothingAndCostsNothing() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(2, at: after(20))
         progress.settle(at: after(25))
-        #expect(progress.greenColumns == 0)
+        #expect(progress.doneColumns == 0)
         progress.touched(0, at: after(60))
         progress.settle(at: after(65))
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
     }
 
-    /// Going back to correct a number in a column that is already green does
-    /// not advance anything. The next column is green when the next set is
+    /// Going back to correct a number in a column that is already marked does
+    /// not advance anything. The next column is marked when the next set is
     /// done, not when the last one is tidied up.
-    @Test func correctingAColumnThatIsAlreadyGreenAdvancesNothing() {
+    @Test func correctingAColumnThatIsAlreadyMarkedAdvancesNothing() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(20))
         progress.settle(at: after(25))
         progress.touched(0, at: after(60))
         progress.settle(at: after(65))
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
     }
 
-    /// Nothing green beyond the last set, without being told how many there
+    /// Nothing marked beyond the last set, without being told how many there
     /// are: the column after the last one is not a column anybody can touch.
     @Test func thereIsNothingAfterTheLastSet() {
-        var progress = SetProgress(enteredAt: start, greenColumns: 3)
+        var progress = SetProgress(enteredAt: start, doneColumns: 3)
         progress.touched(2, at: after(20))
         progress.settle(at: after(25))
-        #expect(progress.greenColumns == 3)
+        #expect(progress.doneColumns == 3)
     }
 
     // MARK: The wait
@@ -148,14 +148,14 @@ import Foundation
         let stillTooSoon = progress.settle(at: after(24.9))
         #expect(!tooSoon)
         #expect(!stillTooSoon)
-        #expect(progress.greenColumns == 0)
+        #expect(progress.doneColumns == 0)
         let decided = progress.settle(at: after(25))
         #expect(decided)
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
         // And the decision is not made twice.
         let again = progress.settle(at: after(30))
         #expect(!again)
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
     }
 
     @Test func theMomentToDecideIsFiveSecondsAfterTheLastTouch() {
@@ -170,42 +170,42 @@ import Foundation
         #expect(progress.decidesAt == nil)
     }
 
-    /// The next column is five seconds clear of the GREENING, which is itself
+    /// The next column is five seconds clear of the MARKING, which is itself
     /// five seconds after the last touch — so reaching straight back for the
     /// wheels is still setting up for the next set rather than having done it.
     /// A later touch, once the set really has been done, counts as it should.
     @Test func reachingStraightBackForTheWheelsIsStillSettingUp() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(20))
-        progress.settle(at: after(25))          // green at 25
+        progress.settle(at: after(25))          // marked at 25
         progress.touched(1, at: after(27))      // only 2s after that
         progress.settle(at: after(35))
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
         progress.touched(1, at: after(80))
         progress.settle(at: after(85))
-        #expect(progress.greenColumns == 2)
+        #expect(progress.doneColumns == 2)
     }
 
     // MARK: Coming back to an exercise
 
     /// Swiping away and back is arriving again, so the wheels can be looked
-    /// over without a set being marked. What was already green stays green —
+    /// over without a set being marked. What was already marked stays marked —
     /// those sets were done, and leaving the screen did not undo them.
-    @Test func comingBackToAnExerciseArmsTheGraceAgainButKeepsWhatIsGreen() {
+    @Test func comingBackToAnExerciseArmsTheGraceAgainButKeepsWhatIsMarked() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(20))
         progress.settle(at: after(25))
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
 
         progress.entered(at: after(600))        // back from another exercise
         progress.touched(1, at: after(601))     // a glance at the numbers
         progress.settle(at: after(610))
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
 
         // And the set itself, done after it.
         progress.touched(1, at: after(640))
         progress.settle(at: after(645))
-        #expect(progress.greenColumns == 2)
+        #expect(progress.doneColumns == 2)
     }
 
     /// An open burst does not survive the trip. Half a flurry before swiping
@@ -216,14 +216,14 @@ import Foundation
         progress.entered(at: after(21))
         #expect(progress.decidesAt == nil)
         progress.settle(at: after(60))
-        #expect(progress.greenColumns == 0)
+        #expect(progress.doneColumns == 0)
     }
 
     /// LEAVING drops it too, and this is the one that matters: the exercise is
     /// not on screen to be asked while it is away, so the question would
     /// otherwise be put on the way back IN — against a five seconds that has
     /// not been re-armed yet, which is how a swipe between exercises managed
-    /// to turn a column green.
+    /// to mark a column.
     @Test func leavingAnExerciseDropsTheTouchLeftHangingToo() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(20))
@@ -232,15 +232,15 @@ import Foundation
         // Coming back and asking, as the screen does.
         progress.settle(at: after(30))
         progress.entered(at: after(30))
-        #expect(progress.greenColumns == 0)
+        #expect(progress.doneColumns == 0)
     }
 
-    @Test func leavingKeepsWhatIsAlreadyGreen() {
+    @Test func leavingKeepsWhatIsAlreadyMarked() {
         var progress = SetProgress(enteredAt: start)
         progress.touched(0, at: after(20))
         progress.settle(at: after(25))
         progress.left()
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
     }
 
     /// The timer wakes at the moment the quiet runs out, so a decision is made
@@ -252,7 +252,7 @@ import Foundation
         progress.touched(0, at: after(20))
         let decided = progress.settle(at: after(300))
         #expect(!decided)
-        #expect(progress.greenColumns == 0)
+        #expect(progress.doneColumns == 0)
         // And it is gone, not left lying around to be decided next time.
         #expect(progress.decidesAt == nil)
     }
@@ -263,6 +263,6 @@ import Foundation
         progress.touched(0, at: after(20))
         let decided = progress.settle(at: after(27))
         #expect(decided)
-        #expect(progress.greenColumns == 1)
+        #expect(progress.doneColumns == 1)
     }
 }

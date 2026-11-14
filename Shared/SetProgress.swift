@@ -7,7 +7,7 @@ import Foundation
 // help: nothing is written down until "log" is pressed, by which time the
 // question has been answered the hard way.
 //
-// So the app guesses, and says so by turning a column green. The guess is
+// So the app guesses, and says so by tinting a column. The guess is
 // built on the one thing it already knows — a touch on a wheel, which is what
 // starts the rest timer — plus FIVE SECONDS OF QUIET.
 //
@@ -19,21 +19,24 @@ import Foundation
 //
 //     a burst   = touches with less than five seconds between them
 //     qualifies = the burst's FIRST touch came at least five seconds after
-//                 arriving at the exercise, or after the last column went
-//                 green
+//                 arriving at the exercise, or after the last column was
+//                 marked
 //
-// A qualifying burst that touched the next column along turns that column
-// green, and nothing else does. Which means the app cannot know a set is done
-// until five seconds after the last touch — the burst is not over until then —
-// and the green arrives late by exactly that much. That is a real cost and
-// worth it: the alternative is three columns going green while the wheels are
-// still being set up, which would be worse than saying nothing at all.
+// A qualifying burst that touched the next column along marks that column, and
+// nothing else does. Which means the app cannot know a set is done until five
+// seconds after the last touch — the burst is not over until then — and the
+// mark arrives late by exactly that much. That is a real cost and worth it:
+// the alternative is three columns marked while the wheels are still being set
+// up, which would be worse than saying nothing at all.
 //
-// LEFT TO RIGHT, strictly. Only the column immediately right of the last green
-// one can turn green, so a stray touch on the third column while the first is
-// still the only green one does nothing, and does not use up its burst either.
-// The columns are the sets in order; a green third set with an unmarked second
+// LEFT TO RIGHT, strictly. Only the column immediately right of the last marked
+// one can be marked, so a stray touch on the third column while the first is
+// still the only marked one does nothing, and does not use up its burst either.
+// The columns are the sets in order; a marked third set with an unmarked second
 // would be a claim the app has no way to make.
+//
+// What the mark LOOKS like is `setDoneTint`, deliberately somewhere else: the
+// rule has no business knowing a colour, and the colour changed once already.
 //
 // This holds one exercise's progress and nothing else — no view, no clock of
 // its own, no storage — so the rule above is tested (`SetProgressTests`)
@@ -57,12 +60,12 @@ nonisolated struct SetProgress: Equatable {
     /// is dropped rather than guessed at.
     static let latestDecision: TimeInterval = 5
 
-    /// Columns `0..<greenColumns` are done. Never goes down: the app has no
+    /// Columns `0..<doneColumns` are done. Never goes down: the app has no
     /// way of noticing a set being un-done.
-    private(set) var greenColumns = 0
+    private(set) var doneColumns = 0
 
     /// What the next burst has to be five seconds clear of: arriving at this
-    /// exercise, or the moment the last column went green.
+    /// exercise, or the moment the last column was marked.
     private var since: Date
 
     /// The burst in progress, if the wheels have been touched recently.
@@ -70,9 +73,9 @@ nonisolated struct SetProgress: Equatable {
     private var lastTouch: Date?
     private var touchedColumns: Set<Int> = []
 
-    init(enteredAt: Date, greenColumns: Int = 0) {
+    init(enteredAt: Date, doneColumns: Int = 0) {
         self.since = enteredAt
-        self.greenColumns = max(0, greenColumns)
+        self.doneColumns = max(0, doneColumns)
     }
 
     /// Arriving at the exercise — the first time, or swiping back to it.
@@ -80,7 +83,7 @@ nonisolated struct SetProgress: Equatable {
     /// Coming back is arriving: the wheels get looked over again, and often
     /// adjusted, and that is setting up rather than lifting. Re-arming the
     /// five seconds here is what stops a glance at an old exercise from
-    /// marking a set nobody did. What is already green stays green.
+    /// marking a set nobody did. What is already marked stays marked.
     mutating func entered(at when: Date) {
         since = when
         forgetBurst()
@@ -90,7 +93,7 @@ nonisolated struct SetProgress: Equatable {
     /// with it: half a flurry before leaving and half after coming back is two
     /// visits, not one burst, and a burst left open would otherwise be decided
     /// on the way back in — against a five seconds that had not been re-armed
-    /// yet. What is already green stays green.
+    /// yet. What is already marked stays marked.
     mutating func left() {
         forgetBurst()
     }
@@ -116,7 +119,7 @@ nonisolated struct SetProgress: Equatable {
     }
 
     /// The wheels have been left alone; decide what the burst meant. True if a
-    /// column went green.
+    /// column was marked.
     ///
     /// Safe to call at any time — before the quiet is up it does nothing, so
     /// a timer that fires early or twice cannot invent a set.
@@ -132,22 +135,22 @@ nonisolated struct SetProgress: Equatable {
         }
 
         let qualifies = first.timeIntervalSince(since) >= Self.quiet
-        let next = greenColumns
-        // `next` is never a real column once every set is green, so this stops
+        let next = doneColumns
+        // `next` is never a real column once every set is marked, so this stops
         // of its own accord without being told how many there are.
-        let greened = qualifies && touchedColumns.contains(next)
+        let marked = qualifies && touchedColumns.contains(next)
 
         forgetBurst()
 
-        if greened {
-            greenColumns = next + 1
-            // The moment it went green is when the quiet ran out, not whenever
+        if marked {
+            doneColumns = next + 1
+            // The moment it was marked is when the quiet ran out, not whenever
             // the timer got round to asking. Otherwise a late tick would move
             // the next column's deadline with it, and the rule would depend on
             // how busy the device was.
             since = last.addingTimeInterval(Self.quiet)
         }
-        return greened
+        return marked
     }
 
     /// When there will next be something to decide, for whatever wants to set
@@ -155,5 +158,5 @@ nonisolated struct SetProgress: Equatable {
     var decidesAt: Date? { lastTouch?.addingTimeInterval(Self.quiet) }
 
     /// Whether this column has been done, for the view that tints it.
-    func isDone(_ column: Int) -> Bool { column < greenColumns }
+    func isDone(_ column: Int) -> Bool { column < doneColumns }
 }

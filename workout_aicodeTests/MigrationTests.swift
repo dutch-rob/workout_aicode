@@ -2046,17 +2046,17 @@ struct LogListTests {
     #expect(rest.total == 90)
 }
 
-/// The green columns travel with the hand-over, and a snapshot from a build
+/// The marked columns travel with the hand-over, and a snapshot from a build
 /// that had none reads as none rather than failing to decode at all — which
 /// would have taken the weights and reps with it.
 @Test func whichSetsAreDoneSurvivesTheHandOver() throws {
     let snap = SessionSnapshot(workoutId: "W", currentIndex: 1,
                                weights: [[50], [60]], reps: [[10], [8]],
                                loggedIndices: [], startedAt: 0,
-                               greenColumns: [3, 1])
+                               doneColumns: [3, 1])
     let back = try JSONDecoder().decode(SessionSnapshot.self,
                                         from: try JSONEncoder().encode(snap))
-    #expect(back.greenColumns == [3, 1])
+    #expect(back.doneColumns == [3, 1])
 
     let older = """
     {"workoutId":"W","currentIndex":1,"weights":[[50]],"reps":[[10]],
@@ -2064,7 +2064,7 @@ struct LogListTests {
     """
     let fromBefore = try JSONDecoder().decode(SessionSnapshot.self,
                                               from: Data(older.utf8))
-    #expect(fromBefore.greenColumns.isEmpty)
+    #expect(fromBefore.doneColumns.isEmpty)
     #expect(fromBefore.reps == [[10]])
 }
 
