@@ -559,15 +559,33 @@ final class WatchSessionManager: NSObject, ObservableObject {
     /// `transferUserInfo` rather than a plain message: it is queued and
     /// delivered even when the phone is in a pocket with the app closed, which
     /// at the end of a workout it usually is.
-    func requestSchedule(workoutId: String, starts: [Date], duration: TimeInterval) {
+    /// `ranFrom`/`ranTo` are when the workout really happened. The phone
+    /// writes that down as well as the plans — see
+    /// `WorkoutCalendar.noteFinished` — and only this device knows it, since
+    /// the workout was on the wrist.
+    func requestSchedule(workoutId: String, starts: [Date], duration: TimeInterval,
+                         ranFrom: Date, ranTo: Date) {
         let session = WCSession.default
         guard session.activationState == .activated else { return }
         session.transferUserInfo([
             "type": "scheduleNext",
             "workoutId": workoutId,
             "starts": starts.map(\.timeIntervalSince1970),
-            "durationSeconds": duration
+            "durationSeconds": duration,
+            "ranFrom": ranFrom.timeIntervalSince1970,
+            "ranTo": ranTo.timeIntervalSince1970
         ])
+    }
+
+    /// "Not now" on the wrist — sent anyway, with nothing to schedule.
+    ///
+    /// Saying no to next Thursday is not saying no to a record of today, and
+    /// the phone is the only device that can tell whether this workout is one
+    /// the user keeps in their calendar at all. So the question goes over with
+    /// an empty schedule and the phone decides.
+    func declineSchedule(workoutId: String, ranFrom: Date, ranTo: Date) {
+        requestSchedule(workoutId: workoutId, starts: [], duration: 0,
+                        ranFrom: ranFrom, ranTo: ranTo)
     }
 
     /// Started on the wrist. The phone does not measure anything for this, but

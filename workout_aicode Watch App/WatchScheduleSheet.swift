@@ -59,7 +59,9 @@ struct WatchScheduleSheet: View {
                     Button {
                         session.requestSchedule(workoutId: finished.workoutId,
                                                 starts: starts,
-                                                duration: duration)
+                                                duration: duration,
+                                                ranFrom: finished.startedAt,
+                                                ranTo: finished.endedAt)
                         sent = true
                     } label: {
                         Label("Add", systemImage: "calendar.badge.plus")
@@ -72,6 +74,16 @@ struct WatchScheduleSheet: View {
                 }
             }
             .padding(.horizontal, 4)
+        }
+        // Whichever way this sheet went away without an "Add": the button, or
+        // a swipe. One place rather than two, so a workout is never written
+        // down twice and never missed because it was dismissed rather than
+        // declined. The phone decides whether anything comes of it.
+        .onDisappear {
+            guard !sent else { return }
+            session.declineSchedule(workoutId: finished.workoutId,
+                                    ranFrom: finished.startedAt,
+                                    ranTo: finished.endedAt)
         }
     }
 }

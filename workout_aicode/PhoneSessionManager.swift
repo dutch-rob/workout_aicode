@@ -319,8 +319,14 @@ final class PhoneSessionManager: NSObject, ObservableObject {
     /// view. Cleared once it has been dealt with.
     struct ScheduleRequest: Equatable {
         let workoutId: UUID
+        /// Empty for "not now" on the wrist: nothing to schedule, but the
+        /// workout that was done still gets written down.
         let starts: [Date]
         let duration: TimeInterval
+        /// When the workout really ran, for the record of it. Nil from a Watch
+        /// older than records, and then only the plans go in.
+        let ranFrom: Date?
+        let ranTo: Date?
     }
     @Published var scheduleRequestedFromWatch: ScheduleRequest? = nil
 
@@ -884,10 +890,19 @@ nonisolated extension PhoneSessionManager: WCSessionDelegate {
             let starts = (message["starts"] as? [Double] ?? [])
                 .map { Date(timeIntervalSince1970: $0) }
             let duration = message["durationSeconds"] as? Double ?? 0
+            let ranFrom = (message["ranFrom"] as? Double).map { Date(timeIntervalSince1970: $0) }
+            let ranTo = (message["ranTo"] as? Double).map { Date(timeIntervalSince1970: $0) }
             DispatchQueue.main.async {
-                guard let id, !starts.isEmpty, duration > 0 else { return }
+                guard let id else { return }
+                // No starts and no times is a message with nothing in it. No
+                // starts WITH times is "not now", which still has something
+                // to say: that this workout was done.
+                let plans = !starts.isEmpty && duration > 0
+                let ran = ranFrom != nil && ranTo != nil
+                guard plans || ran else { return }
                 self.scheduleRequestedFromWatch = ScheduleRequest(
-                    workoutId: id, starts: starts, duration: duration)
+                    workoutId: id, starts: plans ? starts : [], duration: duration,
+                    ranFrom: ranFrom, ranTo: ranTo)
             }
         default:
             let incoming = SendableAcrossQueues(message)

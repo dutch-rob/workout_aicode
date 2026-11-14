@@ -82,6 +82,39 @@ struct ContentView: View {
                                  groupMembers: members, grouped: grouped)
     }
 
+    /// What the Watch asked for, now that this device can write it.
+    ///
+    /// Two different requests arrive here. One has dates in it: put these in
+    /// the calendar. The other has none, and is "not now" — which still says
+    /// that a workout was done, and `noteFinished` decides whether a record of
+    /// it is wanted. Only the first may ask for calendar access: a permission
+    /// prompt for a question answered on the wrist, minutes ago, with "no",
+    /// would be the app not listening.
+    private func answerWatchSchedule(_ request: PhoneSessionManager.ScheduleRequest?) {
+        guard let request else { return }
+        handoff.scheduleRequestedFromWatch = nil
+        guard let workout = workouts.first(where: { $0.id == request.workoutId })
+        else { return }
+        let target = scheduled(workout)
+        let ran = request.ranFrom.flatMap { from in request.ranTo.map { (from, $0) } }
+
+        if request.starts.isEmpty {
+            guard let ran else { return }
+            WorkoutCalendar.shared.noteFinished(target, from: ran.0, to: ran.1,
+                                                onlyIfAlreadyScheduling: true)
+            return
+        }
+
+        Task {
+            guard await WorkoutCalendar.shared.requestAccess() else { return }
+            WorkoutCalendar.shared.schedule(target, starts: request.starts,
+                                            duration: request.duration)
+            if let ran {
+                WorkoutCalendar.shared.noteFinished(target, from: ran.0, to: ran.1)
+            }
+        }
+    }
+
     private func refreshWeightUnitState() {
         guard !isDemoRun else { return }
         WeightHistory.catchUp(in: modelContext)
@@ -317,17 +350,7 @@ struct ContentView: View {
         // question was already answered on the wrist, and asking it twice
         // would be the app arguing with itself.
         .onChange(of: handoff.scheduleRequestedFromWatch) { _, request in
-            guard let request else { return }
-            handoff.scheduleRequestedFromWatch = nil
-            guard let workout = workouts.first(where: { $0.id == request.workoutId })
-            else { return }
-            let target = scheduled(workout)
-            Task {
-                guard await WorkoutCalendar.shared.requestAccess() else { return }
-                WorkoutCalendar.shared.schedule(target,
-                                                starts: request.starts,
-                                                duration: request.duration)
-            }
+            answerWatchSchedule(request)
         }
         .onChange(of: handoff.justFinished) { _, finished in
             guard let finished, WorkoutSchedule.isEnabled else {

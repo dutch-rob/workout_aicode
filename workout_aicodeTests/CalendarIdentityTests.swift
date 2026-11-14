@@ -115,4 +115,121 @@ import Foundation
         #expect(target.claims(target.tag))
         #expect(alone(biceps).claims(alone(biceps).tag))
     }
+
+    // MARK: A workout done, as against one planned
+    //
+    // The two kinds of event are treated as opposites, so every one of these
+    // is really the same question: can anything the app does later reach a
+    // record of a workout that happened? The answer has to be no, including
+    // when the grouping switch has moved since.
+
+    @Test func aRecordSaysSoOnItsURLAndComesBackSayingSo() {
+        let pull = UUID(), biceps = UUID()
+        let written = group(pull, [biceps], workout: biceps).recordTag
+        #expect(written.isRecord)
+        #expect(WorkoutEventTag(url: written.url) == written)
+        #expect(written.url?.query?.contains("done=1") == true)
+    }
+
+    /// The plan and the record of the same workout carry the same ids and
+    /// differ only in this. If they did not differ, the next reschedule would
+    /// find the record sitting at a time it no longer wants and delete it.
+    @Test func aPlanAndARecordOfTheSameWorkoutAreNotTheSameEvent() {
+        let pull = UUID(), biceps = UUID()
+        let target = group(pull, [biceps], workout: biceps)
+        #expect(target.tag != target.recordTag)
+        #expect(!target.tag.isRecord)
+    }
+
+    @Test func aRecordIsRecognisedAsThisWorkoutsButNeverAsItsPlan() {
+        let pull = UUID(), biceps = UUID()
+        let target = group(pull, [biceps], workout: biceps)
+        let record = target.recordTag.url
+        // Recognised, so that it can be found and left alone.
+        #expect(target.claims(eventAt: record))
+        // And never offered up as something to move, retitle or remove.
+        #expect(!target.claimsPlan(eventAt: record))
+        #expect(target.claimsPlan(eventAt: target.tag.url))
+    }
+
+    /// Grouping going off is what orphaned events before two ids; a record
+    /// must not be collected by the other side of that move either.
+    @Test func aRecordSurvivesTheGroupingSwitchBeingMoved() {
+        let pull = UUID(), biceps = UUID(), hammers = UUID()
+        let madeWhileGrouped = group(pull, [biceps, hammers], workout: biceps).recordTag.url
+        #expect(!alone(biceps).claimsPlan(eventAt: madeWhileGrouped))
+        #expect(!group(pull, [biceps, hammers], workout: hammers)
+            .claimsPlan(eventAt: madeWhileGrouped))
+        // An ungrouped record, found again after the switch went ON.
+        let madeAlone = alone(biceps).recordTag.url
+        #expect(!group(pull, [biceps, hammers], workout: biceps)
+            .claimsPlan(eventAt: madeAlone))
+    }
+
+    @Test func anUngroupedRecordStillSaysItHappened() {
+        let biceps = UUID()
+        let tag = WorkoutEventTag(url: alone(biceps).recordTag.url)
+        #expect(tag?.isRecord == true)
+        #expect(tag?.workoutId == biceps)
+    }
+
+    // MARK: What it is called
+
+    /// A plan says "Pull" because which of the group's workouts it will be is
+    /// decided at the gym door. A record is written when that is settled, and
+    /// saying which one was done is the whole point of keeping it.
+    @Test func aRecordIsNamedForTheWorkoutAndThenTheGroup() {
+        let pull = UUID(), biceps = UUID()
+        let target = group(pull, [biceps], workout: biceps)
+        #expect(target.name == "Pull")
+        #expect(target.recordName == "Biceps curls \u{2014} Pull")
+    }
+
+    @Test func ungroupedThereIsOnlyOneNameToUse() {
+        let target = alone(UUID())
+        #expect(target.recordName == "Biceps curls")
+        #expect(target.recordName == target.name)
+    }
+
+    // MARK: Clearing away plans that have been overtaken
+
+    /// `schedule` only ever looks forward, so a plan whose time came and went
+    /// was never in its window: "Pull, last Tuesday 13:45" would sit there for
+    /// ever, next to nothing saying whether Tuesday happened. Finishing a
+    /// workout is the one moment the app learns something about a day gone by.
+    @Test func aPlanWhoseTimeHasPassedIsSweptUp() {
+        let pull = UUID(), biceps = UUID()
+        let target = group(pull, [biceps], workout: biceps)
+        let now = Date()
+        #expect(target.sweepsUp(eventAt: target.tag.url,
+                                startingAt: now.addingTimeInterval(-3_600), now: now))
+    }
+
+    @Test func nextWeeksPlanIsLeftExactlyWhereItIs() {
+        let pull = UUID(), biceps = UUID()
+        let target = group(pull, [biceps], workout: biceps)
+        let now = Date()
+        #expect(!target.sweepsUp(eventAt: target.tag.url,
+                                 startingAt: now.addingTimeInterval(86_400), now: now))
+    }
+
+    @Test func noSweepEverTakesARecordWithIt() {
+        let pull = UUID(), biceps = UUID()
+        let target = group(pull, [biceps], workout: biceps)
+        let now = Date()
+        // Including the record of the very workout doing the sweeping, which
+        // started before now by definition.
+        #expect(!target.sweepsUp(eventAt: target.recordTag.url,
+                                 startingAt: now.addingTimeInterval(-3_600), now: now))
+    }
+
+    @Test func norSomebodyElsesPastEvents() {
+        let target = alone(UUID())
+        let now = Date()
+        let theirs = alone(UUID()).tag.url
+        #expect(!target.sweepsUp(eventAt: theirs,
+                                 startingAt: now.addingTimeInterval(-3_600), now: now))
+        #expect(!target.sweepsUp(eventAt: URL(string: "https://example.com/"),
+                                 startingAt: now.addingTimeInterval(-3_600), now: now))
+    }
 }

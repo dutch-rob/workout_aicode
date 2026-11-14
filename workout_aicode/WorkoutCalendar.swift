@@ -22,6 +22,11 @@ import EventKit
 // created, while an event the user made by hand, or one from another app, is
 // never touched. Keeping a list of identifiers locally would have been the
 // other way, and the second device would not have had it.
+//
+// The mark also says whether an event is a PLAN or a RECORD of a workout done.
+// Everything below writes plans, moves plans and removes plans; the one thing
+// that writes a record never touches it again afterwards. See
+// `WorkoutEventTag`.
 
 @MainActor
 final class WorkoutCalendar {
@@ -81,9 +86,13 @@ final class WorkoutCalendar {
 
     // MARK: Reading back what this app wrote
 
-    /// This app's own future events that one reschedule is entitled to deal
-    /// with, soonest first. Which those are is `ScheduleTarget.claims`, and is
-    /// tested there.
+    /// This app's own future PLANS that one reschedule is entitled to deal
+    /// with, soonest first. Which those are is `ScheduleTarget.claimsPlan`,
+    /// and is tested there.
+    ///
+    /// Records of workouts already done are not among them, however well their
+    /// ids match: they are facts, and a reschedule moving or deleting one
+    /// would be the app rewriting its own history.
     ///
     /// Every calendar is searched, not just the one being written to: an event
     /// may have been written on another device, to a calendar this one does
@@ -95,7 +104,7 @@ final class WorkoutCalendar {
         let end = now.addingTimeInterval(Double(days) * 86_400)
         let predicate = store.predicateForEvents(withStart: now, end: end, calendars: nil)
         return store.events(matching: predicate)
-            .filter { target.claims(eventAt: $0.url) }
+            .filter { target.claimsPlan(eventAt: $0.url) }
             .sorted { $0.startDate < $1.startDate }
     }
 
@@ -161,8 +170,96 @@ final class WorkoutCalendar {
         return written
     }
 
-    /// Takes out every future event this app made for a workout — for the
+    // MARK: Writing down what was done
+
+    /// How far back finishing a workout tidies up after itself.
+    ///
+    /// `schedule` only ever looks FORWARD, so a plan that had already finished
+    /// by the time the workout ended was never in its window and would sit
+    /// there for ever — "Pull, 13:45" still in last Tuesday, next to nothing
+    /// saying whether Tuesday happened. A fortnight is enough to catch those
+    /// without the app rummaging through a year of somebody's diary.
+    static let lookBackDays = 14
+
+    /// Writes down the workout that has just been done, and clears away the
+    /// plans it has overtaken.
+    ///
+    /// THE TIMES ARE THE REAL ONES — when the workout actually started and
+    /// actually ended, not the quarter hours a plan is rounded to. A plan is a
+    /// time to be somewhere and reads better rounded; a record is what
+    /// happened, and roundings in it would be a small lie told for ever.
+    ///
+    /// ONLY ONE RECORD PER WORKOUT. Both devices can reach this for the same
+    /// workout — the Watch asks the phone to write, and the phone may have
+    /// been watching the same session end — so a record already sitting at
+    /// this time means there is nothing to do.
+    ///
+    /// `onlyIfAlreadyScheduling` is the declined offer. Somebody who said "not
+    /// now" to next Thursday still wants today written down; somebody who has
+    /// never put a workout in their calendar has asked for nothing and gets
+    /// nothing. Having a plan for this workout — upcoming, or in the fortnight
+    /// behind — is the difference between the two.
+    @discardableResult
+    func noteFinished(_ target: ScheduleTarget, from start: Date, to end: Date,
+                      onlyIfAlreadyScheduling: Bool = false,
+                      now: Date = Date()) -> Bool {
+        guard hasAccess, let calendar = chosenCalendar else { return false }
+
+        // One search serves both questions below; the second is only asked
+        // when the first has not already answered it.
+        let behind = recentlyPast(for: target, now: now)
+        let plans = behind.filter { target.claimsPlan(eventAt: $0.url) }
+        if onlyIfAlreadyScheduling, plans.isEmpty,
+           upcoming(for: target, from: now).isEmpty {
+            return false
+        }
+
+        for event in plans where event.startDate < now {
+            try? store.remove(event, span: .thisEvent, commit: false)
+        }
+
+        let already = behind.contains {
+            WorkoutEventTag(url: $0.url)?.isRecord == true
+                && Self.sameMinute($0.startDate, start)
+        }
+        var wrote = false
+        if !already {
+            let event = EKEvent(eventStore: store)
+            event.calendar = calendar
+            event.title = target.recordName.isEmpty ? "Workout" : target.recordName
+            event.startDate = start
+            // A workout logged and ended inside the same minute is still a
+            // workout; a calendar cannot draw an event with no length.
+            event.endDate = max(end, start.addingTimeInterval(60))
+            event.url = target.recordTag.url
+            event.notes = "A workout you did, written down by SetsRepsWheels. It leaves this one alone from now on — move it, edit it or delete it as you like."
+            try? store.save(event, span: .thisEvent, commit: false)
+            wrote = true
+        }
+
+        try? store.commit()
+        return wrote
+    }
+
+    /// This app's own events in the fortnight behind `now` — plans and
+    /// records both, because the caller has a question about each.
+    ///
+    /// Nothing else looks back at all. A reschedule has no business in the
+    /// past: the only thing that may touch what is already there is finishing
+    /// a workout, which is the one moment the app learns something new about
+    /// a day that has been and gone.
+    private func recentlyPast(for target: ScheduleTarget, now: Date) -> [EKEvent] {
+        let begin = now.addingTimeInterval(-Double(Self.lookBackDays) * 86_400)
+        let predicate = store.predicateForEvents(withStart: begin, end: now,
+                                                 calendars: nil)
+        return store.events(matching: predicate)
+            .filter { target.claims(eventAt: $0.url) }
+    }
+
+    /// Takes out every future PLAN this app made for a workout — for the
     /// switch in settings being turned off, and for a workout being deleted.
+    /// Records of workouts done stay: they are not a schedule, and switching
+    /// off a schedule is not a reason to forget what somebody has done.
     func removeUpcoming(for target: ScheduleTarget, now: Date = Date()) {
         guard hasAccess else { return }
         for event in upcoming(for: target, from: now) {

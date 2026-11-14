@@ -95,11 +95,24 @@ struct ScheduleNextWorkoutSheet: View {
         .onAppear {
             start = WorkoutSchedule.nextStart(after: finished.startedAt, daysAhead: daysAhead)
         }
+        .onDisappear {
+            // "Not now", or swiped away. The next workout is nobody's business
+            // if they did not ask for it — but what they have just DONE is
+            // still worth writing down, and `onlyIfAlreadyScheduling` keeps
+            // that to people who are using the calendar for this workout
+            // anyway. Nothing is requested here either: a permission prompt
+            // appearing behind a sheet somebody has just dismissed would be
+            // the app asking a question it was told to drop.
+            guard done == nil else { return }
+            calendar.noteFinished(target, from: finished.startedAt,
+                                  to: finished.endedAt,
+                                  onlyIfAlreadyScheduling: true)
+        }
     }
 
     private var proposalFooter: String {
         let length = Int(duration / 60)
-        return "The time this workout began, rounded up to the quarter hour, \(daysAhead) \(daysAhead == 1 ? "day" : "days") from now. It goes in as a \(length)-minute event — as long as the one you have just done."
+        return "The time this workout began, rounded up to the quarter hour, \(daysAhead) \(daysAhead == 1 ? "day" : "days") from now. It goes in as a \(length)-minute event — as long as the one you have just done, which is written into your calendar too, at the time it really happened."
     }
 
     private func put() async {
@@ -109,6 +122,9 @@ struct ScheduleNextWorkoutSheet: View {
             return
         }
         done = calendar.schedule(target, starts: starts, duration: duration)
+        // And the one just finished, named after the workout rather than the
+        // group, so the calendar says which of them it actually was.
+        calendar.noteFinished(target, from: finished.startedAt, to: finished.endedAt)
     }
 }
 
