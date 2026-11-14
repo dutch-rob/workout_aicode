@@ -53,6 +53,12 @@ struct WatchLogExerciseView: View {
     /// logged here. See `followTheWorkout`.
     @State private var preparedOrder: [String] = []
 
+    /// How far through each exercise's sets the app believes the user is, so a
+    /// column can be tinted green. By exercise index, like `loggedIndices`,
+    /// and the rule is `SetProgress`'s — the same file the phone uses, so the
+    /// two devices agree about what counts as a set done.
+    @State private var setProgress: [Int: SetProgress] = [:]
+
     // MARK: - Body
 
     var body: some View {
@@ -66,10 +72,26 @@ struct WatchLogExerciseView: View {
                     startOrAdoptSession()
                     didPrepare = true
                 }
+                arriveAt(currentIndex)
+            }
+            // A burst of touches is only over once the wheels have been left
+            // alone, so the decision has to be taken on a timer rather than on
+            // a touch. One sleep per burst, restarted by `id` whenever another
+            // touch moves the moment — and nothing at all while the wheels are
+            // still. This screen must not rebuild on a tick: the heart rate
+            // already arrives once a second and is deliberately kept off it.
+            .task(id: nextSetDecision) {
+                guard let decision = nextSetDecision else { return }
+                let wait = decision.timeIntervalSinceNow
+                if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+                guard !Task.isCancelled else { return }
+                setProgress[currentIndex]?.settle(at: Date())
             }
             // Report live state so the phone can take over from exactly here.
-            .onChange(of: currentIndex) { _, _ in
+            .onChange(of: currentIndex) { previous, index in
                 mode = .reps   // each new exercise starts on the reps row
+                setProgress[previous]?.left()
+                arriveAt(index)
                 session.updateLiveSnapshot(currentSnapshot()); session.checkpoint()
             }
             .onChange(of: weights) { _, _ in session.updateLiveSnapshot(currentSnapshot()) }
@@ -518,7 +540,15 @@ struct WatchLogExerciseView: View {
                                reps: reps,
                                loggedIndices: Array(loggedIndices),
                                startedAt: startedAt.timeIntervalSince1970,
-                               weightsGrams: weights)
+                               weightsGrams: weights,
+                               greenColumns: greenColumnsByExercise())
+    }
+
+    /// The green columns as one count per exercise, for the hand-over. Only
+    /// the counts travel: the five-second clock behind them is about a hand on
+    /// a wheel on THIS device, and means nothing on the other one.
+    private func greenColumnsByExercise() -> [Int] {
+        (0..<workout.exerciseOrder.count).map { setProgress[$0]?.greenColumns ?? 0 }
     }
 
     private func adopt(_ snap: SessionSnapshot) {
@@ -533,6 +563,15 @@ struct WatchLogExerciseView: View {
         if session.restTimerEnabled, let rest = snap.pendingRest() {
             WatchRestTimer.shared.resume(endsAt: rest.endsAt, total: rest.total, exercise: "")
         }
+        // Which sets the phone had marked. Entered NOW, every one of them:
+        // picking a device up is arriving, and the first thing anybody does
+        // with it is look the wheels over.
+        let now = Date()
+        var adopted: [Int: SetProgress] = [:]
+        for (index, green) in snap.greenColumns.enumerated() where green > 0 {
+            adopted[index] = SetProgress(enteredAt: now, greenColumns: green)
+        }
+        setProgress = adopted
     }
 
     private func startOrAdoptSession() {
@@ -613,9 +652,10 @@ struct WatchLogExerciseView: View {
                 .labelsHidden()
                 .pickerStyle(.wheel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .setDoneTint(setIsDone(series), cornerRadius: 8)
+                .simultaneousGesture(wheelTouchGesture(column: series))
             }
         }
-        .simultaneousGesture(wheelTouchGesture)
     }
 
     /// A touch on a wheel ends a set, as it does on the phone.
@@ -628,16 +668,48 @@ struct WatchLogExerciseView: View {
     ///
     /// Simultaneous, so the wheels still scroll and the page swipe between
     /// exercises still works; a horizontal fling is that swipe, not a set.
-    private var wheelTouchGesture: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+    /// One per column rather than one across the row, which is what tells the
+    /// app WHICH set was touched. The rest timer does not care — any wheel
+    /// ends a set — but the green columns do.
+    private func wheelTouchGesture(column: Int) -> some Gesture {
+        // GLOBAL, not local: a page swipe drags this view sideways under the
+        // finger, so in the view's own space the fling measures as nearly
+        // nothing and the guard below never fires. See the phone's copy.
+        DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onEnded { value in
                 if abs(value.translation.width) > 40,
                    abs(value.translation.width) > abs(value.translation.height) {
                     return
                 }
+                noteWheelTouched(column: column)
                 noteSetFinished()
             }
     }
+
+    // MARK: - Which sets have been done
+
+    /// Arriving at an exercise, first time or swiping along to it. Re-arms the
+    /// five seconds in which looking the wheels over is not doing a set.
+    private func arriveAt(_ index: Int) {
+        var progress = setProgress[index] ?? SetProgress(enteredAt: Date())
+        progress.entered(at: Date())
+        setProgress[index] = progress
+    }
+
+    private func noteWheelTouched(column: Int) {
+        let now = Date()
+        var progress = setProgress[currentIndex] ?? SetProgress(enteredAt: now)
+        progress.touched(column, at: now)
+        setProgress[currentIndex] = progress
+    }
+
+    /// Whether this column of wheels is a set the app believes is done.
+    private func setIsDone(_ column: Int) -> Bool {
+        setProgress[currentIndex]?.isDone(column) ?? false
+    }
+
+    /// When there is next something to decide, for the timer on the screen.
+    private var nextSetDecision: Date? { setProgress[currentIndex]?.decidesAt }
 
     // MARK: - The other metric, shown as labels
 

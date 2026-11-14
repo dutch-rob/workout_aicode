@@ -151,6 +151,37 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   groups and would otherwise need the group list and the ids to join it with.
   `SyncWorkout.scheduledName` is what the end-of-workout offer uses, so the
   wrist and the calendar name the same thing.
+* `Shared/SetProgress.swift` decides **which sets have been done** before
+  anything is logged — the green columns on the wheels, on the phone, the iPad
+  and the Watch. Nothing new is observed for it: a touch on a wheel is already
+  what starts the rest timer. What is new is FIVE SECONDS OF QUIET. Touches
+  less than five seconds apart are one burst; a burst whose first touch came
+  at least five seconds after arriving at the exercise, or after the last
+  column went green, marks the next column along. Setting three columns up on
+  arrival is a continuous flurry and marks nothing, however long it runs,
+  which is the case the rule exists for — no amount of looking at WHICH wheels
+  were touched can tell setting up from lifting, only the pause can.
+
+  Two consequences are built in rather than worked around. The decision cannot
+  be made until five seconds after the last touch, so the green arrives late by
+  exactly that much, and a view has to ask on a timer — one sleep per burst,
+  keyed on `decidesAt`, never a tick (this screen carries the heart rate and
+  must not rebuild every second). And a burst belongs to a VISIT: `left()` is
+  called on swiping away, because otherwise the question would be put on the
+  way back in, against a five seconds not yet re-armed — which is precisely how
+  a swipe between exercises turned a column green. `settle` also refuses a
+  question put far too late, for the app coming back out of a pocket.
+
+  The counts travel in `SessionSnapshot.greenColumns` so a workout handed
+  between devices keeps them; the clock behind them does not, being about a
+  hand on a wheel on one device. `SetProgressTests` holds the whole rule, dates
+  passed in, so a set done forty seconds after the last one tests in no time.
+
+  One trap worth knowing, in both log screens: the wheel-touch gesture measures
+  in `.global`. A page swipe drags the whole screen sideways under the finger,
+  so in the view's own space the finger has barely moved and the
+  horizontal-fling guard — the line that throws page swipes away — measured
+  nearly nothing. It had been that way since the gesture was written.
 * `Shared/CalendarIdentity.swift` decides **which calendar events belong to
   which workout**, and it is the reason the grouping switch can be moved at
   all. An event carries BOTH ids it could be filed under —

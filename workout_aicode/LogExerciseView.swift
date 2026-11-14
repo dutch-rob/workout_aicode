@@ -52,6 +52,11 @@ struct LogExerciseView: View {
     /// is not something to leave the user to work out from the wheels.
     @State private var carriedOn = false
     @State private var currentIndex: Int = 0
+
+    /// How far through each exercise's sets the app believes the user is, so a
+    /// column can be tinted green. By exercise index, like `loggedIndices`.
+    /// The rule is `SetProgress`'s and is tested there.
+    @State private var setProgress: [Int: SetProgress] = [:]
     @State private var weights: [[Int]] = []
     @State private var reps: [[Int]] = []
 
@@ -140,6 +145,20 @@ struct LogExerciseView: View {
                     prepareBuffers()
                     ensureBufferShape()
                     startOrAdoptSession()
+                    arriveAt(currentIndex)
+                }
+                // A burst of touches is only over once the wheels have been
+                // left alone, so the decision has to be taken on a timer
+                // rather than on a touch. One sleep per burst, restarted by
+                // `id` whenever another touch moves the moment — not a tick
+                // every second, which would rebuild this screen throughout a
+                // workout for the sake of a question with no new answer.
+                .task(id: nextSetDecision) {
+                    guard let decision = nextSetDecision else { return }
+                    let wait = decision.timeIntervalSinceNow
+                    if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+                    guard !Task.isCancelled else { return }
+                    setProgress[currentIndex]?.settle(at: Date())
                 }
                 .onChange(of: geo.size.width) { _, newWidth in
                     containerWidth = newWidth
@@ -149,7 +168,9 @@ struct LogExerciseView: View {
                 }
                 // Report state to the handover coordinator so the Watch can take
                 // over from exactly here. Exercise/log boundaries also checkpoint.
-                .onChange(of: currentIndex) { _, _ in
+                .onChange(of: currentIndex) { previous, index in
+                    setProgress[previous]?.left()
+                    arriveAt(index)
                     handoff.updateLiveSnapshot(currentSnapshot()); handoff.checkpoint()
                 }
                 .onChange(of: weights) { _, _ in handoff.updateLiveSnapshot(currentSnapshot()) }
@@ -237,20 +258,58 @@ struct LogExerciseView: View {
     ///
     /// Only wheels, not the whole screen: a tap anywhere would fire on the log,
     /// quit and list buttons, which are not the end of anything.
-    private func wheelTouchEnded(_ translation: CGSize) {
+    private func wheelTouchEnded(_ translation: CGSize, column: Int) {
         carriedOn = false
         // A horizontal fling is the page swipe to another exercise, not a set.
         if abs(translation.width) > 40, abs(translation.width) > abs(translation.height) {
             return
         }
+        noteWheelTouched(column: column)
         restTimer.setFinished(exercise: exerciseAt(currentIndex)?.name ?? "",
                               seconds: restSecondsForCurrent)
     }
 
-    private var wheelTouchGesture: some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .local)
-            .onEnded { wheelTouchEnded($0.translation) }
+    /// One per column rather than one across the row, which is what tells the
+    /// app WHICH set was touched. The rest timer does not care — any wheel
+    /// ends a set — but the green columns do, and working the column out
+    /// afterwards from where the finger landed would mean measuring the row
+    /// and dividing by the spacing to answer a question the view already knows
+    /// the answer to.
+    private func wheelTouchGesture(column: Int) -> some Gesture {
+        // GLOBAL, not local. A page swipe drags this whole view sideways under
+        // the finger — `.offset(x: dragTranslation)` above — so in the view's
+        // OWN space the finger has barely moved, and the horizontal fling that
+        // the next line throws away measured as nearly nothing. Every swipe
+        // between exercises was arriving here as a touch on a wheel. In the
+        // screen's space the finger has moved the distance it really moved.
+        DragGesture(minimumDistance: 0, coordinateSpace: .global)
+            .onEnded { wheelTouchEnded($0.translation, column: column) }
     }
+
+    // MARK: - Which sets have been done
+
+    /// Arriving at an exercise, first time or swiping back to it. Re-arms the
+    /// five seconds in which looking the wheels over is not doing a set.
+    private func arriveAt(_ index: Int) {
+        var progress = setProgress[index] ?? SetProgress(enteredAt: Date())
+        progress.entered(at: Date())
+        setProgress[index] = progress
+    }
+
+    private func noteWheelTouched(column: Int) {
+        let now = Date()
+        var progress = setProgress[currentIndex] ?? SetProgress(enteredAt: now)
+        progress.touched(column, at: now)
+        setProgress[currentIndex] = progress
+    }
+
+    /// Whether this column of wheels is a set the app believes is done.
+    private func setIsDone(_ column: Int) -> Bool {
+        setProgress[currentIndex]?.isDone(column) ?? false
+    }
+
+    /// When there is next something to decide, for the timer in `body`.
+    private var nextSetDecision: Date? { setProgress[currentIndex]?.decidesAt }
 
     // MARK: - Handover helpers
 
@@ -268,7 +327,15 @@ struct LogExerciseView: View {
                                reps: reps,
                                loggedIndices: Array(loggedIndices),
                                startedAt: startedAt.timeIntervalSince1970,
-                               weightsGrams: weights)
+                               weightsGrams: weights,
+                               greenColumns: greenColumnsByExercise())
+    }
+
+    /// The green columns as one count per exercise, for the hand-over. Only
+    /// the counts travel: the five-second clock behind them is about a hand on
+    /// a wheel on THIS device, and means nothing on the other one.
+    private func greenColumnsByExercise() -> [Int] {
+        (0..<exerciseIds.count).map { setProgress[$0]?.greenColumns ?? 0 }
     }
 
     /// A snapshot's wheels in grams: as sent when the other device knew grams,
@@ -305,6 +372,19 @@ struct LogExerciseView: View {
         if let rest = snap.pendingRest() {
             restTimer.resume(endsAt: rest.endsAt, total: rest.total, exercise: "")
         }
+        // Which sets the other device had marked. Entered NOW, every one of
+        // them: picking a device up is arriving, and the first thing anybody
+        // does with it is look the wheels over.
+        adoptGreenColumns(snap.greenColumns)
+    }
+
+    private func adoptGreenColumns(_ counts: [Int]) {
+        let now = Date()
+        var adopted: [Int: SetProgress] = [:]
+        for (index, green) in counts.enumerated() where green > 0 {
+            adopted[index] = SetProgress(enteredAt: now, greenColumns: green)
+        }
+        setProgress = adopted
     }
 
     private func startOrAdoptSession() {
@@ -487,11 +567,12 @@ struct LogExerciseView: View {
                 }
                 .pickerStyle(.wheel)
                 .frame(maxWidth: .infinity)
+                .setDoneTint(setIsDone(series))
                 .wheelOutline()
+                .simultaneousGesture(wheelTouchGesture(column: series))
             }
         }
         .frame(height: pickerHeight)
-        .simultaneousGesture(wheelTouchGesture)
     }
 
     private func repsPickers(for exercise: ExerciseDef) -> some View {
@@ -503,11 +584,12 @@ struct LogExerciseView: View {
                 }
                 .pickerStyle(.wheel)
                 .frame(maxWidth: .infinity)
+                .setDoneTint(setIsDone(series))
                 .wheelOutline()
+                .simultaneousGesture(wheelTouchGesture(column: series))
             }
         }
         .frame(height: pickerHeight)
-        .simultaneousGesture(wheelTouchGesture)
     }
 
     private var wheelSpacing: CGFloat { 8 }

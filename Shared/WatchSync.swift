@@ -354,18 +354,27 @@ nonisolated struct SessionSnapshot: Codable, Equatable {
         return end > now ? (end, restTotal) : nil
     }
 
+    /// How many of each exercise's sets the app believes are done, one count
+    /// per exercise — the green columns, see `SetProgress`.
+    ///
+    /// It travels because the reminder is worth least at the moment a device
+    /// changes hands. Somebody two sets into an exercise who picks up the
+    /// phone would otherwise find three plain columns and no way to say which
+    /// two they had done. Empty from a build that did not have it.
+    var greenColumns: [Int] = []
+
     /// The same wheels in grams. Empty in a snapshot from a build that had no
     /// grams, and then read from `weights`.
     var weightsGrams: [[Int]]
 
     enum CodingKeys: String, CodingKey {
         case workoutId, currentIndex, weights, reps, loggedIndices, startedAt
-        case restEndsAt, restTotal, updatedAt, weightsGrams
+        case restEndsAt, restTotal, updatedAt, weightsGrams, greenColumns
     }
     init(workoutId: String, currentIndex: Int, weights: [[Int]], reps: [[Int]],
          loggedIndices: [Int], startedAt: Double,
          restEndsAt: Double? = nil, restTotal: Int? = nil, updatedAt: Double? = nil,
-         weightsGrams: [[Int]] = []) {
+         weightsGrams: [[Int]] = [], greenColumns: [Int] = []) {
         self.workoutId = workoutId
         self.currentIndex = currentIndex
         self.weights = weights
@@ -376,6 +385,7 @@ nonisolated struct SessionSnapshot: Codable, Equatable {
         self.restTotal = restTotal
         self.updatedAt = updatedAt
         self.weightsGrams = weightsGrams
+        self.greenColumns = greenColumns
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -392,6 +402,7 @@ nonisolated struct SessionSnapshot: Codable, Equatable {
         restTotal = try c.decodeIfPresent(Int.self, forKey: .restTotal)
         updatedAt = try c.decodeIfPresent(Double.self, forKey: .updatedAt)
         weightsGrams = try c.decodeIfPresent([[Int]].self, forKey: .weightsGrams) ?? []
+        greenColumns = try c.decodeIfPresent([Int].self, forKey: .greenColumns) ?? []
     }
 
     /// The wheels in grams, per exercise of the workout being taken over.

@@ -19,7 +19,7 @@ I made this app for myself because I wanted logging to be quicker than in the ap
 
 ## Contents
 - [Getting started](#getting-started) — defining your first workout and exercises
-- [Logging a workout](#logging-a-workout) — the wheels, the buttons, skipping an exercise
+- [Logging a workout](#logging-a-workout) — the wheels, the buttons, which set you are on, skipping an exercise
 - [Aerobic exercises](#aerobic-exercises) — cardio, with heart rate on the Watch
 - [The rest timer](#the-rest-timer) — optional, off by default
 - [Scheduling the next one](#scheduling-the-next-one) — optional, off by default
@@ -47,6 +47,13 @@ Then tap **new workout** and give it a name. Tap **add exercise** to open the ex
 Tap a workout on the start screen. The first exercise appears with a row of wheels for each set: the top row is the weights, the bottom row the repetitions. If you have logged this exercise before, the wheels start at the numbers you logged last time, so you usually only need to adjust what changed.
 
 After finishing a set, tap **log, next** to record the exercise and move to the next one. On the last exercise that button reads **log, end**, which records it and takes you back to the start screen.
+
+### Which set you are on
+Three sets is one more than you can keep track of while you are out of breath, so the app does it for you: a column of wheels turns **green** once it believes you have done that set. It works out from the wheels themselves, with no button to press, and it is only a reminder — what gets logged is still everything on screen when you press **log**.
+
+The rule is five seconds of quiet. Arriving at an exercise you usually set the wheels up, three columns one after another; that flurry marks nothing, however long it goes on, because there is no pause in it. A touch on the leftmost unmarked column five seconds or more after you arrived — or after the last column went green — marks that column, once you have left the wheels alone for five seconds again. So the green always arrives about five seconds after you stop touching, and it goes left to right: reaching past a column does not mark it.
+
+It is on the Watch too, on the same rule, and the marks travel with the workout if you hand it between your iPhone and your Watch part-way through. They last the whole workout and survive swiping to another exercise and back.
 
 **quit** ends the workout without logging the exercise that is on screen. Anything you already logged during the workout is kept.
 
