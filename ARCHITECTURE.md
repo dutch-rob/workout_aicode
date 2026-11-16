@@ -422,6 +422,13 @@ Swift Testing (`@Test`, `#expect`) throughout the unit test targets; XCTest
 only in the UI ones.
 
 ```bash
+tools/run-tests.sh              # all three platforms
+tools/run-tests.sh ios watch    # one or more of: ios watch mac
+```
+
+which is these three, plus the clearing up:
+
+```bash
 xcodebuild test -scheme workout_aicode \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max' \
   -skip-testing:workout_aicodeUITests
@@ -431,6 +438,13 @@ xcodebuild test -scheme 'workout_aicode Watch App-' \
 
 xcodebuild test -scheme workout_aicode_MacOS -destination 'platform=macOS'
 ```
+
+**Use the script rather than the three lines.** Xcode makes a throwaway
+simulator clone under `~/Library/Developer/XCTestDevices` for every
+`xcodebuild test` run and is meant to delete it afterwards; on this Mac it
+never has. By 16 November 2026 there were 202 of them going back to October —
+about 1.5 million files — and the data volume was 96% full. The script removes
+them when the run is over, which is the only reason it exists.
 
 `workout_aicodeTests/MigrationTests.swift` is the big one — every schema
 version is migrated and checked. `MixedBuildTests.swift` covers the case the
@@ -447,6 +461,7 @@ bug and rendering the view did.
 
 | Script | What it does |
 |---|---|
+| `tools/run-tests.sh` | the three unit test suites, and deletes the simulator clones Xcode leaves behind |
 | `tools/make-screenshots.sh` | App Store screenshots for iPhone and Watch |
 | `tools/make-mac-screenshots.sh` | the same for the Mac — needs Screen Recording for whatever runs it |
 | `tools/srw-window-id.swift` | asks the window server which window belongs to a process |
