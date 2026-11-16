@@ -387,6 +387,8 @@ struct MacLogsView: View {
                     Text(WeightText.string(grams: weight, in: unit))
                         .foregroundStyle(LogComparison.weightColour(current: weight,
                                                                     previous: previousWeight,
+                                                                    currentReps: reps,
+                                                                    previousReps: previousReps,
                                                                     increment: incrementForLog))
                     Text("\(reps)")
                         .macFont(.caption)

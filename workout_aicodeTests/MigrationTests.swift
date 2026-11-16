@@ -331,19 +331,44 @@ struct NewExerciseNumberTests {
 /// does not repaint every assisted set — see `LogComparison.tolerance`.
 @Test func aSmallChangeInBodyWeightLeavesTheLogUncoloured() {
     // 5 kg increment: anything up to 2.5 kg is not a change worth colouring.
-    #expect(LogComparison.weightColour(current: 54, previous: 52, increment: 5) == .primary)
-    #expect(LogComparison.weightColour(current: 50, previous: 52, increment: 5) == .primary)
+    // The reps are held level throughout, so the weight speaks for itself.
+    #expect(LogComparison.weightColour(current: 54, previous: 52,
+                                       currentReps: 8, previousReps: 8,
+                                       increment: 5) == .primary)
+    #expect(LogComparison.weightColour(current: 50, previous: 52,
+                                       currentReps: 8, previousReps: 8,
+                                       increment: 5) == .primary)
     // Beyond it, the colour comes back.
-    #expect(LogComparison.weightColour(current: 55, previous: 52, increment: 5) == .green)
-    #expect(LogComparison.weightColour(current: 49, previous: 52, increment: 5) == .red)
+    #expect(LogComparison.weightColour(current: 55, previous: 52,
+                                       currentReps: 8, previousReps: 8,
+                                       increment: 5) == .green)
+    #expect(LogComparison.weightColour(current: 49, previous: 52,
+                                       currentReps: 8, previousReps: 8,
+                                       increment: 5) == .red)
 }
 
 @Test func anOrdinaryIncrementStillColoursEverySet() {
     // The whole point of the slack is that ordinary training never meets it:
     // weights move by whole increments, which always clear half of one.
-    #expect(LogComparison.weightColour(current: 55, previous: 50, increment: 5) == .green)
-    #expect(LogComparison.weightColour(current: 45, previous: 50, increment: 5) == .red)
-    #expect(LogComparison.weightColour(current: 50, previous: 50, increment: 5) == .primary)
+    #expect(LogComparison.weightColour(current: 55, previous: 50,
+                                       currentReps: 8, previousReps: 8,
+                                       increment: 5) == .green)
+    #expect(LogComparison.weightColour(current: 45, previous: 50,
+                                       currentReps: 8, previousReps: 8,
+                                       increment: 5) == .red)
+    #expect(LogComparison.weightColour(current: 50, previous: 50,
+                                       currentReps: 8, previousReps: 8,
+                                       increment: 5) == .primary)
+}
+
+/// The slack is the WEIGHT's, and a rep is never within it.
+///
+/// Reps are counted rather than measured: there is no body weight to drift and
+/// no half a repetition, so one of them either happened or did not.
+@Test func oneFewerRepIsEnoughToTakeTheColourOffMoreWeight() {
+    #expect(LogComparison.weightColour(current: 55, previous: 50,
+                                       currentReps: 7, previousReps: 8,
+                                       increment: 5) == .primary)
 }
 
 @Test func anExtraRepSurvivesAWobbleInBodyWeight() {
@@ -1901,11 +1926,66 @@ struct LogListTests {
     }
 
     @Test func moreWeightReadsAsProgressAndLessDoesNot() {
-        #expect(LogComparison.weightColour(current: 60, previous: 55) == .green)
-        #expect(LogComparison.weightColour(current: 50, previous: 55) == .red)
-        #expect(LogComparison.weightColour(current: 55, previous: 55) == .primary)
+        // Reps level, so the weight is the only thing that moved.
+        #expect(LogComparison.weightColour(current: 60, previous: 55,
+                                           currentReps: 8, previousReps: 8) == .green)
+        #expect(LogComparison.weightColour(current: 50, previous: 55,
+                                           currentReps: 8, previousReps: 8) == .red)
+        #expect(LogComparison.weightColour(current: 55, previous: 55,
+                                           currentReps: 8, previousReps: 8) == .primary)
         // Nothing to compare against is not progress and not a decline.
-        #expect(LogComparison.weightColour(current: 55, previous: nil) == .primary)
+        #expect(LogComparison.weightColour(current: 55, previous: nil,
+                                           currentReps: 8, previousReps: nil) == .primary)
+    }
+
+    /// The bug this rule was written for, in the numbers it was found in.
+    ///
+    /// Butterfly, 16 November 2026 against 9 November: the second set went up
+    /// in weight and down in reps, and the weight came up green. Two numbers
+    /// traded against each other are not an improvement, and the screen should
+    /// not claim one.
+    @Test func moreWeightBoughtByDroppingRepsIsNotProgress() {
+        #expect(LogComparison.weightColour(current: 60, previous: 55,
+                                           currentReps: 6, previousReps: 8) == .primary)
+        // Nor is the reverse a decline: less weight for more reps is a trade,
+        // and which way it went is not this screen's to say.
+        #expect(LogComparison.weightColour(current: 50, previous: 55,
+                                           currentReps: 10, previousReps: 8) == .primary)
+        // Both moving the same way is unambiguous, and still coloured.
+        #expect(LogComparison.weightColour(current: 60, previous: 55,
+                                           currentReps: 10, previousReps: 8) == .green)
+        #expect(LogComparison.weightColour(current: 50, previous: 55,
+                                           currentReps: 6, previousReps: 8) == .red)
+    }
+
+    /// The two rules are each other's mirror, and a change to one that is not
+    /// made to the other would show as one of these failing.
+    @Test func theWeightAndTheRepsAreColouredByTheSameRule() {
+        // The same set read both ways round: weight up, reps up — both green.
+        #expect(LogComparison.weightColour(current: 60, previous: 55,
+                                           currentReps: 10, previousReps: 8) == .green)
+        #expect(LogComparison.repsColour(current: 10, previous: 8,
+                                         currentWeight: 60, previousWeight: 55) == .green)
+        // Weight up, reps down — neither number is coloured.
+        #expect(LogComparison.weightColour(current: 60, previous: 55,
+                                           currentReps: 6, previousReps: 8) == .primary)
+        #expect(LogComparison.repsColour(current: 6, previous: 8,
+                                         currentWeight: 60, previousWeight: 55) == .primary)
+        // Weight down, reps down — both red.
+        #expect(LogComparison.weightColour(current: 50, previous: 55,
+                                           currentReps: 6, previousReps: 8) == .red)
+        #expect(LogComparison.repsColour(current: 6, previous: 8,
+                                         currentWeight: 50, previousWeight: 55) == .red)
+    }
+
+    /// A set that was not logged last time, on either side of the comparison.
+    @Test func aMissingCounterpartReadsAsUnchanged() {
+        // No previous reps: the weight is judged on its own, as it was before
+        // this rule existed.
+        #expect(LogComparison.weightColour(current: 60, previous: 55,
+                                           currentReps: 8, previousReps: nil) == .green)
+        #expect(LogComparison.weightColour(current: 50, previous: 55,
+                                           currentReps: 8, previousReps: nil) == .red)
     }
 
     @Test func extraRepsBoughtByDroppingTheWeightAreNotProgress() {

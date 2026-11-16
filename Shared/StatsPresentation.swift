@@ -121,24 +121,45 @@ enum LogComparison {
         Double(max(1, increment)) / 2
     }
 
-    /// More weight is progress, less is not. No previous entry is neither.
+    /// More weight is progress only if the reps did not drop to buy it. No
+    /// previous entry is neither.
+    ///
+    /// THE SAME RULE AS `repsColour`, READ THE OTHER WAY ROUND, and it did not
+    /// used to be. Weight was coloured on the weight alone, so a set of
+    /// butterfly done at more weight for fewer reps than the week before came
+    /// up green on the weight and uncoloured on the reps — the screen
+    /// announcing an improvement that the two numbers together do not support.
+    /// Found in a real log, 9 to 16 November 2026.
+    ///
+    /// Green means the number in question went up and the other one did not go
+    /// down; red means it went down and the other one did not go up. Anything
+    /// else — a trade, either way round — is left uncoloured, because which
+    /// side of it came out ahead is not this screen's to decide.
     ///
     /// `increment` is the exercise's weight increment; a difference of half of
     /// it or less is left uncoloured. Passing nothing keeps the old exact
     /// comparison, which is what a caller without the exercise to hand gets.
+    /// It applies to the weight only: reps are counted, not measured, and one
+    /// of them is always worth something.
     static func weightColour(current: Int, previous: Int?,
+                             currentReps: Int, previousReps: Int?,
                              increment: Int? = nil) -> Color {
         guard let previous else { return .primary }
         let margin = increment.map(tolerance(forIncrement:)) ?? 0
         let difference = Double(current - previous)
-        if difference > margin { return .green }
-        if difference < -margin { return .red }
+        // A missing counterpart reads as unchanged, which is the same thing
+        // `repsColour` does with a missing weight: it is the reading that lets
+        // the number in question speak for itself.
+        let prevReps = previousReps ?? currentReps
+        if difference > margin && currentReps >= prevReps { return .green }
+        if difference < -margin && currentReps <= prevReps { return .red }
         return .primary
     }
 
     /// Reps only count as progress if the weight did not drop to buy them —
     /// two more reps at ten kilos less is not a better set, and colouring it
-    /// green would be flattery rather than information.
+    /// green would be flattery rather than information. `weightColour` is this
+    /// same rule the other way round; the two must stay each other's mirror.
     ///
     /// The same margin applies to that weight comparison: a kilo of body
     /// weight must not take the colour off an extra repetition.

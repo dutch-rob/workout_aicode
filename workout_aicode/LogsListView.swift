@@ -156,8 +156,13 @@ struct LogsListView: View {
                 ForEach(0..<maxCount, id: \.self) { i in
                     let current = i < grams.count ? grams[i] : 0
                     let prev = previousGrams.indices.contains(i) ? previousGrams[i] : nil
+                    // The reps of the SAME set, both times: the weight's
+                    // colour depends on them — see LogComparison.weightColour.
+                    let currentR = i < log.reps.count ? log.reps[i] : 0
+                    let prevR = previous?.reps.indices.contains(i) == true ? previous!.reps[i] : nil
                     Text(WeightText.string(grams: current, in: unit))
                         .foregroundStyle(colorForWeight(current: current, previous: prev,
+                                                        currentReps: currentR, previousReps: prevR,
                                                         exerciseId: log.exerciseId))
                         .font(.headline)
                 }
@@ -194,8 +199,11 @@ struct LogsListView: View {
         exercises.first(where: { $0.id == exerciseId })?.weightIncrementGrams
     }
 
-    private func colorForWeight(current: Int, previous: Int?, exerciseId: UUID) -> Color {
+    private func colorForWeight(current: Int, previous: Int?,
+                                currentReps: Int, previousReps: Int?,
+                                exerciseId: UUID) -> Color {
         LogComparison.weightColour(current: current, previous: previous,
+                                   currentReps: currentReps, previousReps: previousReps,
                                    increment: increment(for: exerciseId))
     }
 

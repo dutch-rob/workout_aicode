@@ -185,6 +185,26 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   so in the view's own space the finger has barely moved and the
   horizontal-fling guard — the line that throws page swipes away — measured
   nearly nothing. It had been that way since the gesture was written.
+* `Shared/StatsPresentation.swift` holds, among the statistics, the **green and
+  red in the log list** — `LogComparison`, shared because it is a claim about
+  the user's training rather than a decoration, and a Mac colouring the same
+  two rows differently from the phone would be telling one of two contradictory
+  stories about one workout.
+
+  `weightColour` and `repsColour` ARE EACH OTHER'S MIRROR and must stay so.
+  Either number is green when it went up and the other did not go down, red
+  when it went down and the other did not go up, and uncoloured otherwise.
+  `repsColour` had that rule from the start and `weightColour` did not, so more
+  weight for fewer reps came up green on the weight and plain on the reps —
+  the screen announcing an improvement that the two numbers together do not
+  support. Found in a real log, butterfly, 9 against 16 November 2026. A trade
+  either way round is left uncoloured on purpose: which side of it came out
+  ahead is not this screen's to decide.
+
+  `tolerance` is the weight's alone — half the exercise's increment, so that a
+  kilo of body weight does not repaint every set on an assisted machine. Reps
+  get none: they are counted rather than measured, and there is no half a
+  repetition.
 * `Shared/CalendarIdentity.swift` decides **which calendar events belong to
   which workout**, and it is the reason the grouping switch can be moved at
   all. An event carries BOTH ids it could be filed under —

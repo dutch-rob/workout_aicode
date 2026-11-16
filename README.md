@@ -262,7 +262,7 @@ An exercise needs a name and a primary muscle group before it can be saved, and 
 ## Your logs and statistics
 The **logs/stats** button opens four tabs.
 
-**logs** shows your logged sets, most recent first. A weight is green when it is higher than the last time you did that set of that exercise, and red when it is lower. A repetition count is green when it is higher than last time and the weight has not dropped, and red when it is lower and the weight has not risen.
+**logs** shows your logged sets, most recent first, with each set coloured against the same set of the last time you did that exercise. A number is green when it went up and the other one did not go down, and red when it went down and the other one did not go up. So more weight for more reps is green on both, and less for fewer is red on both — but more weight for fewer reps is a trade rather than an improvement, and neither number is coloured, because which side of it came out ahead is not something the app can know.
 
 **graphs** draws one chart per exercise: a dot for each workout, and a straight trendline through them. A graph appears once you have logged that exercise in at least 8 workouts, so the tab fills in gradually; below the graphs you will see which exercises are still short and by how much.
 
