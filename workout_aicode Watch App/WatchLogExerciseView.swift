@@ -795,6 +795,19 @@ struct WatchLogExerciseView: View {
                 .controlSize(.mini)
                 .frame(maxWidth: .infinity)
         }
+        // Clear of the rest's bar, whose bottom end reaches down to about
+        // where this row begins and crossed the first button. The bar is
+        // additive and drawn on top, so the overlap was a stripe down the left
+        // end of a control — and making the bar opaque there instead, which
+        // was the other way out, would have put a solid block over it.
+        //
+        // Moving the row over lines it up with the wheel columns above, which
+        // is where the eye expects buttons under wheels to start, and costs
+        // the three of them about nine percent of their width between them.
+        //
+        // ALWAYS, not only while a rest runs: buttons that moved when a set
+        // was logged would be buttons that moved out from under a thumb.
+        .padding(.leading, WatchRestDrain.barWidth - leadingInset)
         .confirmationDialog("Exercises", isPresented: $showExerciseList, titleVisibility: .visible) {
             ForEach(ExerciseListFilter.visible(count: workout.exerciseOrder.count,
                                                logged: loggedIndices,

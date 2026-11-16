@@ -185,6 +185,38 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   so in the view's own space the finger has barely moved and the
   horizontal-fling guard — the line that throws page swipes away — measured
   nearly nothing. It had been that way since the gesture was written.
+* `Shared/RestBar.swift` is the **draining rest bar**, on both the phone and
+  the Watch, as functions of two dates and nothing else. It must stay a
+  computation rather than becoming state: the crown reports every value it
+  passes through, so one spin of a wheel is dozens of "set finished" events,
+  and animating a stored fill on each of them left SwiftUI blending dozens of
+  overlapping animations of one property — the bar crawled down the screen
+  long after the rest was over.
+
+  The Watch's bar is SPLIT LENGTHWISE. The left half drains once across the
+  whole rest; the right half sweeps the same height every `fastCycle` seconds
+  and starts again. A ninety-second rest drains about two points a second,
+  which is honest and unreadable — reported from a real workout as being too
+  slow to tell from a bar that had stopped. The sweep is phased from the END
+  of the rest (`fastFill` takes the fractional part of "how many sweeps are
+  left"), so it reaches the bottom exactly as the rest runs out instead of
+  being cut off part way down, and it needs no state of its own to do it.
+
+  `tickInterval` is the other half of that bargain and the part to be careful
+  with. It is a watch battery, and it is also the main thread the wheels
+  settle on: a wheel once came to rest one click past where it was let go
+  because the bar was being redrawn fifteen times a second underneath it. The
+  rate is now taken from whatever on screen moves fastest and no faster —
+  `stepPoints` (five) is the furthest anything may travel between two readings
+  of the clock, and the counter's whole seconds put a floor of twice a second
+  under it. The fast half costs nothing extra in clock readings for any rest
+  longer than one sweep, and SHORTENS them for anything under about four
+  minutes, because the rate no longer depends on the rest's length at all.
+
+  The log screen's buttons are inset by the bar's width so that the bar's
+  bottom end no longer crosses the first of them. Always, not only while a
+  rest runs: buttons that moved when a set was logged would be buttons that
+  moved out from under a thumb.
 * `Shared/StatsPresentation.swift` holds, among the statistics, the **green and
   red in the log list** — `LogComparison`, shared because it is a claim about
   the user's training rather than a decoration, and a Mac colouring the same

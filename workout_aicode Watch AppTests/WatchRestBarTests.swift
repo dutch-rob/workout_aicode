@@ -14,7 +14,13 @@ import CoreGraphics
 // because the rounded corners ate its first and last seconds, then because the
 // top of it was adding red to the blue of the heart rate zone band, in the one
 // corner a glance has to read to know the rest has started. So the ends are
-// what these cover — both what the bar says and, now, where it is drawn.
+// what these cover — both what the bar says and where it is drawn.
+//
+// A third report, from a workout on 15 November 2026: the bar was too slow to
+// tell from a stopped one. It is now split lengthwise, with the right half
+// sweeping the whole height every fifteen seconds, so the last tests here are
+// about that half and about the one thing it put at risk — how often the clock
+// is read, which is a watch battery and the main thread the wheels settle on.
 
 @Suite
 struct WatchRestBarTests {
@@ -119,5 +125,123 @@ struct WatchRestBarTests {
     @Test func withNoInsetTheBarIsTheWholeStripAsItWas() {
         let full = RestBar.bar(in: screen, inset: 0, width: width, fill: 1)
         #expect(full == CGRect(x: 0, y: 0, width: width, height: screen))
+    }
+
+    // MARK: - The half that sweeps
+
+    // The fast half is timed from the END of the rest, so that it reaches the
+    // bottom exactly as the rest runs out rather than being cut off part way
+    // down. Which means a whole number of sweeps from the end is the bottom.
+    @Test func theFastHalfIsAtTheBottomAWholeNumberOfSweepsFromTheEnd() {
+        #expect(RestBar.fastFill(endsAt: endsAt, now: endsAt) == 0)
+        for sweeps in 1...3 {
+            let when = endsAt.addingTimeInterval(-RestBar.fastCycle * Double(sweeps))
+            #expect(RestBar.fastFill(endsAt: endsAt, now: when) == 0)
+        }
+    }
+
+    @Test func theFastHalfDrainsAcrossOneSweepAndStartsAgain() {
+        // A quarter of the way into a sweep, three quarters of it is left.
+        let quarterIn = endsAt.addingTimeInterval(-RestBar.fastCycle * 1.75)
+        #expect(abs(RestBar.fastFill(endsAt: endsAt, now: quarterIn) - 0.75) < 0.0001)
+        // Halfway, half of it.
+        let halfIn = endsAt.addingTimeInterval(-RestBar.fastCycle * 1.5)
+        #expect(abs(RestBar.fastFill(endsAt: endsAt, now: halfIn) - 0.5) < 0.0001)
+        // A moment after the bottom it is back at the top rather than stuck
+        // there — the "starts again" half of the whole idea.
+        let justAfterBottom = endsAt.addingTimeInterval(-RestBar.fastCycle * 2 + 0.01)
+        #expect(RestBar.fastFill(endsAt: endsAt, now: justAfterBottom) > 0.99)
+    }
+
+    // The same clamping the slow half gets: nothing to draw once the rest is
+    // over, or before it starts, or when there is no rest at all.
+    @Test func theFastHalfIsEmptyWhenThereIsNoRestLeft() {
+        #expect(RestBar.fastFill(endsAt: nil, now: start) == 0)
+        #expect(RestBar.fastFill(endsAt: endsAt, now: endsAt.addingTimeInterval(5)) == 0)
+    }
+
+    @Test func theFastHalfIsNeverOutsideTheBar() {
+        // Walked a second at a time across a rest and a bit beyond it, since
+        // a phase that strayed outside 0...1 would draw past the bar's ends.
+        for second in 0...120 {
+            let fill = RestBar.fastFill(endsAt: endsAt,
+                                        now: start.addingTimeInterval(Double(second)))
+            #expect(fill >= 0 && fill < 1)
+        }
+    }
+
+    // MARK: - The two halves side by side
+
+    @Test func theSlowHalfIsOnTheLeftAndTheFastOneOnTheRight() {
+        let halves = RestBar.halves(in: screen, inset: inset, width: width,
+                                    fill: 1, fastFill: 1)
+        #expect(halves.slow?.minX == 0)
+        #expect(halves.fast?.minX == width / 2)
+        #expect(halves.slow?.width == width / 2)
+        #expect(halves.fast?.width == width / 2)
+        // Together they are the bar that was there before the split.
+        #expect(halves.slow?.union(halves.fast!)
+                == RestBar.bar(in: screen, inset: inset, width: width, fill: 1))
+    }
+
+    // Each half is drained by its own number, and the two are nothing to do
+    // with each other: late in a rest the fast half can be near the top while
+    // the slow one is nearly gone, which is the point of it.
+    @Test func eachHalfIsDrainedByItsOwnNumber() {
+        let halves = RestBar.halves(in: screen, inset: inset, width: width,
+                                    fill: 0.1, fastFill: 0.9)
+        let track = screen - inset * 2
+        #expect(abs((halves.slow?.height ?? 0) - track * 0.1) < 0.0001)
+        #expect(abs((halves.fast?.height ?? 0) - track * 0.9) < 0.0001)
+        // Both sit on the same bottom edge.
+        #expect(halves.slow?.maxY == halves.fast?.maxY)
+    }
+
+    @Test func anEmptyHalfIsNotDrawnAtAll() {
+        let halves = RestBar.halves(in: screen, inset: inset, width: width,
+                                    fill: 0, fastFill: 0.5)
+        #expect(halves.slow == nil)
+        #expect(halves.fast != nil)
+    }
+
+    // MARK: - How often the clock is read
+    //
+    // This is a watch battery, and it is also the main thread the wheels
+    // settle on: a wheel once came to rest one click past where it was let go
+    // because the bar was being redrawn fifteen times a second underneath it.
+    // So the rate is part of the behaviour, not a detail.
+
+    @Test func theClockIsReadNoFasterThanTheBarActuallyMoves() {
+        // An ordinary rest. The fast half sweeps every `fastCycle` seconds, so
+        // it, and not the ninety-second drain, sets the rate.
+        let ordinary = RestBar.tickInterval(total: 90)
+        #expect(abs(ordinary - RestBar.fastCycle / RestBar.stepsPerSweep) < 0.0001)
+        // Which is about three times a second, not fifteen.
+        #expect(ordinary > 1.0 / 4)
+        #expect(ordinary < 1.0 / 2.5)
+    }
+
+    @Test func aLongRestIsReadNoMoreOftenThanAShortOne() {
+        // The fast half is the same speed whatever the rest's length, so the
+        // rate stops depending on it. It used to: a thirty-second rest was
+        // read seven times a second and a three-minute one twice.
+        #expect(RestBar.tickInterval(total: 60) == RestBar.tickInterval(total: 300))
+    }
+
+    @Test func theCounterNeverSkipsASecond() {
+        // Whole seconds beside the wheels, so twice a second is the slowest
+        // the clock may ever be read — including for a rest so long that
+        // nothing on the bar would need it.
+        for total in [15.0, 90.0, 600.0, 36_000.0] {
+            #expect(RestBar.tickInterval(total: total) <= 0.5)
+        }
+        #expect(RestBar.tickInterval(total: 0) <= 0.5)
+    }
+
+    @Test func aVeryShortRestCannotSpinTheMainThread() {
+        // A one-second rest would want the clock read every 20 ms; the floor
+        // says fifteen times a second and no more.
+        #expect(RestBar.tickInterval(total: 1) >= 1.0 / 15)
+        #expect(RestBar.tickInterval(total: 0.001) >= 1.0 / 15)
     }
 }

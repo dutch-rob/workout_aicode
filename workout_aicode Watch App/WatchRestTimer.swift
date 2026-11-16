@@ -20,9 +20,13 @@ import UserNotifications
 //
 // It runs on the log screen, as on the phone: no screen of its own. The Watch
 // used to cover everything with a countdown three seconds after the last turn
-// of the crown; now a red bar fills the left edge of the screen the moment a
-// set ends and drains away across the rest, with the seconds over the wheels.
-// The wheels stay usable throughout, and turning one starts the rest again.
+// of the crown; now a bar fills the left edge of the screen the moment a set
+// ends and drains away across the rest, with the seconds over the wheels. The
+// wheels stay usable throughout, and turning one starts the rest again.
+//
+// The bar is split lengthwise: the left half drains across the whole rest, the
+// right half sweeps the same height every fifteen seconds, over and over, so
+// that something is always visibly moving. See `RestBar.fastFill`.
 //
 // Why a scheduled notification and not only a Timer: during a rest the wrist
 // is down and the app is not frontmost, so a running timer in a suspended app
@@ -58,6 +62,12 @@ final class WatchRestTimer: ObservableObject {
     /// is in `RestBar` — which the phone's countdown uses as well.
     var restFill: CGFloat {
         RestBar.fill(endsAt: endsAt, now: tick, total: TimeInterval(totalSeconds))
+    }
+
+    /// Where the bar's fast half stands — see `RestBar.fastFill`. The same
+    /// `tick` drives both halves, so the extra half costs no extra clock.
+    var fastFill: CGFloat {
+        RestBar.fastFill(endsAt: endsAt, now: tick)
     }
 
     var remainingSeconds: Int { RestBar.remaining(endsAt: endsAt, now: tick) }
@@ -174,21 +184,12 @@ final class WatchRestTimer: ObservableObject {
         WatchRestHaptics.strong(taps: WatchSessionManager.shared.restTaps)
     }
 
-    /// How often the clock is re-read, taken from how fast the bar actually
-    /// moves: one tick per point of travel, and no faster.
-    ///
-    /// This was a flat fifteen times a second. A ninety-second rest drains
-    /// about two points a second down a watch screen, so fourteen of every
-    /// fifteen of those ticks redrew the bar in the same place — all on the
-    /// main thread, some of it inside the few hundred milliseconds a wheel
-    /// spends settling onto a number.
-    ///
-    /// Never slower than twice a second: the counter beside the wheels counts
-    /// whole seconds and must not skip one.
+    /// How often the clock is re-read. The arithmetic, and the three things
+    /// that have a say in it, are in `RestBar.tickInterval` — where they can be
+    /// held still by tests, which a rate this file worked out for itself could
+    /// not be.
     private var tickInterval: TimeInterval {
-        guard totalSeconds > 0 else { return 0.5 }
-        let screenPoints = 220.0
-        return min(0.5, max(1.0 / 15, Double(totalSeconds) / screenPoints))
+        RestBar.tickInterval(total: TimeInterval(totalSeconds))
     }
 
     /// Runs only while a rest does — this is a watch battery.
@@ -296,6 +297,18 @@ enum WatchRestHaptics {
 /// The rest as a bar up the left edge of the screen, full at the start and
 /// drained away by the end.
 ///
+/// SPLIT LENGTHWISE, in two colours. The left half is the rest itself, draining
+/// once across the whole of it; the right half sweeps the same height every
+/// `RestBar.fastCycle` seconds and starts again from the top. A rest drains
+/// about two points a second, which is honest and unreadable — reported from a
+/// real workout as the bar being too slow to tell from a stopped one — and the
+/// fast half is what answers "is this still running?" at a glance.
+///
+/// Red and orange rather than something starker. The bar is drawn additively
+/// over the row labels (see below), so anything approaching white in it would
+/// take the labels with it; two warm colours keep the labels readable straight
+/// through both halves while still being told apart at ten points wide.
+///
 /// It used to be a wash of white at 22% over the WHOLE screen, including the
 /// wheels, and then a 5pt white sliver in the margin beside them. It is now
 /// wide enough to run under the "weight" and "reps" labels, for three reasons:
@@ -366,10 +379,16 @@ struct WatchRestDrain: ViewModifier {
                 // before it began draining. A Canvas has no animatable
                 // geometry: the closure runs, the rectangle is where it is.
                 Canvas { [inset = topRowBottom ?? 0] context, size in
-                    guard let rect = RestBar.bar(in: size.height, inset: inset,
-                                                 width: Self.barWidth,
-                                                 fill: timer.restFill) else { return }
-                    context.fill(Path(rect), with: .color(.red))
+                    let halves = RestBar.halves(in: size.height, inset: inset,
+                                                width: Self.barWidth,
+                                                fill: timer.restFill,
+                                                fastFill: timer.fastFill)
+                    if let slow = halves.slow {
+                        context.fill(Path(slow), with: .color(.red))
+                    }
+                    if let fast = halves.fast {
+                        context.fill(Path(fast), with: .color(.orange))
+                    }
                 }
                 .blendMode(.plusLighter)
                 .allowsHitTesting(false)
