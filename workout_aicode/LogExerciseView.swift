@@ -680,13 +680,15 @@ struct LogExerciseView: View {
     /// which is where an empty log comes from (one is in the user's own
     /// history, from a tap on "log" before touching anything). What is on
     /// screen is what gets written.
+    ///
+    /// The rule itself is `LoggedSets`, in Shared, because the Watch's log
+    /// button has to write exactly the same thing and for a while did not.
+    /// What stays here is the only part that is this device's: where the
+    /// number of sets comes from, which is a different type on each.
     private func displayed(_ buffer: [[Int]], for exercise: ExerciseDef,
                            default fallback: Int) -> [Int] {
-        let count = max(1, exercise.numberOfSeries)
-        let row = currentIndex < buffer.count ? buffer[currentIndex] : []
-        return (0..<count).map { series in
-            series < row.count ? row[series] : fallback
-        }
+        LoggedSets.displayed(buffer, at: currentIndex,
+                             sets: exercise.numberOfSeries, default: fallback)
     }
 
     /// Why a set cannot be logged yet, or nil when it can.
@@ -698,7 +700,7 @@ struct LogExerciseView: View {
         // what the wheels open on next time, for this exercise and for the
         // next device that syncs it.
         let reps = displayed(self.reps, for: exercise, default: 0)
-        if !reps.contains(where: { $0 > 0 }) {
+        if !LoggedSets.hasRepetitions(reps) {
             return "Set the repetitions before logging — a set with none is not a set."
         }
         return nil

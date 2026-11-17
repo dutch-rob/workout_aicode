@@ -185,6 +185,16 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   so in the view's own space the finger has barely moved and the
   horizontal-fling guard — the line that throws page swipes away — measured
   nearly nothing. It had been that way since the gesture was written.
+* `Shared/LoggedSets.swift` is **what the log button writes**: one value per
+  set the exercise has, taken from what the wheels SHOW rather than from the
+  buffer behind them, which only holds the sets whose wheels were actually
+  turned. The weight wheel and the reps wheel of one set are independent, so
+  sending the raw buffers could write a different number of each — and every
+  reader of a log takes the two as pairs. The phone was given this rule in
+  October 2026 and the Watch was not, which left the Watch the only device
+  that could still do it: Butterfly, 9 November 2026, went down with two
+  weights and three reps, and then seeded the next session's wheels. Seven
+  logs in that export are like it. Both devices call this now.
 * `Shared/RestBar.swift` is the **draining rest bar**, on both the phone and
   the Watch, as functions of two dates and nothing else. It must stay a
   computation rather than becoming state: the crown reports every value it

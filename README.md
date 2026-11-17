@@ -48,6 +48,8 @@ Tap a workout on the start screen. The first exercise appears with a row of whee
 
 After finishing a set, tap **log, next** to record the exercise and move to the next one. On the last exercise that button reads **log, end**, which records it and takes you back to the start screen.
 
+A set with no repetitions is not a set, so the button waits until at least one of the repetition wheels is off nought. What then goes into the log is every set on screen, a set you left alone included — which is why a workout where you stopped after two of three sets shows a third set of nought. The *logs* tab can be corrected afterwards on a Mac if you would rather it were not there.
+
 ### Which set you are on
 Three sets is one more than you can keep track of while you are out of breath, so the app does it for you: a column of wheels turns **yellow** once it believes you have done that set. It works out from the wheels themselves, with no button to press, and it is only a reminder — what gets logged is still everything on screen when you press **log**. Yellow rather than the obvious green, because on the Watch green is already taken: watchOS rings whichever wheel the Digital Crown is pointed at in it.
 
@@ -155,7 +157,7 @@ Because the screen is small, the Watch shows **one** row of wheels at a time. Th
 
 If the rest timer is on, it runs here too — see [The rest timer](#the-rest-timer).
 
-The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one), **quit** ends the workout, and **list** jumps straight to any exercise, with a ✓ against the ones already logged. The last entry in that list switches it between the whole workout and only what's left, the same as on the phone — handy on a small screen, where the exercises still to do can otherwise be off the bottom. Swiping left and right moves between exercises without logging, exactly as on the phone.
+The buttons work like the iPhone: **log** records the exercise and moves on (**end** on the last one; **reps?** while every repetition wheel is still on nought, for the same reason as on the phone), **quit** ends the workout, and **list** jumps straight to any exercise, with a ✓ against the ones already logged. The last entry in that list switches it between the whole workout and only what's left, the same as on the phone — handy on a small screen, where the exercises still to do can otherwise be off the bottom. Swiping left and right moves between exercises without logging, exactly as on the phone.
 
 ### One row of wheels or two
 Settings › *Wheels on the Watch*.

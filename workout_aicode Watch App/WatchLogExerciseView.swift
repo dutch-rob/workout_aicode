@@ -769,10 +769,16 @@ struct WatchLogExerciseView: View {
             Button {
                 logAndNext(exercise)
             } label: {
-                Text(isLastUnlogged ? "end" : "log").frame(maxWidth: .infinity)
+                // "reps?" rather than a grey "log": a disabled button with no
+                // word for what it wants is a button that looks broken, and
+                // there is no room on a wrist for the sentence the phone puts
+                // under the exercise name.
+                Text(canLog(exercise) ? (isLastUnlogged ? "end" : "log") : "reps?")
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.mini)
+            .disabled(!canLog(exercise))
             }
 
             Button("quit") {
@@ -846,10 +852,16 @@ struct WatchLogExerciseView: View {
         let measured = exercise.isAerobic
             ? WatchAerobicWorkout.shared.takeLastSummary(for: exercise.name)
             : nil
+        // What the WHEELS SHOW, one value per set the exercise has — not the
+        // raw buffer, which only holds the sets whose wheels were actually
+        // turned, and holds a different number of each because the weight
+        // wheel and the reps wheel of one set are independent. See
+        // Shared/LoggedSets for the log this cost and how it travels.
         session.logSet(workoutId: workout.id,
                        exerciseId: exercise.id,
-                       weights: weights[safe: currentIndex] ?? [],
-                       reps: reps[safe: currentIndex] ?? [],
+                       weights: displayed(weights, for: exercise,
+                                          default: exercise.lowestGrams),
+                       reps: displayed(reps, for: exercise, default: 0),
                        aerobic: exercise.isAerobic ? (measured
                             ?? WatchAerobicWorkout.Summary(
                                 durationSeconds: durationSeconds(at: currentIndex),
@@ -1003,6 +1015,30 @@ struct WatchLogExerciseView: View {
         return Array(stride(from: exercise.lowestGrams,
                             through: exercise.highestGrams,
                             by: increment))
+    }
+
+    /// What the wheels are SHOWING for this exercise, one value per set — the
+    /// same rule as the phone's `displayed`, and now the same code. Only the
+    /// type the set count is read off differs between the two.
+    private func displayed(_ buffer: [[Int]], for exercise: SyncExercise,
+                           default fallback: Int) -> [Int] {
+        LoggedSets.displayed(buffer, at: currentIndex,
+                             sets: exercise.numberOfSeries, default: fallback)
+    }
+
+    /// Whether this exercise has anything to log yet.
+    ///
+    /// The phone's rule, which the Watch never had: nought repetitions is not
+    /// a set, and "log" on a screen nobody has touched would write a row of
+    /// them — then hand that row to the next session's wheels, since those are
+    /// seeded from the last log. An aerobic exercise is not asked, because its
+    /// log holds a measured session rather than sets.
+    ///
+    /// Rarely false in practice: the wheels open on the last session's
+    /// numbers, so only an exercise never logged before starts at nought.
+    private func canLog(_ exercise: SyncExercise) -> Bool {
+        if exercise.isAerobic { return true }
+        return LoggedSets.hasRepetitions(displayed(reps, for: exercise, default: 0))
     }
 
     private func ensureCapacity(_ arr: inout [Int], upTo index: Int, fill: Int) {
