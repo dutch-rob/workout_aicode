@@ -8,9 +8,22 @@ import SwiftData
 // to; here there is width for the sets to sit out in a row where they can be
 // read across, which is the whole reason to look at a log on a Mac.
 //
-// Read-only, deliberately. Logging happens on the phone and the Watch, and a
-// Mac that could quietly rewrite last Tuesday would make the history a
-// different kind of thing.
+// Read-only to look at, deliberately: logging happens on the phone and the
+// Watch, and a Mac that could quietly rewrite last Tuesday would make the
+// history a different kind of thing. Nothing here writes anything.
+//
+// Clicking a row is the way IN to the editor rather than an edit. It takes the
+// copy of the whole log that `MacEditLogsView` cannot open without, starts
+// draft mode, and opens that screen with this row's first set waiting for the
+// keyboard. The toolbar button is the same thing with nothing picked out.
+//
+// So the "keep or discard?" question is still asked once, on purpose, on the
+// way out of a sheet — see the note at the top of MacEditLogsView. Editing in
+// place here would have had nowhere to ask it: this is a sidebar selection, and
+// leaving it is a click on "Graphs", a closed window or ⌘Q, none of which can
+// be interrupted to put a question. What the click fixes is the part that was
+// actually in the way — arriving in a flat table of every row ever logged and
+// having to find this one again.
 
 struct MacLogsView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
@@ -34,6 +47,8 @@ struct MacLogsView: View {
     @Environment(\.modelContext) private var context
     @State private var editing: LogEditSession?
     @State private var couldNotOpen: String?
+    /// The row the pointer is over, so its pencil is the only one showing.
+    @State private var hovered: UUID?
 
     private var exerciseNames: [UUID: String] {
         Dictionary(exercises.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
@@ -146,7 +161,9 @@ struct MacLogsView: View {
         .navigationTitle("Logs")
         .toolbar {
             ToolbarItem {
-                Button(action: openEditor) {
+                Button {
+                    openEditor()
+                } label: {
                     Label("Edit logs", systemImage: "square.and.pencil")
                         // With its words, not just the pencil. A macOS toolbar
                         // shows icon-only by default, and an unlabelled icon is
@@ -172,12 +189,13 @@ struct MacLogsView: View {
     /// The copy is taken BEFORE the screen opens, and the screen does not open
     /// without one. An editor with no way back is not a thing to offer for the
     /// only records in this app that cannot be re-made.
-    private func openEditor() {
+    private func openEditor(focusing log: UUID? = nil) {
         let wasInDraft = DraftMode.isOn(in: context)
         do {
             let snapshot = try LogEditing.snapshot(in: context)
             DraftMode.start(in: context)
-            editing = LogEditSession(wasInDraft: wasInDraft, snapshot: snapshot)
+            editing = LogEditSession(wasInDraft: wasInDraft, snapshot: snapshot,
+                                     focus: log)
         } catch {
             couldNotOpen = "Your logs could not be copied, so there would be no way to undo an edit. \(error.localizedDescription)"
         }
@@ -323,8 +341,11 @@ struct MacLogsView: View {
                                     sets(entry.log)
                                 }
                                 Spacer(minLength: 0)
+                                editPencil(entry.log.id)
                             }
                             .padding(.vertical, 2)
+                            .opensTheEditor(row: entry.log.id, hovered: $hovered,
+                                            open: { openEditor(focusing: $0) })
                         }
                     }
                 } header: {
@@ -357,8 +378,30 @@ struct MacLogsView: View {
                 sets(log)
             }
             Spacer(minLength: 0)
+            editPencil(log.id)
         }
         .padding(.vertical, 2)
+        .opensTheEditor(row: log.id, hovered: $hovered, open: { openEditor(focusing: $0) })
+    }
+
+    /// The pencil at the right of the row the pointer is over.
+    ///
+    /// The row itself is what you click; this is what SAYS so. Nothing else on
+    /// a screen that only shows things suggests a row can be opened, and the
+    /// toolbar button already went unnoticed once for exactly that reason —
+    /// see the note on it above. One at a time, and the space is kept whether
+    /// it is showing or not, so no row moves as the pointer crosses it.
+    private func editPencil(_ id: UUID) -> some View {
+        Button {
+            openEditor(focusing: id)
+        } label: {
+            Image(systemName: "square.and.pencil")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .opacity(hovered == id ? 1 : 0)
+        .help("Correct this row")
+        .frame(width: 22)
     }
 
     /// One column per set: the weight over the reps, coloured against the last
@@ -403,9 +446,17 @@ struct MacLogsView: View {
             }
         }
         // Said once at the head of the row rather than on every set.
+        //
+        // `fixedSize`, or the two lines collapse into a truncated "w…" lying
+        // across the numbers. An overlay is offered the size of what it is
+        // over, and the row of sets is no longer quite two lines of caption2
+        // tall; a Text given less height than its lines need drops to one and
+        // marks the loss with an ellipsis. It wants its own size, and it is
+        // offset clear of the numbers anyway.
         .overlay(alignment: .leading) {
             Text("w\nr")
                 .macFont(.caption2).foregroundStyle(.secondary)
+                .fixedSize()
                 .offset(x: -14)
         }
     }
@@ -446,5 +497,32 @@ struct MacLogsView: View {
             .filter { $0.element > 0 }
             .map { "Z\($0.offset + 1) \(minutesSeconds($0.element))" }
             .joined(separator: " · ")
+    }
+}
+
+// MARK: - A log row that opens the editor
+
+private extension View {
+    /// Makes a row of the log clickable, and keeps `hovered` pointing at the
+    /// row the pointer is over so only that row shows its pencil.
+    ///
+    /// Takes the row's ID rather than its log, for the reason the editor's
+    /// `Row` exists: SwiftData tears a deleted object's backing data away at
+    /// once, and a closure that reads a property off one is a closure waiting
+    /// for a fault. A UUID cannot fault.
+    ///
+    /// A single click, not a double. This opens a screen; it commits nothing,
+    /// and the screen it opens can be left without keeping a thing. And
+    /// `contentShape` is what makes the empty parts of the row answer too —
+    /// without it only the text is clickable, and a row that responds in some
+    /// places and not others feels broken rather than careful.
+    func opensTheEditor(row id: UUID, hovered: Binding<UUID?>,
+                        open: @escaping (UUID) -> Void) -> some View {
+        contentShape(Rectangle())
+            .onTapGesture { open(id) }
+            .onHover { inside in
+                if inside { hovered.wrappedValue = id }
+                else if hovered.wrappedValue == id { hovered.wrappedValue = nil }
+            }
     }
 }

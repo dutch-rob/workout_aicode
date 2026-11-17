@@ -185,6 +185,15 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   so in the view's own space the finger has barely moved and the
   horizontal-fling guard — the line that throws page swipes away — measured
   nearly nothing. It had been that way since the gesture was written.
+* `workout_aicode_MacOS/MacLogsView.swift` shows the logs and **cannot write
+  one**: clicking a row opens the editor on it rather than editing in place.
+  Editing in place would have had nowhere to ask "keep or discard?" — the Logs
+  screen is a sidebar selection, and leaving it is a click on "Graphs", a closed
+  window or ⌘Q, none of which can be interrupted with a question. The editor
+  answers that by being a sheet, which is left once, on purpose. So the click
+  takes the snapshot, starts draft mode, and hands the editor the row to open
+  on; what it removes is arriving in a flat table of every row ever logged and
+  having to find that row again.
 * `Shared/LoggedSets.swift` is **what the log button writes**: one value per
   set the exercise has, taken from what the wheels SHOW rather than from the
   buffer behind them, which only holds the sets whose wheels were actually
