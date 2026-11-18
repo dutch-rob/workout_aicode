@@ -28,6 +28,13 @@ import SwiftData
 // ever undoes things CREATED while drafting, and this screen creates nothing.
 // Correcting a set that was logged last Tuesday was never something leaving
 // draft would have put back.
+//
+// The phone has this screen too, and it is a different screen: a Form in a
+// NavigationStack with a decimal keypad, where this is a 430pt panel with a
+// Grid of pop-up buttons. What they share is `LogRowDraft` — what gets read
+// off a log and what writing it back does to the weights beside it, the
+// assisted machine's number and the trailing empty sets. The layout is each
+// platform's own; the data is not.
 
 struct MacEditOneLogView: View {
     let logId: UUID
@@ -42,14 +49,9 @@ struct MacEditOneLogView: View {
     @Query private var assistedResults: [AssistedResult]
 
     // What is being typed. Read off the log when the screen opens and written
-    // back on Save; the log itself is not touched in between.
+    // back on Save; the log itself is not touched in between. See LogRowDraft.
     @State private var loaded = false
-    @State private var date = Date()
-    @State private var workoutId = UUID()
-    @State private var exerciseId = UUID()
-    /// GRAMS, like everything stored. The fields show the user's unit.
-    @State private var grams: [Int] = []
-    @State private var reps: [Int] = []
+    @State private var draft = LogRowDraft.empty
 
     /// Which set's weight has the keyboard. Asked for the moment the screen
     /// appears rather than on the next turn of the run loop — see
@@ -61,7 +63,7 @@ struct MacEditOneLogView: View {
     }
 
     private var exercise: ExerciseDef? {
-        exercises.first { $0.id == exerciseId }
+        exercises.first { $0.id == draft.exerciseId }
     }
 
     /// A ride has no sets, only a duration, and this screen does not offer to
@@ -87,9 +89,9 @@ struct MacEditOneLogView: View {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 GridRow {
                     Text("Workout").gridColumnAlignment(.trailing)
-                    Picker("", selection: $workoutId) {
-                        if !workouts.contains(where: { $0.id == workoutId }) {
-                            Text("(missing)").tag(workoutId)
+                    Picker("", selection: $draft.workoutId) {
+                        if !workouts.contains(where: { $0.id == draft.workoutId }) {
+                            Text("(missing)").tag(draft.workoutId)
                         }
                         ForEach(workouts) {
                             Text($0.name.isEmpty ? "(unnamed)" : $0.name).tag($0.id)
@@ -103,9 +105,9 @@ struct MacEditOneLogView: View {
                 }
                 GridRow {
                     Text("Exercise")
-                    Picker("", selection: $exerciseId) {
-                        if !exercises.contains(where: { $0.id == exerciseId }) {
-                            Text("choose…").tag(exerciseId)
+                    Picker("", selection: $draft.exerciseId) {
+                        if !exercises.contains(where: { $0.id == draft.exerciseId }) {
+                            Text("choose…").tag(draft.exerciseId)
                         }
                         ForEach(exercises) {
                             Text($0.name.isEmpty ? "(unnamed)" : $0.name).tag($0.id)
@@ -119,7 +121,7 @@ struct MacEditOneLogView: View {
                 }
                 GridRow {
                     Text("When")
-                    DatePicker("", selection: $date).labelsHidden()
+                    DatePicker("", selection: $draft.date).labelsHidden()
                 }
             }
             .macFont(.callout)
@@ -161,7 +163,7 @@ struct MacEditOneLogView: View {
             }
             .macFont(.caption).foregroundStyle(.secondary)
 
-            ForEach(grams.indices, id: \.self) { i in
+            ForEach(draft.grams.indices, id: \.self) { i in
                 HStack(spacing: 8) {
                     Text("Set \(i + 1)")
                         .macFont(.callout).foregroundStyle(.secondary)
@@ -181,9 +183,8 @@ struct MacEditOneLogView: View {
             }
 
             Button {
-                grams.append(grams.last ?? 0)
-                reps.append(0)
-                focused = grams.count - 1
+                draft.addSet()
+                focused = draft.grams.count - 1
             } label: {
                 Label("One more set", systemImage: "plus.circle")
             }
@@ -213,21 +214,15 @@ struct MacEditOneLogView: View {
 
     /// Reads in the user's unit, keeps grams. A set at no weight is still a
     /// set, so nothing is dropped here — the trailing empties go on Save,
-    /// where the big table trims them too.
+    /// where the big table trims them too. See LogRowDraft.
     private func weightBinding(_ i: Int) -> Binding<Double> {
-        Binding(get: { unit.display(grams: i < grams.count ? grams[i] : 0) },
-                set: { value in
-                    guard i < grams.count else { return }
-                    grams[i] = unit.grams(from: max(0, value))
-                })
+        Binding(get: { draft.weight(i, in: unit) },
+                set: { draft.setWeight($0, at: i, in: unit) })
     }
 
     private func repsBinding(_ i: Int) -> Binding<Int> {
-        Binding(get: { i < reps.count ? reps[i] : 0 },
-                set: { value in
-                    guard i < reps.count else { return }
-                    reps[i] = max(0, value)
-                })
+        Binding(get: { draft.repetitions(i) },
+                set: { draft.setRepetitions($0, at: i) })
     }
 
     /// Once. `onAppear` runs again when the window comes back to the front,
@@ -235,36 +230,13 @@ struct MacEditOneLogView: View {
     private func load() {
         guard !loaded, let log else { return }
         loaded = true
-        date = log.date
-        workoutId = log.workoutId
-        exerciseId = log.exerciseId
-        let stored = LogEditing.grams(for: log, in: context)
-        let count = max(stored.count, log.reps.count)
-        grams = (0..<count).map { $0 < stored.count ? stored[$0] : 0 }
-        reps = (0..<count).map { $0 < log.reps.count ? log.reps[$0] : 0 }
-        focused = grams.isEmpty ? nil : 0
+        draft = LogRowDraft.read(log, in: context)
+        focused = draft.grams.isEmpty ? nil : 0
     }
 
     private func save() {
         guard let log else { return }
-        log.date = date
-        log.workoutId = workoutId
-        log.exerciseId = exerciseId
-
-        if aerobicSeconds == nil {
-            LogEditing.extend(log, toSets: grams.count, in: context)
-            for i in grams.indices {
-                LogEditing.setGrams(grams[i], at: i, for: log, in: context)
-                // On an assisted machine the weight here is what was lifted;
-                // the machine's own number follows it.
-                LogEditing.realignAssisted(log: log, set: i, in: context)
-                log.reps[i] = i < reps.count ? reps[i] : 0
-            }
-            // A set with nothing in it at the end of a row is a column the
-            // table would keep offering for ever.
-            LogEditing.trimEmptyTrailingSets(log, in: context)
-        }
-
+        draft.write(to: log, isAerobic: aerobicSeconds != nil, in: context)
         StoreSave.save(context)
         dismiss()
     }

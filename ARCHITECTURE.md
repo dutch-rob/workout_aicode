@@ -203,6 +203,25 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   Measured on a hundred rows, a click reaches a typeable field in 0.10s
   against the table's 0.37s, and the table's number grows with the log while
   the one-row screen's does not.
+* **The phone has the small editor too, and it is a different screen.**
+  `workout_aicode/EditOneLogView.swift` is a Form in a NavigationStack with a
+  number pad; `MacEditOneLogView` is a 430pt panel with a Grid of pop-up
+  buttons. What they share is `Shared/LogRowDraft.swift`: what is read off a
+  log and what writing it back does to the weights beside it, to the assisted
+  machine's own number and to the trailing empty sets. Sharing the LAYOUT
+  would have meant one of the two being wrong; not sharing the DATA is how
+  `LoggedSets` happened. Tested in `LogRowDraftTests`, against a real store.
+* **The phone's log list folds and sorts with the Mac's code.**
+  `LogsListView` used to group logs itself, with its own copy of the one-hour
+  session rule — a second answer to "what is a session" that nothing kept in
+  step with `Shared/StatsPresentation.swift`. It now calls `LogSessions` for
+  grouping, filtering, ordering and the by-exercise view, exactly as
+  `MacLogsView` does, and draws the result its own way: two narrow columns
+  with the sets stacked w-over-r, because that is what fits on a phone.
+  The headers are ordinary rows rather than `Section` headers — a folded-away
+  section is a header with no rows, and a `List` gives it the same generous
+  gap either way, which left twenty-six headers spread down a screen and a
+  half of black. `listSectionSpacing(.compact)` did not change it.
 * `Shared/LoggedSets.swift` is **what the log button writes**: one value per
   set the exercise has, taken from what the wheels SHOW rather than from the
   buffer behind them, which only holds the sets whose wheels were actually
