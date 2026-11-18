@@ -64,6 +64,27 @@ final class WatchSessionManager: NSObject, ObservableObject {
 
     private override init() {
         super.init()
+        #if DEBUG
+        // A screenshot run talks to nobody.
+        //
+        // The Watch simulator is PAIRED with the iPhone simulator, and that
+        // pairing is a working WatchConnectivity link, not a decoration. The
+        // script shoots the phone first and the Watch second, so the phone was
+        // still there to answer `queryDriver` — and one "yes" puts this Watch
+        // into `.paused`, which draws "Active on iPhone" over whatever screen
+        // was asked for. The workouts capture came out as a second picture of
+        // the hand-over prompt.
+        //
+        // Nothing in a demo run needs the link: the data is seeded by
+        // `loadDemoData`, the rest countdown and the heart rate are shown
+        // directly, and the hand-over prompt has `-SRWScreen paused` to ask
+        // for it. Not activating leaves every send guarded by
+        // `activationState == .activated` to do nothing, and `queryDriver`
+        // to answer "not driving" without asking. `ingest` keeps its own
+        // guard: no context can arrive now, and it costs nothing to say so
+        // in both places.
+        if DemoMode.isEnabled { return }
+        #endif
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
