@@ -84,10 +84,33 @@ enum MacDemoData {
         let lower = define(legDay)
 
 
+        // A group each, and every workout in one.
+        //
+        // Not decoration: `WorkoutGrouping.canEnable` will not let grouping be
+        // switched on until no workout is without a group, so a seed that made
+        // none could only ever be photographed in a state the app itself
+        // refuses — and on a Mac with grouping already on, the workouts screen
+        // said "Scheduling needs a group" in orange, in the picture that went
+        // to Apple. Whether the row is drawn at all is the Mac's own setting
+        // and is deliberately left alone here: with grouping off there is no
+        // row, with it on there is a group to show, and neither needs this
+        // run to change what the user has set.
+        //
+        // One group per workout rather than one holding both, because a group
+        // means workouts that are the same session done two ways — the two
+        // gyms in `WorkoutGrouping` — and "Upper body" and "Leg day" are not
+        // that. This is what somebody who trains at one gym would have.
+        let upperGroup = WorkoutGroupDef(name: "Upper body", sortIndex: 0)
+        let legGroup = WorkoutGroupDef(name: "Leg day", sortIndex: 1)
+        context.insert(upperGroup)
+        context.insert(legGroup)
+
         let upperWorkout = WorkoutDef(name: "Upper body",
-                                      exerciseOrder: upper.map(\.0.id), sortIndex: 0)
+                                      exerciseOrder: upper.map(\.0.id), sortIndex: 0,
+                                      groupId: upperGroup.id)
         let legWorkout = WorkoutDef(name: "Leg day",
-                                    exerciseOrder: lower.map(\.0.id), sortIndex: 1)
+                                    exerciseOrder: lower.map(\.0.id), sortIndex: 1,
+                                    groupId: legGroup.id)
         context.insert(upperWorkout)
         context.insert(legWorkout)
 
