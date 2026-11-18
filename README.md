@@ -13,7 +13,7 @@ phone ⇄ Watch contract, and why the project is called `workout_aicode` inside.
 ---
 
 <!-- INFO_SCREEN_START -->
-SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so tracking an exercise is just some flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part-way through. There is an optional rest timer that counts the rest between your sets and taps your wrist when it is over, so you can pocket the phone in between. Cardio fits alongside the weights: an aerobic exercise counts down instead of counting sets, and with an Apple Watch it runs as a real Apple workout, showing your heart rate zone and landing in Fitness. Once you have some history it estimates how your strength is trending per exercise, and shows you which exercises are moving and which are stuck. Everything stays on your devices unless you turn something on yourself.
+SetsRepsWheels logs the sets, weights and repetitions of weight training. All the sets of an exercise are on one screen, and you set the numbers with picker wheels that start where you left them the last time you did that exercise — so tracking an exercise is just some flicks and a tap. There is a companion Apple Watch app that logs the same workout at the machine, and you can hand a workout over between your iPhone and your Watch part-way through. There is an optional rest timer that counts the rest between your sets and taps your wrist when it is over, so you can pocket the phone in between. A set that went down wrong can be put right afterwards by tapping it in your log. Cardio fits alongside the weights: an aerobic exercise counts down instead of counting sets, and with an Apple Watch it runs as a real Apple workout, showing your heart rate zone and landing in Fitness. Once you have some history it estimates how your strength is trending per exercise, and shows you which exercises are moving and which are stuck. Everything stays on your devices unless you turn something on yourself.
 
 I made this app for myself because I wanted logging to be quicker than in the apps I tried. It is deliberately bare-bones. I hope you find it useful too (though it is probably not the best workout app for everybody).
 
@@ -48,7 +48,7 @@ Tap a workout on the start screen. The first exercise appears with a row of whee
 
 After finishing a set, tap **log, next** to record the exercise and move to the next one. On the last exercise that button reads **log, end**, which records it and takes you back to the start screen.
 
-A set with no repetitions is not a set, so the button waits until at least one of the repetition wheels is off nought. What then goes into the log is every set on screen, a set you left alone included — which is why a workout where you stopped after two of three sets shows a third set of nought. The *logs* tab can be corrected afterwards on a Mac if you would rather it were not there.
+A set with no repetitions is not a set, so the button waits until at least one of the repetition wheels is off nought. What then goes into the log is every set on screen, a set you left alone included — which is why a workout where you stopped after two of three sets shows a third set of nought. The *logs* tab can be corrected afterwards — tap the row and put the numbers right — if you would rather it were not there.
 
 ### Which set you are on
 Three sets is one more than you can keep track of while you are out of breath, so the app does it for you: a column of wheels turns **yellow** once it believes you have done that set. It works out from the wheels themselves, with no button to press, and it is only a reminder — what gets logged is still everything on screen when you press **log**. Yellow rather than the obvious green, because on the Watch green is already taken: watchOS rings whichever wheel the Digital Crown is pointed at in it.
@@ -266,6 +266,10 @@ The **logs/stats** button opens four tabs.
 
 **logs** shows your logged sets, most recent first, with each set coloured against the same set of the last time you did that exercise. A number is green when it went up and the other one did not go down, and red when it went down and the other one did not go up. So more weight for more reps is green on both, and less for fewer is red on both — but more weight for fewer reps is a trade rather than an improvement, and neither number is coloured, because which side of it came out ahead is not something the app can know.
 
+The sets are grouped into the sessions they were done in, and the heading of a session folds it away. **Workout / Exercise** switches between reading the log by session and reading it by exercise — one exercise and every time you have done it, which is the question you have standing in front of a machine. The field above narrows both, by exercise name or workout name, and the arrows beside it put the list in date or name order.
+
+**Tap a row to correct it.** That opens that row on its own: its workout, its exercise, when it was, and the weight and repetitions of each set. Nothing is changed until you save, so **Cancel** leaves the log exactly as it was. Adding a set that went unlogged is there too, and a set left empty at the end is dropped when you save. Deleting a whole row, or adding one that was never logged at all, is on the Mac.
+
 **graphs** draws one chart per exercise: a dot for each workout, and a straight trendline through them. A graph appears once you have logged that exercise in at least 8 workouts, so the tab fills in gradually; below the graphs you will see which exercises are still short and by how much.
 
 **progress** lists those same exercises ordered from least to most progress, so whatever is falling behind is at the top. Each line shows the trend per week, the best estimate from your last workout, and how many hard sets that exercise usually takes.
@@ -276,7 +280,7 @@ The **logs/stats** button opens four tabs.
    - import JSON — read back a file in the same format (easiest starting from one you exported). Files exported by older versions still read; they simply have none of the extra detail.
    - undo import — restore the previous data if an import did not do what you wanted
 
-Exports are sent wherever you choose. Editing an exported JSON file and importing it back is currently the only way to correct a mistake in your log; I intend to make that easier.
+Exports are sent wherever you choose. A mistake in your log no longer needs a round trip through a file: tap the row on the *logs* tab, or click it on the Mac. Removing a whole row, or adding one that was never logged at all, is still the Mac's — or an edited export, read back in.
 
 Picking a file to import does not change anything by itself. The file is read
 and described first — what it holds, when it was written and which app wrote

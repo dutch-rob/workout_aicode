@@ -77,6 +77,7 @@ enum MacInfoTopic: String, CaseIterable, Identifiable, Hashable {
             return [
                 "A workout is a named list of exercises in the order you do them — “PF A”, “Upper body”, whatever you call it. Your phone shows these on its start screen, and tapping one begins logging.",
                 "Choose a workout on the left to edit it. Drag to reorder; the order here is the order the wheels come up in at the gym.",
+                "A workout can also belong to a group — see Settings — which is what your calendar is named after when you train the same session at two gyms.",
                 "The panel on the right adds exercises. It offers the ones you have already defined, and a ready-made catalogue for anything you have not — building a workout is exactly when you notice a lift you have not set up yet. Open “Find by muscle” to pick from the body instead of from a list, which is easier when you know the muscle but not the name you gave it."
             ]
         case .exercises:
@@ -108,9 +109,10 @@ enum MacInfoTopic: String, CaseIterable, Identifiable, Hashable {
         case .settings:
             return [
                 "Settings are in the sidebar and in the app menu (⌘,).",
-                "Text size applies to this app only. macOS has no system-wide setting for it the way an iPhone does, and screens differ enough that the same size is small on one and large on another.",
+                "Most of these travel. The ones about your TRAINING rather than about a machine — the weight unit, the rest timer, carrying weights between workouts, what a new exercise starts with, the statistics options, scheduling, and the Watch's own preferences — are kept with your workouts and reach every device through iCloud. Setting one here sets it on your phone and your Watch.",
+                "Five stay on the device that set them, because they cannot sensibly travel: Apple Health sharing and where body weight comes from both hang off a permission each device grants for itself; which calendar events go in is an identifier that means nothing on another device; sharing anonymous data with the developer is each device's own consent to give; and the iCloud switch cannot travel through iCloud. Text size is a sixth — macOS has no system-wide setting for it the way an iPhone does, and screens differ enough that the same size is small on one and large on another.",
                 "The weight unit decides how weights are read out. Nothing is recalculated when you switch: weights are stored in a form that has no unit, so switching re-presents everything you have ever logged in the other one.",
-                "The numbers a new exercise starts with are kept per device, so what you set here applies to exercises made here."
+                "Workout groups are here as well: name them, rename them, remove one, and say which group each workout is in. A group is for a session you do more than one way — the same muscles at a different gym — and it is the name your calendar gets instead of whichever version you happened to do last. The switch that turns that on is on the iPhone, which is the device that owns the calendar; what the Mac does is make the groups for it."
             ]
         case .privacy:
             return [
