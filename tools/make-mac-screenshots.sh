@@ -45,6 +45,7 @@
 # Usage:  tools/make-mac-screenshots.sh
 #         SCREENS="logs workouts" tools/make-mac-screenshots.sh
 #         APPEARANCE=light tools/make-mac-screenshots.sh
+#         NOBUILD=1 tools/make-mac-screenshots.sh     # app just built in Xcode
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -75,10 +76,52 @@ if ! swiftc -O tools/srw-window-id.swift -o "$HELPER" 2>"$WORK/swiftc.log"; then
   exit 1
 fi
 
-APP=$(find ~/Library/Developer/Xcode/DerivedData -maxdepth 4 -name "SetsRepsWheels.app" \
-      -path "*Debug*" 2>/dev/null | head -1)
-if [ -z "$APP" ]; then
-  echo "No built Mac app found. Build the workout_aicode_MacOS scheme first." >&2
+# THE APP IS BUILT HERE, and the path comes from the build rather than from a
+# search. This used to hunt DerivedData for any Debug SetsRepsWheels.app and
+# take the first one, which silently shot WHATEVER WAS LYING AROUND: a run
+# after an edit produced pictures of the previous binary, looking exactly like
+# pictures of the new one. An afternoon went on a layout bug that had already
+# been fixed, and the only hint was two "different" screenshots with the same
+# checksum. Nothing in the output said the app was months old, because
+# nothing knew.
+#
+# `-showBuildSettings` is asked rather than guessed at for the same reason the
+# bundle identifier is read out of the app below: DerivedData paths, the
+# configuration's folder name and the product's own name are all Xcode's to
+# change.
+#
+# NOBUILD=1 skips the build for a quick reshoot of an app just built in Xcode.
+# The path still comes from the build settings, so it is still the app this
+# scheme builds and not one found somewhere.
+SCHEME="${SCHEME:-workout_aicode_MacOS}"
+SETTINGS=$(xcodebuild -project workout_aicode.xcodeproj -scheme "$SCHEME" \
+           -configuration Debug -destination 'platform=macOS' \
+           -showBuildSettings 2>"$WORK/settings.log")
+PRODUCTS=$(awk -F' = ' '/^ *BUILT_PRODUCTS_DIR = /{print $2; exit}' <<<"$SETTINGS")
+PRODUCT=$(awk -F' = ' '/^ *FULL_PRODUCT_NAME = /{print $2; exit}' <<<"$SETTINGS")
+if [ -z "$PRODUCTS" ] || [ -z "$PRODUCT" ]; then
+  echo "Could not ask Xcode where the $SCHEME scheme puts its app:" >&2
+  tail -20 "$WORK/settings.log" >&2
+  exit 1
+fi
+APP="$PRODUCTS/$PRODUCT"
+
+if [ "${NOBUILD:-0}" = "1" ]; then
+  echo "NOBUILD=1, so using whatever is already at $APP"
+else
+  echo "Building $SCHEME (Debug)…"
+  if ! xcodebuild -project workout_aicode.xcodeproj -scheme "$SCHEME" \
+       -configuration Debug -destination 'platform=macOS' \
+       build >"$WORK/build.log" 2>&1; then
+    echo "The Mac app did not build, so nothing was captured:" >&2
+    grep -E "error:|BUILD FAILED" "$WORK/build.log" | head -20 >&2
+    tail -5 "$WORK/build.log" >&2
+    exit 1
+  fi
+fi
+
+if [ ! -d "$APP" ]; then
+  echo "No app at $APP. Build the $SCHEME scheme, or run without NOBUILD=1." >&2
   exit 1
 fi
 echo "Using $APP"
@@ -158,7 +201,13 @@ rm -f "$probe"
 # before the window-id fix, survived two runs and nearly went to Apple. It
 # used to be cleared at the top, which meant a run that could not capture
 # anything still threw away the pictures from the run that could.
-rm -f "$OUT"/*.png
+#
+# ONLY THE SCREENS THIS RUN SHOOTS. It used to clear the lot, so reshooting one
+# screen with SCREENS= deleted the other seven — a tidy-looking one-file change
+# that also took seven tracked pictures out of the repository.
+for screen in $SCREENS; do
+  rm -f "$OUT/$screen.png"
+done
 
 shoot() {
   local screen="$1"

@@ -482,7 +482,7 @@ bug and rendering the view did.
 |---|---|
 | `tools/run-tests.sh` | the three unit test suites, and deletes the simulator clones Xcode leaves behind |
 | `tools/make-screenshots.sh` | App Store screenshots for iPhone and Watch |
-| `tools/make-mac-screenshots.sh` | the same for the Mac — needs Screen Recording for whatever runs it |
+| `tools/make-mac-screenshots.sh` | the same for the Mac — builds the app first, and needs Screen Recording for whatever runs it |
 | `tools/srw-window-id.swift` | asks the window server which window belongs to a process |
 | `tools/svg-to-bodydiagram.py` | turns the body artwork into `Shared/BodyDiagram.json` |
 | `tools/export-shared-data.py` | pulls the anonymous shared data people opt into |
@@ -493,6 +493,14 @@ The screenshot scripts launch the app with `-SRW…` flags (`-SRWDemo`,
 flag must be given a value — `NSUserDefaults` reads the launch arguments as
 pairs, and a bare flag swallows the next one. The header of
 `tools/make-mac-screenshots.sh` explains what that cost.
+
+The Mac one **builds the app it shoots**, and takes the path from the build
+settings rather than searching DerivedData. It used to shoot the first Debug
+app it could find, which meant a run after an edit could quietly photograph the
+previous binary — two "different" screenshots with the same checksum was the
+only clue. `NOBUILD=1` skips the build for a reshoot of something just built in
+Xcode. It also clears only the screens it is about to shoot, so `SCREENS=` for
+one screen no longer deletes the other seven.
 
 ## Building
 
