@@ -1,4 +1,6 @@
-Easier to correct a logged set. Tap a row in the logs tab and that row opens on its own — its workout, its exercise, when it was, and the weight and repetitions of each set. Nothing is changed until you save, so Cancel leaves the log exactly as it was. Until now putting a set right meant a Mac, or editing an exported file and reading it back.
+[ iPhone, iPad and Apple Watch — 1.8, build 14 ]
+
+Easier to correct a logged set. Tap a row in the logs screen and that row opens for editing — its workout, its exercise, when it was, and the weight and repetitions of each set. Nothing is changed until you save, so Cancel leaves the log exactly as it was. Earlier, putting a set right meant the Mac app, or editing an exported file and reading it back.
 
 Read your log either way round. Sets are grouped into the workout sessions they were done in, and a heading folds one away. "By exercise" turns that inside out — one lift and every time you have done it, newest first, which is the question you have standing in front of a machine. The filter narrows both, and the list sorts by date or by name.
 
@@ -12,6 +14,22 @@ Your calendar gets what you did, not only what you plan. Finishing a workout wri
 
 Importing shows you the file first. Picking a file now describes it before anything happens — what it holds against what you already have, the span its logs cover, when it was written and by which app — with Merge and Replace underneath, and a file that will not read says why.
 
-Also: the Watch now always writes a weight for every set it writes repetitions for; a weight is only green when the repetitions did not pay for it, so more weight for fewer reps is a trade and neither number is colored; quitting a Watch workout you logged nothing in no longer offers to schedule the next one; the exercise list, on the phone and the Watch, can be narrowed to what you still have to do; and an exercise name on the Watch has the width it was wasting.
+Also: the Apple Watch app now always writes a weight for every set it writes repetitions for; a weight is only green when the repetitions did not pay for it, so more weight for fewer reps is a trade and neither number is colored; quitting a Watch workout you logged nothing in no longer offers to schedule the next one; the exercise list, on the phone and the Watch, can be narrowed to what you still have to do; and an exercise name on the Watch has the width it was wasting.
 
-On the Mac: click a row in the logs to correct it, name and edit your workout groups, and the workouts screen has its room back.
+And if you have the Mac app: click a row in the logs to correct it, name and edit your workout groups, and the workouts screen has its room back.
+
+
+=============================================
+
+
+[ Mac — 1.8, build 15 ]
+
+Easier to correct a logged set. Click a row in Logs and that row opens on its own, for editing — its workout, its exercise, when it was, and the weight and repetitions of each set. Nothing is changed until you save, so Cancel leaves the log exactly as it was. The whole table is still there under Edit logs, for the jobs that need it: adding a row, deleting one, correcting several at once.
+
+Name your own workout groups. Settings now holds the groups themselves, not only the choice of which one a workout is in: add a group, rename it, remove it. A group is workouts that mean the same session — the same push day at two gyms, where the machines are not the same — and it is the group that gets scheduled, so your calendar can say "Push" while which of them it will be is still undecided. The Mac never writes to your calendar; it says what gets scheduled, and your iPhone does the writing.
+
+Your settings travel. The settings about your training rather than about a device — the weight unit, the rest timer, what a new exercise starts with, the statistics options, scheduling, and the Watch's own preferences — now reach every device through your own iCloud account. This Mac can set the ones it has no use for itself: change one here and your iPhone and Watch follow. The handful that cannot sensibly travel stay where they are set, and Info says which and why.
+
+The workouts screen has its room back. The list of workouts no longer takes half the window to show a name and a count, so the workout you are editing has the rest. And an exercise can be taken back out of a workout again: a minus beside its name, or a right-click.
+
+Also: a weight is only green when the repetitions did not pay for it, so more weight for fewer reps is a trade and neither number is colored; and the exported spreadsheet says which unit its weights are in.
