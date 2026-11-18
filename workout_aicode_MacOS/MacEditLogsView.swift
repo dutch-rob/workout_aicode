@@ -12,12 +12,12 @@ import SwiftData
 // leaving has to be one thing the user does on purpose — not something that can
 // happen by clicking "Graphs" in the sidebar while half a row is typed.
 //
-// It is reached two ways and they differ only in where it lands: the toolbar
-// button opens it at the top, and clicking a row on the Logs screen opens it on
-// that row, scrolled to and with the row's first weight waiting for the
-// keyboard. Correcting one set used to mean opening the toolbar's flat table
-// and finding that row again among every row ever logged, which is the work
-// `session.focus` saves.
+// This is the screen for the jobs that need the whole log at once: adding a
+// row, deleting one, correcting several. Correcting ONE row does not come here
+// — clicking it on the Logs screen opens MacEditOneLogView, which holds one
+// row's numbers in its own state, writes on Save, and therefore needs none of
+// the copying, drafting and asking below. This screen briefly opened scrolled
+// to a clicked row instead; that is what the one-row screen replaced.
 
 /// Everything that has to be remembered from the moment the screen opened.
 struct LogEditSession: Identifiable {
@@ -27,15 +27,6 @@ struct LogEditSession: Identifiable {
     /// goes.
     let wasInDraft: Bool
     let snapshot: LogSnapshot
-    /// The log that was clicked on the Logs screen, to open on. Nil from the
-    /// toolbar button, which picked nothing out.
-    let focus: UUID?
-
-    init(wasInDraft: Bool, snapshot: LogSnapshot, focus: UUID? = nil) {
-        self.wasInDraft = wasInDraft
-        self.snapshot = snapshot
-        self.focus = focus
-    }
 }
 
 struct MacEditLogsView: View {
@@ -53,15 +44,6 @@ struct MacEditLogsView: View {
 
     @State private var leaving = false
     @State private var failure: String?
-
-    /// One cell of the table, for the keyboard to be put in. Only the weight
-    /// of a set is ever asked for: it is the left half of the pair and the
-    /// natural place to start reading a row you came here to correct.
-    private enum Cell: Hashable {
-        case weight(log: UUID, set: Int)
-    }
-
-    @FocusState private var focused: Cell?
 
     // The row at the bottom, before it becomes a log.
     @State private var newWorkout: UUID?
@@ -211,67 +193,20 @@ struct MacEditLogsView: View {
     // MARK: The table
 
     private func table(_ layout: Layout) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        ForEach(layout.rows) { row in
-                            VStack(alignment: .leading, spacing: 0) {
-                                self.row(row, layout.setColumns)
-                                Divider()
-                            }
-                            // Named, so a row clicked on the Logs screen can
-                            // be scrolled to. The ForEach identifies its own
-                            // content, but what it identifies here is a pair
-                            // of views, and only one of them is the row.
-                            .id(row.id)
-                        }
-                        newRow(layout.setColumns)
-                    } header: {
-                        columnTitles(layout.setColumns)
+        ScrollView([.vertical, .horizontal]) {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                Section {
+                    ForEach(layout.rows) { row in
+                        self.row(row, layout.setColumns)
+                        Divider()
                     }
+                    newRow(layout.setColumns)
+                } header: {
+                    columnTitles(layout.setColumns)
                 }
-                .padding(.horizontal, 12)
             }
-            .onAppear { openOnTheRowThatWasClicked(proxy) }
+            .padding(.horizontal, 12)
         }
-    }
-
-    /// Arriving at the row the user clicked rather than at the top of every
-    /// row they have ever logged.
-    ///
-    /// Putting the keyboard in the cell is what does most of the work: macOS
-    /// brings a newly focused field into view by itself. The explicit scroll is
-    /// for the row that has no cell to focus — an aerobic one, which shows its
-    /// duration instead of sets — and as a second chance for a row the lazy
-    /// stack has not built yet, which is why it is asked twice. Both are no-ops
-    /// when the first attempt already landed.
-    ///
-    /// THE FOCUS IS ASKED FOR AT ONCE, not on the next turn of the run loop,
-    /// and the difference is not the microseconds it sounds like. Presenting a
-    /// sheet keeps the main thread to itself while it arrives, so a `main.async`
-    /// from `onAppear` does not run for the better part of half a second: the
-    /// table was on screen with no cursor in it, and the cursor turned up
-    /// afterwards, which is exactly what it looked like. Measured on a hundred
-    /// rows, the cell took the keyboard at 0.37s this way against 0.67s the
-    /// other — and the table being long is not what costs the time, which is
-    /// why there is nothing to make faster here. A field that has not been
-    /// built yet is no obstacle: `focused` is a value, and the field takes the
-    /// keyboard when the lazy stack gets round to building it.
-    private func openOnTheRowThatWasClicked(_ proxy: ScrollViewProxy) {
-        guard let target = session.focus else { return }
-        focused = .weight(log: target, set: 0)
-        let settle = { (animated: Bool) in
-            guard animated else { proxy.scrollTo(target, anchor: .center); return }
-            withAnimation(.easeOut(duration: 0.2)) {
-                proxy.scrollTo(target, anchor: .center)
-            }
-        }
-        DispatchQueue.main.async {
-            settle(false)
-            focused = .weight(log: target, set: 0)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { settle(true) }
     }
 
     private func columnTitles(_ setColumns: Int) -> some View {
@@ -310,8 +245,7 @@ struct MacEditLogsView: View {
             } else {
                 ForEach(0..<setColumns, id: \.self) { i in
                     setPair(weight: weightBinding(row, i), reps: repsBinding(row, i),
-                            machine: i < row.machineSettings.count ? row.machineSettings[i] : nil,
-                            cell: .weight(log: row.id, set: i))
+                            machine: i < row.machineSettings.count ? row.machineSettings[i] : nil)
                 }
             }
 
@@ -382,13 +316,12 @@ struct MacEditLogsView: View {
         .frame(width: 190)
     }
 
-    /// `cell` names the weight field so the keyboard can be put in it; the
-    /// row at the bottom is not a log yet and has no name to go under.
     private func setPair(weight: Binding<Double>, reps: Binding<Int>,
-                         machine: Int? = nil, cell: Cell? = nil) -> some View {
+                         machine: Int? = nil) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 2) {
-                weightField(weight, cell: cell)
+                TextField("", value: weight, format: .number)
+                    .frame(width: 34)
                 TextField("", value: reps, format: .number)
                     .frame(width: 34)
             }
@@ -405,21 +338,6 @@ struct MacEditLogsView: View {
         }
         .monospacedDigit()
         .frame(width: 74, alignment: .leading)
-    }
-
-    /// `.focused` only where there is something to focus. A field with no
-    /// `Cell` is the add-a-row field at the bottom, which the Logs screen
-    /// never asks for.
-    @ViewBuilder
-    private func weightField(_ value: Binding<Double>, cell: Cell?) -> some View {
-        if let cell {
-            TextField("", value: value, format: .number)
-                .frame(width: 34)
-                .focused($focused, equals: cell)
-        } else {
-            TextField("", value: value, format: .number)
-                .frame(width: 34)
-        }
     }
 
     /// Reads the row's own copy, writes to the record behind it — which may be

@@ -90,8 +90,8 @@ enum MacInfoTopic: String, CaseIterable, Identifiable, Hashable {
                 "Every set you have logged, newest first. The field at the top narrows the list to what you type — part of an exercise name, or a workout name — and matches by word, so “chin” finds the chin-up and not the bench press.",
                 "Tick “Dates” to narrow to a period. Both ends are included.",
                 "Read it either way round. “By workout” groups each session together, which answers what you did on a day. “By exercise” gathers every time you did one lift, newest first, which answers what you did last time and whether to add weight. Either way the +/− in the left margin folds a group away, and the column headings sort — click the one already in use to turn it round.",
-                "Click a row to correct it. The log editor opens on that row with its first weight ready to type; the pencil at the right of the row does the same. “Edit logs” in the toolbar opens the same screen at the top, for adding a row or finding one yourself.",
-                "Either way it takes a copy of everything first, so it can all be put back, and it asks whether to keep your changes as you leave it."
+                "Click a row to correct it — that row on its own, with its first weight ready to type. The pencil at the right of the row does the same. Nothing is changed until you press Save, so closing the window leaves the log exactly as it was.",
+                "“Edit logs” in the toolbar opens the whole log as a table instead, which is where rows are added and deleted. That one writes as you type, so it takes a copy of everything first and asks on the way out whether to keep what you did."
             ]
         case .graphsAndProgress:
             return [

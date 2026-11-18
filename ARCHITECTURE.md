@@ -186,14 +186,23 @@ SwiftData, backed by CloudKit when the user turns iCloud on.
   horizontal-fling guard — the line that throws page swipes away — measured
   nearly nothing. It had been that way since the gesture was written.
 * `workout_aicode_MacOS/MacLogsView.swift` shows the logs and **cannot write
-  one**: clicking a row opens the editor on it rather than editing in place.
-  Editing in place would have had nowhere to ask "keep or discard?" — the Logs
-  screen is a sidebar selection, and leaving it is a click on "Graphs", a closed
-  window or ⌘Q, none of which can be interrupted with a question. The editor
-  answers that by being a sheet, which is left once, on purpose. So the click
-  takes the snapshot, starts draft mode, and hands the editor the row to open
-  on; what it removes is arriving in a flat table of every row ever logged and
-  having to find that row again.
+  one**: clicking a row opens an editor rather than editing in place. Editing
+  in place would have had nowhere to ask "keep or discard?" — the Logs screen
+  is a sidebar selection, and leaving it is a click on "Graphs", a closed
+  window or ⌘Q, none of which can be interrupted with a question. A sheet is
+  left once, on purpose.
+* **Two editors, and the small one is small on purpose.**
+  `MacEditOneLogView` is what a click on a row opens: that row alone, held in
+  the screen's own state and written only on Save. Because nothing is written
+  until then, it needs no copy of the log, no draft mode and no question on
+  the way out — closing it leaves the log untouched. `MacEditLogsView` is the
+  whole log as a table, for adding and deleting rows and correcting several at
+  once; it edits the live records as you type, so it does need all three.
+  Draft mode is no loss in the small one for a second reason: it only ever
+  undoes things CREATED while drafting, and that screen creates nothing.
+  Measured on a hundred rows, a click reaches a typeable field in 0.10s
+  against the table's 0.37s, and the table's number grows with the log while
+  the one-row screen's does not.
 * `Shared/LoggedSets.swift` is **what the log button writes**: one value per
   set the exercise has, taken from what the wheels SHOW rather than from the
   buffer behind them, which only holds the sets whose wheels were actually

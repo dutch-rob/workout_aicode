@@ -12,18 +12,17 @@ import SwiftData
 // Watch, and a Mac that could quietly rewrite last Tuesday would make the
 // history a different kind of thing. Nothing here writes anything.
 //
-// Clicking a row is the way IN to the editor rather than an edit. It takes the
-// copy of the whole log that `MacEditLogsView` cannot open without, starts
-// draft mode, and opens that screen with this row's first set waiting for the
-// keyboard. The toolbar button is the same thing with nothing picked out.
+// Clicking a row opens THAT ROW, on its own — see MacEditOneLogView, which
+// writes nothing until Save and so needs neither a copy of the log nor draft
+// mode nor a question on the way out. The toolbar button opens the flat table
+// of every row ever logged, which is still where rows are added and deleted,
+// and which does need all three.
 //
-// So the "keep or discard?" question is still asked once, on purpose, on the
-// way out of a sheet — see the note at the top of MacEditLogsView. Editing in
-// place here would have had nowhere to ask it: this is a sidebar selection, and
-// leaving it is a click on "Graphs", a closed window or ⌘Q, none of which can
-// be interrupted to put a question. What the click fixes is the part that was
-// actually in the way — arriving in a flat table of every row ever logged and
-// having to find this one again.
+// Both are sheets, and that is not a style choice. The "keep or discard?"
+// question the table asks has to be asked somewhere, and this screen is a
+// sidebar selection: leaving it is a click on "Graphs", a closed window or ⌘Q,
+// none of which can be interrupted to put a question. Editing in place here
+// would have had nowhere to ask it.
 
 struct MacLogsView: View {
     @Query(sort: [SortDescriptor(\WorkoutLog.date, order: .reverse)]) private var logs: [WorkoutLog]
@@ -46,6 +45,9 @@ struct MacLogsView: View {
     @State private var to = Date()
     @Environment(\.modelContext) private var context
     @State private var editing: LogEditSession?
+    /// The row being corrected on its own. A wrapper because `sheet(item:)`
+    /// wants something identifiable and a UUID is not it.
+    @State private var correcting: LogToCorrect?
     @State private var couldNotOpen: String?
     /// The row the pointer is over, so its pencil is the only one showing.
     @State private var hovered: UUID?
@@ -177,6 +179,9 @@ struct MacLogsView: View {
         .sheet(item: $editing) { session in
             MacEditLogsView(session: session)
         }
+        .sheet(item: $correcting) { row in
+            MacEditOneLogView(logId: row.id)
+        }
         .alert("Could not open the log editor",
                isPresented: Binding(get: { couldNotOpen != nil },
                                     set: { if !$0 { couldNotOpen = nil } })) {
@@ -189,13 +194,12 @@ struct MacLogsView: View {
     /// The copy is taken BEFORE the screen opens, and the screen does not open
     /// without one. An editor with no way back is not a thing to offer for the
     /// only records in this app that cannot be re-made.
-    private func openEditor(focusing log: UUID? = nil) {
+    private func openEditor() {
         let wasInDraft = DraftMode.isOn(in: context)
         do {
             let snapshot = try LogEditing.snapshot(in: context)
             DraftMode.start(in: context)
-            editing = LogEditSession(wasInDraft: wasInDraft, snapshot: snapshot,
-                                     focus: log)
+            editing = LogEditSession(wasInDraft: wasInDraft, snapshot: snapshot)
         } catch {
             couldNotOpen = "Your logs could not be copied, so there would be no way to undo an edit. \(error.localizedDescription)"
         }
@@ -345,7 +349,7 @@ struct MacLogsView: View {
                             }
                             .padding(.vertical, 2)
                             .opensTheEditor(row: entry.log.id, hovered: $hovered,
-                                            open: { openEditor(focusing: $0) })
+                                            open: { correcting = LogToCorrect(id: $0) })
                         }
                     }
                 } header: {
@@ -381,7 +385,8 @@ struct MacLogsView: View {
             editPencil(log.id)
         }
         .padding(.vertical, 2)
-        .opensTheEditor(row: log.id, hovered: $hovered, open: { openEditor(focusing: $0) })
+        .opensTheEditor(row: log.id, hovered: $hovered,
+                        open: { correcting = LogToCorrect(id: $0) })
     }
 
     /// The pencil at the right of the row the pointer is over.
@@ -393,7 +398,7 @@ struct MacLogsView: View {
     /// it is showing or not, so no row moves as the pointer crosses it.
     private func editPencil(_ id: UUID) -> some View {
         Button {
-            openEditor(focusing: id)
+            correcting = LogToCorrect(id: id)
         } label: {
             Image(systemName: "square.and.pencil")
         }
