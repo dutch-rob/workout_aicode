@@ -124,23 +124,43 @@ struct MacEditLogsView: View {
         logs.first { $0.id == id && !$0.isDeleted }
     }
 
-    /// How many weight/reps pairs the table is wide. At least three, so there
-    /// is somewhere to type, and one spare past the longest row so a set can
-    /// always be added without a control for adding columns.
-    private var setColumns: Int {
+    /// The rows, and how many weight/reps pairs wide the table is: at least
+    /// three, so there is somewhere to type, and one spare past the longest row
+    /// so a set can always be added without a control for adding columns.
+    ///
+    /// WORKED OUT ONCE PER REDRAW, and handed down, which is the whole reason
+    /// this type exists. Both were computed properties, and the width asked
+    /// `rows` for the longest row — so drawing the table rebuilt the whole
+    /// table once per row, dictionaries and all, to find out how wide it was.
+    /// That is quadratic in the number of logs and it happens again on every
+    /// keystroke: measured at 0.13ms a rebuild, a few hundred logs is a few
+    /// hundred milliseconds of it per redraw, for an answer that cannot change
+    /// between one row and the next.
+    ///
+    /// It was NOT what made the editor slow to open — that is the sheet
+    /// arriving, see `openOnTheRowThatWasClicked` — and measuring said so
+    /// before this was written down as a fix for it.
+    private struct Layout {
+        let rows: [Row]
+        let setColumns: Int
+    }
+
+    private var layout: Layout {
+        let rows = self.rows
         let longest = rows.map { max($0.weights.count, $0.reps.count) }.max() ?? 0
-        return min(12, max(3, longest + 1))
+        return Layout(rows: rows, setColumns: min(12, max(3, longest + 1)))
     }
 
     private var changed: Bool { LogEditing.hasChanged(from: session.snapshot, in: context) }
 
     var body: some View {
-        VStack(spacing: 0) {
+        let layout = self.layout
+        return VStack(spacing: 0) {
             header
             Divider()
-            table
+            table(layout)
             Divider()
-            footer
+            footer(layout)
         }
         .frame(minWidth: 900, idealWidth: 1100, minHeight: 560, idealHeight: 700)
         .confirmationDialog("Leave the log editor?", isPresented: $leaving,
@@ -177,9 +197,9 @@ struct MacEditLogsView: View {
         .padding(12)
     }
 
-    private var footer: some View {
+    private func footer(_ layout: Layout) -> some View {
         HStack {
-            Text("\(rows.count) rows")
+            Text("\(layout.rows.count) rows")
                 .macFont(.caption).foregroundStyle(.secondary)
             Spacer()
             Button("Done") { finish() }
@@ -190,14 +210,14 @@ struct MacEditLogsView: View {
 
     // MARK: The table
 
-    private var table: some View {
+    private func table(_ layout: Layout) -> some View {
         ScrollViewReader { proxy in
             ScrollView([.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     Section {
-                        ForEach(rows) { row in
+                        ForEach(layout.rows) { row in
                             VStack(alignment: .leading, spacing: 0) {
-                                self.row(row)
+                                self.row(row, layout.setColumns)
                                 Divider()
                             }
                             // Named, so a row clicked on the Logs screen can
@@ -206,9 +226,9 @@ struct MacEditLogsView: View {
                             // of views, and only one of them is the row.
                             .id(row.id)
                         }
-                        newRow
+                        newRow(layout.setColumns)
                     } header: {
-                        columnTitles
+                        columnTitles(layout.setColumns)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -226,8 +246,21 @@ struct MacEditLogsView: View {
     /// duration instead of sets — and as a second chance for a row the lazy
     /// stack has not built yet, which is why it is asked twice. Both are no-ops
     /// when the first attempt already landed.
+    ///
+    /// THE FOCUS IS ASKED FOR AT ONCE, not on the next turn of the run loop,
+    /// and the difference is not the microseconds it sounds like. Presenting a
+    /// sheet keeps the main thread to itself while it arrives, so a `main.async`
+    /// from `onAppear` does not run for the better part of half a second: the
+    /// table was on screen with no cursor in it, and the cursor turned up
+    /// afterwards, which is exactly what it looked like. Measured on a hundred
+    /// rows, the cell took the keyboard at 0.37s this way against 0.67s the
+    /// other — and the table being long is not what costs the time, which is
+    /// why there is nothing to make faster here. A field that has not been
+    /// built yet is no obstacle: `focused` is a value, and the field takes the
+    /// keyboard when the lazy stack gets round to building it.
     private func openOnTheRowThatWasClicked(_ proxy: ScrollViewProxy) {
         guard let target = session.focus else { return }
+        focused = .weight(log: target, set: 0)
         let settle = { (animated: Bool) in
             guard animated else { proxy.scrollTo(target, anchor: .center); return }
             withAnimation(.easeOut(duration: 0.2)) {
@@ -241,7 +274,7 @@ struct MacEditLogsView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { settle(true) }
     }
 
-    private var columnTitles: some View {
+    private func columnTitles(_ setColumns: Int) -> some View {
         HStack(spacing: 8) {
             Text("Workout").frame(width: 160, alignment: .leading)
             Text("Exercise").frame(width: 190, alignment: .leading)
@@ -257,7 +290,7 @@ struct MacEditLogsView: View {
         .background(.regularMaterial)
     }
 
-    private func row(_ row: Row) -> some View {
+    private func row(_ row: Row, _ setColumns: Int) -> some View {
         HStack(spacing: 8) {
             workoutPicker(selection: Binding(get: { row.workoutId },
                                              set: { record(row.id)?.workoutId = $0 }))
@@ -295,7 +328,7 @@ struct MacEditLogsView: View {
         .padding(.vertical, 3)
     }
 
-    private var newRow: some View {
+    private func newRow(_ setColumns: Int) -> some View {
         HStack(spacing: 8) {
             workoutPicker(selection: Binding(get: { newWorkout ?? workouts.first?.id ?? UUID() },
                                              set: { newWorkout = $0 }))
